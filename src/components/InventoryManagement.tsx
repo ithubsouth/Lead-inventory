@@ -634,7 +634,7 @@ const InventoryManagement = () => {
   const downloadDevicesCSV = () => {
     const filteredDevices = getFilteredDevices();
     const csvContent = [
-      ['Product', 'Model', 'Serial Number', 'Warehouse', 'Status', 'Sales Order', 'School Name', 'Nucleus ID', 'Created Date', 'Created By'],
+      ['Product', 'Model', 'Serial Number', 'Warehouse', 'Device Status', 'Sales Order', 'School Name', 'Nucleus ID', 'Profile ID', 'SD Card Size', 'Deal ID', 'Created Date', 'Created By', 'Record Status'],
       ...filteredDevices.map(device => [
         device.product,
         device.model,
@@ -644,8 +644,12 @@ const InventoryManagement = () => {
         device.sales_order || '',
         device.school_name || '',
         device.nucleus_id || '',
+        device.profile_id || '',
+        device.sd_card_size || '',
+        device.deal_id || '',
         new Date(device.created_at).toLocaleDateString(),
-        device.created_by || ''
+        device.created_by || '',
+        device.is_deleted ? 'Archived' : 'Active'
       ])
     ].map(row => row.join(',')).join('\n');
 
@@ -812,12 +816,343 @@ const InventoryManagement = () => {
         </TabsList>
 
         <TabsContent value="create" className="mt-6">
-          {/* Create order form - implement existing renderCreateOrderForm */}
-          <div className="text-center p-8 border-2 border-dashed border-muted rounded-lg">
-            <Package className="w-12 h-12 mx-auto mb-4 text-muted-foreground" />
-            <h3 className="text-lg font-semibold mb-2">Create New Order</h3>
-            <p className="text-muted-foreground">Order creation form will be implemented here</p>
+          <div className="space-y-6">
+            <Card>
+              <CardHeader>
+                <CardTitle>Order Information</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div>
+                    <Label htmlFor="orderType">Order Type *</Label>
+                    <Select value={orderType} onValueChange={setOrderType}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select order type" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {orderTypes.map(type => (
+                          <SelectItem key={type} value={type}>{type}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <Label htmlFor="salesOrder">Sales Order</Label>
+                    <Input
+                      value={salesOrder}
+                      onChange={(e) => setSalesOrder(e.target.value)}
+                      placeholder="Auto-generated if empty"
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="dealId">Deal ID</Label>
+                    <Input
+                      value={dealId}
+                      onChange={(e) => setDealId(e.target.value)}
+                      placeholder="Optional"
+                    />
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between">
+                <CardTitle>Tablets</CardTitle>
+                <Button onClick={addTablet} size="sm">
+                  <Plus className="w-4 h-4 mr-2" />
+                  Add Tablet
+                </Button>
+              </CardHeader>
+              <CardContent>
+                {tablets.length === 0 ? (
+                  <p className="text-muted-foreground text-center py-4">No tablets added</p>
+                ) : (
+                  <div className="space-y-4">
+                    {tablets.map((tablet) => (
+                      <Card key={tablet.id} className="p-4">
+                        <div className="flex justify-between items-start mb-4">
+                          <h4 className="font-medium">Tablet {tablets.indexOf(tablet) + 1}</h4>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => removeTablet(tablet.id)}
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </Button>
+                        </div>
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                          <div>
+                            <Label>Nucleus ID</Label>
+                            <Input
+                              value={tablet.nucleusId || ''}
+                              onChange={(e) => updateTablet(tablet.id, 'nucleusId', e.target.value)}
+                              placeholder="Optional"
+                            />
+                          </div>
+                          <div>
+                            <Label>School Name *</Label>
+                            <Input
+                              value={tablet.schoolName}
+                              onChange={(e) => updateTablet(tablet.id, 'schoolName', e.target.value)}
+                              placeholder="Required"
+                            />
+                          </div>
+                          <div>
+                            <Label>Model *</Label>
+                            <Select
+                              value={tablet.model}
+                              onValueChange={(value) => updateTablet(tablet.id, 'model', value)}
+                            >
+                              <SelectTrigger>
+                                <SelectValue placeholder="Select model" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {tabletModels.map(model => (
+                                  <SelectItem key={model} value={model}>{model}</SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          <div>
+                            <Label>SD Card Size</Label>
+                            <Select
+                              value={tablet.sdCardSize}
+                              onValueChange={(value) => updateTablet(tablet.id, 'sdCardSize', value)}
+                            >
+                              <SelectTrigger>
+                                <SelectValue placeholder="Select size" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {sdCardSizes.map(size => (
+                                  <SelectItem key={size} value={size}>{size}</SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          <div>
+                            <Label>Profile ID</Label>
+                            <Input
+                              value={tablet.profileId}
+                              onChange={(e) => updateTablet(tablet.id, 'profileId', e.target.value)}
+                              placeholder="Optional"
+                            />
+                          </div>
+                          <div>
+                            <Label>Quantity *</Label>
+                            <Input
+                              type="number"
+                              value={tablet.quantity}
+                              onChange={(e) => updateTablet(tablet.id, 'quantity', Math.max(1, parseInt(e.target.value) || 1))}
+                              min="1"
+                            />
+                          </div>
+                          <div>
+                            <Label>Location *</Label>
+                            <Select
+                              value={tablet.location}
+                              onValueChange={(value) => updateTablet(tablet.id, 'location', value)}
+                            >
+                              <SelectTrigger>
+                                <SelectValue placeholder="Select location" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {locations.map(location => (
+                                  <SelectItem key={location} value={location}>{location}</SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                        </div>
+                      </Card>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between">
+                <CardTitle>TVs</CardTitle>
+                <Button onClick={addTV} size="sm">
+                  <Plus className="w-4 h-4 mr-2" />
+                  Add TV
+                </Button>
+              </CardHeader>
+              <CardContent>
+                {tvs.length === 0 ? (
+                  <p className="text-muted-foreground text-center py-4">No TVs added</p>
+                ) : (
+                  <div className="space-y-4">
+                    {tvs.map((tv) => (
+                      <Card key={tv.id} className="p-4">
+                        <div className="flex justify-between items-start mb-4">
+                          <h4 className="font-medium">TV {tvs.indexOf(tv) + 1}</h4>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => removeTV(tv.id)}
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </Button>
+                        </div>
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                          <div>
+                            <Label>Nucleus ID</Label>
+                            <Input
+                              value={tv.nucleusId || ''}
+                              onChange={(e) => updateTV(tv.id, 'nucleusId', e.target.value)}
+                              placeholder="Optional"
+                            />
+                          </div>
+                          <div>
+                            <Label>School Name *</Label>
+                            <Input
+                              value={tv.schoolName}
+                              onChange={(e) => updateTV(tv.id, 'schoolName', e.target.value)}
+                              placeholder="Required"
+                            />
+                          </div>
+                          <div>
+                            <Label>Model *</Label>
+                            <Select
+                              value={tv.model}
+                              onValueChange={(value) => updateTV(tv.id, 'model', value)}
+                            >
+                              <SelectTrigger>
+                                <SelectValue placeholder="Select model" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {tvModels.map(model => (
+                                  <SelectItem key={model} value={model}>{model}</SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          <div>
+                            <Label>Quantity *</Label>
+                            <Input
+                              type="number"
+                              value={tv.quantity}
+                              onChange={(e) => updateTV(tv.id, 'quantity', Math.max(1, parseInt(e.target.value) || 1))}
+                              min="1"
+                            />
+                          </div>
+                          <div>
+                            <Label>Location *</Label>
+                            <Select
+                              value={tv.location}
+                              onValueChange={(value) => updateTV(tv.id, 'location', value)}
+                            >
+                              <SelectTrigger>
+                                <SelectValue placeholder="Select location" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {locations.map(location => (
+                                  <SelectItem key={location} value={location}>{location}</SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                        </div>
+                      </Card>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            <Button onClick={createOrder} className="w-full" size="lg">
+              Create Order
+            </Button>
           </div>
+        </TabsContent>
+
+        <TabsContent value="serial-entry" className="mt-6">
+          {selectedOrder && (
+            <Card>
+              <CardHeader>
+                <CardTitle>Enter Serial Numbers</CardTitle>
+                <CardDescription>
+                  Order Type: {selectedOrder.orderType} | Sales Order: {selectedOrder.salesOrder}
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                {selectedOrder.tablets.map((tablet) => (
+                  <Card key={tablet.id} className="p-4">
+                    <h4 className="font-medium mb-4">
+                      Tablet - {tablet.model} at {tablet.location} (Quantity: {tablet.quantity})
+                    </h4>
+                    <p className="text-sm text-muted-foreground mb-4">School: {tablet.schoolName}</p>
+                    <div className="space-y-2">
+                      {Array.from({ length: tablet.quantity }, (_, index) => (
+                        <div key={index} className="flex gap-2">
+                          <Input
+                            placeholder={`Serial number ${index + 1}`}
+                            value={tablet.serialNumbers?.[index] || ''}
+                            onChange={(e) => updateSerialNumber(tablet.id, index, e.target.value, 'tablet')}
+                            className="flex-1"
+                          />
+                          <Button
+                            variant="outline"
+                            size="icon"
+                            onClick={() => openScanner(tablet.id, index, 'tablet')}
+                          >
+                            <Camera className="w-4 h-4" />
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
+                  </Card>
+                ))}
+
+                {selectedOrder.tvs.map((tv) => (
+                  <Card key={tv.id} className="p-4">
+                    <h4 className="font-medium mb-4">
+                      TV - {tv.model} at {tv.location} (Quantity: {tv.quantity})
+                    </h4>
+                    <p className="text-sm text-muted-foreground mb-4">School: {tv.schoolName}</p>
+                    <div className="space-y-2">
+                      {Array.from({ length: tv.quantity }, (_, index) => (
+                        <div key={index} className="flex gap-2">
+                          <Input
+                            placeholder={`Serial number ${index + 1}`}
+                            value={tv.serialNumbers?.[index] || ''}
+                            onChange={(e) => updateSerialNumber(tv.id, index, e.target.value, 'tv')}
+                            className="flex-1"
+                          />
+                          <Button
+                            variant="outline"
+                            size="icon"
+                            onClick={() => openScanner(tv.id, index, 'tv')}
+                          >
+                            <Camera className="w-4 h-4" />
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
+                  </Card>
+                ))}
+
+                <div className="flex gap-4">
+                  <Button
+                    variant="outline"
+                    onClick={() => setCurrentView('create')}
+                    className="flex-1"
+                  >
+                    Back to Create
+                  </Button>
+                  <Button
+                    onClick={saveSerialNumbers}
+                    disabled={loading}
+                    className="flex-1"
+                  >
+                    {loading ? 'Saving...' : 'Save Serial Numbers'}
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          )}
         </TabsContent>
 
         <TabsContent value="view" className="mt-6">
@@ -980,23 +1315,23 @@ const InventoryManagement = () => {
             </CardHeader>
             <CardContent>
               <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Product</TableHead>
-                    <TableHead>Model</TableHead>
-                    <TableHead>Serial Number</TableHead>
-                    <TableHead>Warehouse</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Sales Order</TableHead>
-                    <TableHead>School Name</TableHead>
-                    <TableHead>Nucleus ID</TableHead>
-                    <TableHead>Profile ID</TableHead>
-                    <TableHead>SD Card</TableHead>
-                    <TableHead>Created Date</TableHead>
-                    <TableHead>Created By</TableHead>
-                    <TableHead>Status</TableHead>
-                  </TableRow>
-                </TableHeader>
+                 <TableHeader>
+                   <TableRow>
+                     <TableHead>Product</TableHead>
+                     <TableHead>Model</TableHead>
+                     <TableHead>Serial Number</TableHead>
+                     <TableHead>Warehouse</TableHead>
+                     <TableHead>Device Status</TableHead>
+                     <TableHead>Sales Order</TableHead>
+                     <TableHead>School Name</TableHead>
+                     <TableHead>Nucleus ID</TableHead>
+                     <TableHead>Profile ID</TableHead>
+                     <TableHead>SD Card</TableHead>
+                     <TableHead>Created Date</TableHead>
+                     <TableHead>Created By</TableHead>
+                     <TableHead>Record Status</TableHead>
+                   </TableRow>
+                 </TableHeader>
                 <TableBody>
                   {getFilteredDevices().map(device => (
                     <TableRow key={device.id}>
