@@ -14,7 +14,143 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      devices: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          deal_id: string | null
+          deleted_at: string | null
+          id: string
+          is_deleted: boolean
+          last_modified_by: string | null
+          model: string
+          nucleus_id: string | null
+          order_id: string | null
+          product: string
+          profile_id: string | null
+          sales_order: string | null
+          school_name: string | null
+          sd_card_size: string | null
+          serial_number: string
+          status: string
+          updated_at: string
+          warehouse: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          deal_id?: string | null
+          deleted_at?: string | null
+          id?: string
+          is_deleted?: boolean
+          last_modified_by?: string | null
+          model: string
+          nucleus_id?: string | null
+          order_id?: string | null
+          product: string
+          profile_id?: string | null
+          sales_order?: string | null
+          school_name?: string | null
+          sd_card_size?: string | null
+          serial_number: string
+          status?: string
+          updated_at?: string
+          warehouse: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          deal_id?: string | null
+          deleted_at?: string | null
+          id?: string
+          is_deleted?: boolean
+          last_modified_by?: string | null
+          model?: string
+          nucleus_id?: string | null
+          order_id?: string | null
+          product?: string
+          profile_id?: string | null
+          sales_order?: string | null
+          school_name?: string | null
+          sd_card_size?: string | null
+          serial_number?: string
+          status?: string
+          updated_at?: string
+          warehouse?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "devices_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "orders"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      orders: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          deal_id: string | null
+          deleted_at: string | null
+          id: string
+          is_deleted: boolean
+          last_modified_by: string | null
+          model: string
+          nucleus_id: string | null
+          order_date: string
+          order_type: string
+          product: string
+          quantity: number
+          sales_order: string
+          school_name: string | null
+          serial_numbers: string[]
+          updated_at: string
+          warehouse: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          deal_id?: string | null
+          deleted_at?: string | null
+          id?: string
+          is_deleted?: boolean
+          last_modified_by?: string | null
+          model: string
+          nucleus_id?: string | null
+          order_date?: string
+          order_type: string
+          product: string
+          quantity?: number
+          sales_order: string
+          school_name?: string | null
+          serial_numbers?: string[]
+          updated_at?: string
+          warehouse: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          deal_id?: string | null
+          deleted_at?: string | null
+          id?: string
+          is_deleted?: boolean
+          last_modified_by?: string | null
+          model?: string
+          nucleus_id?: string | null
+          order_date?: string
+          order_type?: string
+          product?: string
+          quantity?: number
+          sales_order?: string
+          school_name?: string | null
+          serial_numbers?: string[]
+          updated_at?: string
+          warehouse?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
