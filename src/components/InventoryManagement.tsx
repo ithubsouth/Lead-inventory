@@ -10,7 +10,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Download, Package, BarChart3, Archive, RotateCcw, Plus, Trash2, Search, Edit, Camera, Eye } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
-import BarcodeScanner from './BarcodeScanner';
+import EnhancedBarcodeScanner from './EnhancedBarcodeScanner';
 
 interface Order {
   id: string;
@@ -1191,8 +1191,8 @@ const InventoryManagement = () => {
           </TabsContent>
         </Tabs>
 
-        {/* Barcode Scanner Modal */}
-        <BarcodeScanner
+        {/* Enhanced Barcode Scanner Modal */}
+        <EnhancedBarcodeScanner
           isOpen={scannerOpen}
           onClose={() => setScannerOpen(false)}
           onScan={handleScanResult}
