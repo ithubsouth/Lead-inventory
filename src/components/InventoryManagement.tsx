@@ -320,19 +320,30 @@ const InventoryManagement = () => {
     try {
       setLoading(true);
       
-      const { error } = await supabase
+      // Delete the order
+      const { error: orderError } = await supabase
         .from('orders')
         .update({ is_deleted: true, deleted_at: new Date().toISOString() })
         .eq('id', orderId);
 
-      if (error) throw error;
+      if (orderError) throw orderError;
+
+      // Delete related devices
+      const { error: deviceError } = await supabase
+        .from('devices')
+        .update({ is_deleted: true, deleted_at: new Date().toISOString() })
+        .eq('order_id', orderId);
+
+      if (deviceError) throw deviceError;
 
       toast({
         title: "Success",
-        description: "Order deleted successfully",
+        description: "Order and related devices deleted successfully",
       });
 
       loadOrders();
+      loadDevices();
+      loadWarehouseSummary();
     } catch (error) {
       console.error('Error deleting order:', error);
       toast({
@@ -439,9 +450,7 @@ const InventoryManagement = () => {
   });
 
   const filteredDevices = devices.filter(device => {
-    if (!showDeleted && device.is_deleted) return false;
-    if (showDeleted && !device.is_deleted) return false;
-    
+    // Show all devices regardless of deletion status for devices view
     if (selectedWarehouse !== 'All' && device.warehouse !== selectedWarehouse) return false;
     if (selectedProduct !== 'All' && device.product !== selectedProduct) return false;
     if (selectedModel !== 'All' && device.model !== selectedModel) return false;
@@ -457,7 +466,7 @@ const InventoryManagement = () => {
       );
     }
     
-    return true;
+    return !device.is_deleted; // Only show non-deleted devices
   });
 
   const downloadCSV = (data: any[], filename: string) => {
@@ -946,7 +955,6 @@ const InventoryManagement = () => {
         </div>
       </CardHeader>
       <CardContent>
-        {renderFilters()}
         <div className="overflow-x-auto">
           <Table>
             <TableHeader>
