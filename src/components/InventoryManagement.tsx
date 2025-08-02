@@ -74,6 +74,7 @@ interface Device {
   is_deleted: boolean;
   created_by?: string;
   updated_by?: string;
+  order_type?: 'Inward' | 'Outward'; // Added order_type
 }
 
 interface WarehouseSummary {
@@ -100,6 +101,8 @@ const EditOrderForm = ({ order, onSave, onCancel }: {
 }) => {
   const [formData, setFormData] = useState<Order>({ ...order });
   const [newSerialNumber, setNewSerialNumber] = useState('');
+  const [showScanner, setShowScanner] = useState(false);
+  const [currentSerialIndex, setCurrentSerialIndex] = useState<number | null>(null);
   const { toast } = useToast();
 
   const addSerialNumber = (serial: string) => {
@@ -125,8 +128,23 @@ const EditOrderForm = ({ order, onSave, onCancel }: {
     }));
   };
 
+  const updateSerialNumber = (index: number, value: string) => {
+    const newSerialNumbers = [...formData.serial_numbers];
+    newSerialNumbers[index] = value;
+    setFormData(prev => ({
+      ...prev,
+      serial_numbers: newSerialNumbers
+    }));
+  };
+
   const handleScanSuccess = (result: string) => {
-    addSerialNumber(result);
+    if (currentSerialIndex !== null) {
+      updateSerialNumber(currentSerialIndex, result);
+      setCurrentSerialIndex(null);
+    } else {
+      addSerialNumber(result);
+    }
+    setShowScanner(false);
   };
 
   const handleQuantityChange = (value: number) => {
@@ -143,59 +161,91 @@ const EditOrderForm = ({ order, onSave, onCancel }: {
   return (
     <div className="space-y-6">
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div>
-          <Label>Sales Order</Label>
-          <Input
-            value={formData.sales_order || ''}
-            onChange={(e) => setFormData(prev => ({ ...prev, sales_order: e.target.value }))}
-          />
-        </div>
-        <div>
-          <Label>Deal ID</Label>
-          <Input
-            value={formData.deal_id || ''}
-            onChange={(e) => setFormData(prev => ({ ...prev, deal_id: e.target.value }))}
-          />
-        </div>
-        <div>
-          <Label>School Name</Label>
-          <Input
-            value={formData.school_name || ''}
-            onChange={(e) => setFormData(prev => ({ ...prev, school_name: e.target.value }))}
-          />
-        </div>
-        <div>
-          <Label>Nucleus ID</Label>
-          <Input
-            value={formData.nucleus_id || ''}
-            onChange={(e) => setFormData(prev => ({ ...prev, nucleus_id: e.target.value }))}
-          />
-        </div>
-        <div>
-          <Label>Quantity</Label>
-          <Input
-            type="number"
-            value={formData.quantity}
-            onChange={(e) => handleQuantityChange(parseInt(e.target.value) || 1)}
-            min="1"
-          />
-        </div>
-        <div>
-          <Label>Warehouse</Label>
-          <Select
-            value={formData.warehouse}
-            onValueChange={(value) => setFormData(prev => ({ ...prev, warehouse: value }))}
-          >
-            <SelectTrigger>
-              <SelectValue placeholder="Select warehouse" />
-            </SelectTrigger>
-            <SelectContent>
-              {['Trichy', 'Bangalore', 'Hyderabad', 'Kolkata', 'Bhiwandi', 'Ghaziabad', 'Zirakpur', 'Indore', 'Jaipur'].map(location => (
-                <SelectItem key={location} value={location}>{location}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg">Order Information</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <div>
+              <Label className="text-sm font-medium text-muted-foreground">Sales Order</Label>
+              <Input
+                value={formData.sales_order || ''}
+                onChange={(e) => setFormData(prev => ({ ...prev, sales_order: e.target.value }))}
+              />
+            </div>
+            <div>
+              <Label className="text-sm font-medium text-muted-foreground">Deal ID</Label>
+              <Input
+                value={formData.deal_id || ''}
+                onChange={(e) => setFormData(prev => ({ ...prev, deal_id: e.target.value }))}
+              />
+            </div>
+            <div>
+              <Label className="text-sm font-medium text-muted-foreground">School Name</Label>
+              <Input
+                value={formData.school_name || ''}
+                onChange={(e) => setFormData(prev => ({ ...prev, school_name: e.target.value }))}
+              />
+            </div>
+            <div>
+              <Label className="text-sm font-medium text-muted-foreground">Nucleus ID</Label>
+              <Input
+                value={formData.nucleus_id || ''}
+                onChange={(e) => setFormData(prev => ({ ...prev, nucleus_id: e.target.value }))}
+              />
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg">Product Details</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <div>
+              <Label className="text-sm font-medium text-muted-foreground">Order Type</Label>
+              <Badge variant={formData.order_type === 'Inward' ? 'default' : 'secondary'}>
+                {formData.order_type}
+              </Badge>
+            </div>
+            <div>
+              <Label className="text-sm font-medium text-muted-foreground">Product</Label>
+              <p>{formData.product}</p>
+            </div>
+            <div>
+              <Label className="text-sm font-medium text-muted-foreground">Model</Label>
+              <p>{formData.model}</p>
+            </div>
+            <div>
+              <Label className="text-sm font-medium text-muted-foreground">Quantity</Label>
+              <Input
+                type="number"
+                value={formData.quantity}
+                onChange={(e) => handleQuantityChange(parseInt(e.target.value) || 1)}
+                min="1"
+              />
+            </div>
+            <div>
+              <Label className="text-sm font-medium text-muted-foreground">Warehouse</Label>
+              <Select
+                value={formData.warehouse}
+                onValueChange={(value) => setFormData(prev => ({ ...prev, warehouse: value }))}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select warehouse" />
+                </SelectTrigger>
+                <SelectContent>
+                  {['Trichy', 'Bangalore', 'Hyderabad', 'Kolkata', 'Bhiwandi', 'Ghaziabad', 'Zirakpur', 'Indore', 'Jaipur'].map(location => (
+                    <SelectItem key={location} value={location}>{location}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label className="text-sm font-medium text-muted-foreground">Order Date</Label>
+              <p>{formatDate(formData.order_date)}</p>
+            </div>
+          </CardContent>
+        </Card>
       </div>
 
       <Card>
@@ -222,7 +272,10 @@ const EditOrderForm = ({ order, onSave, onCancel }: {
               Add
             </Button>
             <Button 
-              onClick={() => handleScanSuccess(newSerialNumber)}
+              onClick={() => {
+                setCurrentSerialIndex(null);
+                setShowScanner(true);
+              }}
               variant="outline"
             >
               <Camera className="w-4 h-4" />
@@ -235,7 +288,21 @@ const EditOrderForm = ({ order, onSave, onCancel }: {
               <div className="flex flex-wrap gap-2">
                 {formData.serial_numbers.map((serial, index) => (
                   <div key={index} className="flex items-center gap-1 bg-muted p-2 rounded">
-                    <span className="font-mono text-sm">{serial}</span>
+                    <Input
+                      value={serial}
+                      onChange={(e) => updateSerialNumber(index, e.target.value)}
+                      className="font-mono text-sm w-40"
+                    />
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        setCurrentSerialIndex(index);
+                        setShowScanner(true);
+                      }}
+                    >
+                      <Camera className="w-3 h-3" />
+                    </Button>
                     <Button
                       variant="ghost"
                       size="sm"
@@ -259,6 +326,15 @@ const EditOrderForm = ({ order, onSave, onCancel }: {
           Save Changes
         </Button>
       </div>
+
+      <EnhancedBarcodeScanner
+        isOpen={showScanner}
+        onClose={() => {
+          setShowScanner(false);
+          setCurrentSerialIndex(null);
+        }}
+        onScan={handleScanSuccess}
+      />
     </div>
   );
 };
@@ -280,6 +356,7 @@ const InventoryManagement = () => {
   const [selectedWarehouse, setSelectedWarehouse] = useState<string>('All');
   const [selectedProduct, setSelectedProduct] = useState<string>('All');
   const [selectedModel, setSelectedModel] = useState<string>('All');
+  const [selectedOrderType, setSelectedOrderType] = useState<string>('All'); // Added order type filter
   const [fromDate, setFromDate] = useState<string>('');
   const [toDate, setToDate] = useState<string>('');
   const [showDeleted, setShowDeleted] = useState<boolean>(false);
@@ -309,6 +386,7 @@ const InventoryManagement = () => {
   const warehouseOptions = ['All', ...locations];
   const productOptions = ['All', 'Tablet', 'TV'];
   const modelOptions = ['All', ...tabletModels, ...tvModels];
+  const orderTypeOptions = ['All', 'Inward', 'Outward']; // Added order type options
 
   useEffect(() => {
     loadOrders();
@@ -387,7 +465,7 @@ const InventoryManagement = () => {
           });
         }
         const summary = summaryMap.get(key)!;
-        if (order.order_type === 'Stock' || order.order_type === 'Return') {
+        if (order.order_type === 'Inward') {
           summary.inward += order.quantity;
         } else {
           summary.outward += order.quantity;
@@ -688,6 +766,7 @@ const InventoryManagement = () => {
             nucleus_id: updatedOrder.nucleus_id,
             status: updatedOrder.order_type === 'Inward' ? 'Available' : 'Assigned',
             order_id: updatedOrder.id,
+            order_type: updatedOrder.order_type, // Added order_type
           });
 
         if (deviceError) throw deviceError;
@@ -866,6 +945,7 @@ const InventoryManagement = () => {
     if (selectedWarehouse !== 'All' && device.warehouse !== selectedWarehouse) return false;
     if (selectedProduct !== 'All' && device.product !== selectedProduct) return false;
     if (selectedModel !== 'All' && device.model !== selectedModel) return false;
+    if (selectedOrderType !== 'All' && device.order_type !== selectedOrderType) return false;
     if (fromDate && new Date(device.created_at) < new Date(fromDate)) return false;
     if (toDate && new Date(device.created_at) > new Date(toDate)) return false;
     if (searchQuery) {
@@ -1069,7 +1149,7 @@ const InventoryManagement = () => {
                     </div>
                   </div>
                   <div className="mt-4">
-                    <Label>Serial Numbers (Optional)</Label>
+                    <Label>Serial Numbers</Label>
                     <div className="space-y-2 mt-2">
                       {Array.from({ length: tablet.quantity }, (_, index) => (
                         <div key={index} className="flex gap-2 items-center">
@@ -1187,7 +1267,7 @@ const InventoryManagement = () => {
                     </div>
                   </div>
                   <div className="mt-4">
-                    <Label>Serial Numbers (Optional)</Label>
+                    <Label>Serial Numbers</Label>
                     <div className="space-y-2 mt-2">
                       {Array.from({ length: tv.quantity }, (_, index) => (
                         <div key={index} className="flex gap-2 items-center">
@@ -1410,7 +1490,7 @@ const InventoryManagement = () => {
             />
           </div>
         </div>
-        <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-4">
+        <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-7 gap-4 mb-4">
           <Select value={selectedWarehouse} onValueChange={setSelectedWarehouse}>
             <SelectTrigger>
               <SelectValue placeholder="All Warehouses" />
@@ -1447,6 +1527,18 @@ const InventoryManagement = () => {
               ))}
             </SelectContent>
           </Select>
+          <Select value={selectedOrderType} onValueChange={setSelectedOrderType}>
+            <SelectTrigger>
+              <SelectValue placeholder="All Order Types" />
+            </SelectTrigger>
+            <SelectContent>
+              {orderTypeOptions.map((type) => (
+                <SelectItem key={type} value={type}>
+                  {type}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
           <Input
             type="date"
             value={fromDate}
@@ -1477,6 +1569,7 @@ const InventoryManagement = () => {
                 <TableHead>Serial Number</TableHead>
                 <TableHead>Warehouse</TableHead>
                 <TableHead>Status</TableHead>
+                <TableHead>Order Type</TableHead>
                 <TableHead>Sales Order</TableHead>
                 <TableHead>School Name</TableHead>
                 <TableHead>Deal ID</TableHead>
@@ -1502,6 +1595,11 @@ const InventoryManagement = () => {
                       }
                     >
                       {device.status}
+                    </Badge>
+                  </TableCell>
+                  <TableCell>
+                    <Badge variant={device.order_type === 'Inward' ? 'default' : 'secondary'}>
+                      {device.order_type || '-'}
                     </Badge>
                   </TableCell>
                   <TableCell>{device.sales_order || '-'}</TableCell>
