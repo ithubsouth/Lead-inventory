@@ -74,10 +74,9 @@ interface Device {
   is_deleted: boolean;
   created_by?: string;
   updated_by?: string;
-  order_type?: 'Inward' | 'Outward'; // Added order_type
 }
 
-interface WarehouseSummary {
+interface OrderSummary {
   warehouse: string;
   product: string;
   model: string;
@@ -115,7 +114,7 @@ const EditOrderForm = ({ order, onSave, onCancel }: {
     } else if (formData.serial_numbers.includes(serial)) {
       toast({
         title: "Duplicate Serial Number",
-        description: "This serial number already exists",
+        description: "This serial number already exists in this order",
         variant: "destructive"
       });
     }
@@ -156,6 +155,33 @@ const EditOrderForm = ({ order, onSave, onCancel }: {
       quantity: newQuantity,
       serial_numbers: newSerialNumbers
     }));
+  };
+
+  const validateForm = () => {
+    const validSerials = formData.serial_numbers.filter(sn => sn.trim());
+    if (formData.quantity !== validSerials.length) {
+      toast({
+        title: "Validation Error",
+        description: "The number of serial numbers must match the quantity",
+        variant: "destructive"
+      });
+      return false;
+    }
+    if (!formData.warehouse) {
+      toast({
+        title: "Validation Error",
+        description: "Warehouse is required",
+        variant: "destructive"
+      });
+      return false;
+    }
+    return true;
+  };
+
+  const handleSave = () => {
+    if (validateForm()) {
+      onSave(formData);
+    }
   };
 
   return (
@@ -322,7 +348,7 @@ const EditOrderForm = ({ order, onSave, onCancel }: {
         <Button variant="outline" onClick={onCancel}>
           Cancel
         </Button>
-        <Button onClick={() => onSave(formData)}>
+        <Button onClick={handleSave}>
           Save Changes
         </Button>
       </div>
@@ -342,7 +368,7 @@ const EditOrderForm = ({ order, onSave, onCancel }: {
 const InventoryManagement = () => {
   const [orders, setOrders] = useState<Order[]>([]);
   const [devices, setDevices] = useState<Device[]>([]);
-  const [warehouseSummary, setWarehouseSummary] = useState<WarehouseSummary[]>([]);
+  const [orderSummary, setOrderSummary] = useState<OrderSummary[]>([]);
   const [loading, setLoading] = useState(false);
   const [showScanner, setShowScanner] = useState(false);
   const [currentSerialIndex, setCurrentSerialIndex] = useState<{ itemId: string; index: number; type: 'tablet' | 'tv' } | null>(null);
@@ -352,17 +378,14 @@ const InventoryManagement = () => {
   const [showEditDialog, setShowEditDialog] = useState(false);
   const { toast } = useToast();
 
-  // Filters
   const [selectedWarehouse, setSelectedWarehouse] = useState<string>('All');
   const [selectedProduct, setSelectedProduct] = useState<string>('All');
   const [selectedModel, setSelectedModel] = useState<string>('All');
-  const [selectedOrderType, setSelectedOrderType] = useState<string>('All'); // Added order type filter
   const [fromDate, setFromDate] = useState<string>('');
   const [toDate, setToDate] = useState<string>('');
   const [showDeleted, setShowDeleted] = useState<boolean>(false);
   const [searchQuery, setSearchQuery] = useState<string>('');
 
-  // Form states
   const [orderType, setOrderType] = useState('');
   const [salesOrder, setSalesOrder] = useState('');
   const [dealId, setDealId] = useState('');
@@ -386,19 +409,15 @@ const InventoryManagement = () => {
   const warehouseOptions = ['All', ...locations];
   const productOptions = ['All', 'Tablet', 'TV'];
   const modelOptions = ['All', ...tabletModels, ...tvModels];
-  const orderTypeOptions = ['All', 'Inward', 'Outward']; // Added order type options
 
   useEffect(() => {
     loadOrders();
     loadDevices();
-    loadWarehouseSummary();
+    loadOrderSummary();
   }, []);
 
   const generateId = () => Math.random().toString(36).substr(2, 9);
-
-  const generateDummyId = (prefix: string) => {
-    return `${prefix}-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
-  };
+  const generateDummyId = (prefix: string) => `${prefix}-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
 
   const loadOrders = async () => {
     try {
@@ -407,16 +426,11 @@ const InventoryManagement = () => {
         .from('orders')
         .select('*')
         .order('created_at', { ascending: false });
-
       if (error) throw error;
       setOrders((data as Order[]) || []);
     } catch (error) {
       console.error('Error loading orders:', error);
-      toast({
-        title: 'Error',
-        description: 'Failed to load orders',
-        variant: 'destructive',
-      });
+      toast({ title: 'Error', description: 'Failed to load orders', variant: 'destructive' });
     } finally {
       setLoading(false);
     }
@@ -428,87 +442,66 @@ const InventoryManagement = () => {
         .from('devices')
         .select('*')
         .order('created_at', { ascending: false });
-
       if (error) throw error;
       setDevices((data as Device[]) || []);
     } catch (error) {
       console.error('Error loading devices:', error);
-      toast({
-        title: 'Error',
-        description: 'Failed to load devices',
-        variant: 'destructive',
-      });
+      toast({ title: 'Error', description: 'Failed to load devices', variant: 'destructive' });
     }
   };
 
-  const loadWarehouseSummary = async () => {
+  const loadOrderSummary = async () => {
     try {
+      setLoading(true);
       const { data: ordersData, error: ordersError } = await supabase
         .from('orders')
         .select('warehouse, product, model, order_type, quantity')
         .eq('is_deleted', false);
-
       if (ordersError) throw ordersError;
 
-      const summaryMap = new Map<string, WarehouseSummary>();
+      const summaryMap = new Map<string, OrderSummary>();
+      locations.forEach(warehouse => {
+        productOptions.forEach(product => {
+          if (product !== 'All') {
+            modelOptions.forEach(model => {
+              if (model !== 'All' && (product === 'Tablet' ? tabletModels.includes(model) : tvModels.includes(model))) {
+                const key = `${warehouse}-${product}-${model}`;
+                if (!summaryMap.has(key)) {
+                  summaryMap.set(key, { warehouse, product, model, inward: 0, outward: 0, available: 0 });
+                }
+              }
+            });
+          }
+        });
+      });
 
       ordersData?.forEach((order) => {
         const key = `${order.warehouse}-${order.product}-${order.model}`;
         if (!summaryMap.has(key)) {
-          summaryMap.set(key, {
-            warehouse: order.warehouse,
-            product: order.product,
-            model: order.model,
-            inward: 0,
-            outward: 0,
-            available: 0,
-          });
+          summaryMap.set(key, { warehouse: order.warehouse, product: order.product, model: order.model, inward: 0, outward: 0, available: 0 });
         }
         const summary = summaryMap.get(key)!;
-        if (order.order_type === 'Inward') {
-          summary.inward += order.quantity;
-        } else {
-          summary.outward += order.quantity;
-        }
+        if (order.order_type === 'Inward') summary.inward += order.quantity;
+        else summary.outward += order.quantity;
         summary.available = summary.inward - summary.outward;
       });
 
-      setWarehouseSummary(Array.from(summaryMap.values()));
+      setOrderSummary(Array.from(summaryMap.values()));
     } catch (error) {
-      console.error('Error loading warehouse summary:', error);
-      toast({
-        title: 'Error',
-        description: 'Failed to load warehouse summary',
-        variant: 'destructive',
-      });
+      console.error('Error loading order summary:', error);
+      toast({ title: 'Error', description: 'Failed to load order summary', variant: 'destructive' });
+    } finally {
+      setLoading(false);
     }
   };
 
   const addTablet = () => {
-    const newTablet: TabletItem = {
-      id: generateId(),
-      nucleusId: '',
-      schoolName: '',
-      model: '',
-      sdCardSize: '',
-      profileId: '',
-      quantity: 1,
-      location: '',
-      serialNumbers: [],
-    };
+    const newTablet: TabletItem = { id: generateId(), nucleusId: '', schoolName: '', model: '', sdCardSize: '', profileId: '', quantity: 1, location: '', serialNumbers: [] };
     setTablets([...tablets, newTablet]);
   };
 
   const addTV = () => {
-    const newTV: TVItem = {
-      id: generateId(),
-      nucleusId: '',
-      schoolName: '',
-      model: '',
-      quantity: 1,
-      location: '',
-      serialNumbers: [],
-    };
+    const newTV: TVItem = { id: generateId(), nucleusId: '', schoolName: '', model: '', quantity: 1, location: '', serialNumbers: [] };
     setTvs([...tvs, newTV]);
   };
 
@@ -542,60 +535,20 @@ const InventoryManagement = () => {
     }));
   };
 
-  const removeTablet = (id: string) => {
-    setTablets(tablets.filter(tablet => tablet.id !== id));
-  };
-
-  const removeTV = (id: string) => {
-    setTvs(tvs.filter(tv => tv.id !== id));
-  };
+  const removeTablet = (id: string) => setTablets(tablets.filter(tablet => tablet.id !== id));
+  const removeTV = (id: string) => setTvs(tvs.filter(tv => tv.id !== id));
 
   const validateForm = () => {
     if (!orderType) {
-      toast({
-        title: 'Error',
-        description: 'Please select an order type',
-        variant: 'destructive',
-      });
+      toast({ title: 'Error', description: 'Please select an order type', variant: 'destructive' });
       return false;
     }
-
-    const hasValidTablets = tablets.some(t => 
-      t.schoolName.trim() && 
-      t.model && 
-      t.location && 
-      t.quantity > 0
-    );
-    const hasValidTVs = tvs.some(t => 
-      t.schoolName.trim() && 
-      t.model && 
-      t.location && 
-      t.quantity > 0
-    );
-
+    const hasValidTablets = tablets.some(t => t.schoolName.trim() && t.model && t.location && t.quantity > 0);
+    const hasValidTVs = tvs.some(t => t.schoolName.trim() && t.model && t.location && t.quantity > 0);
     if (!hasValidTablets && !hasValidTVs) {
-      toast({
-        title: 'Error',
-        description: 'Please add at least one tablet or TV with school name, model, location, and quantity',
-        variant: 'destructive',
-      });
+      toast({ title: 'Error', description: 'Please add at least one tablet or TV with school name, model, location, and quantity', variant: 'destructive' });
       return false;
     }
-
-    const allSerialNumbers = [
-      ...tablets.flatMap(t => t.serialNumbers || []),
-      ...tvs.flatMap(t => t.serialNumbers || []),
-    ].filter(sn => sn.trim());
-    const uniqueSerialNumbers = new Set(allSerialNumbers);
-    if (uniqueSerialNumbers.size !== allSerialNumbers.length) {
-      toast({
-        title: 'Error',
-        description: 'Duplicate serial numbers detected',
-        variant: 'destructive',
-      });
-      return false;
-    }
-
     return true;
   };
 
@@ -604,29 +557,21 @@ const InventoryManagement = () => {
 
     setLoading(true);
     try {
-      const validTablets = tablets.filter(t => 
-        t.schoolName.trim() && 
-        t.model && 
-        t.location && 
-        t.quantity > 0
-      );
-      const validTVs = tvs.filter(t => 
-        t.schoolName.trim() && 
-        t.model && 
-        t.location && 
-        t.quantity > 0
-      );
+      const validTablets = tablets.filter(t => t.schoolName.trim() && t.model && t.location && t.quantity > 0);
+      const validTVs = tvs.filter(t => t.schoolName.trim() && t.model && t.location && t.quantity > 0);
 
       for (const tablet of validTablets) {
+        const salesOrderId = salesOrder || generateDummyId('SO');
+        const effectiveOrderType = orderType === 'Stock' || orderType === 'Return' ? 'Inward' : 'Outward';
         const { data: orderData, error: orderError } = await supabase
           .from('orders')
           .insert({
-            order_type: orderType === 'Stock' || orderType === 'Return' ? 'Inward' : 'Outward',
+            order_type: effectiveOrderType,
             product: 'Tablet',
             model: tablet.model,
             quantity: tablet.quantity,
             warehouse: tablet.location,
-            sales_order: salesOrder || generateDummyId('SO'),
+            sales_order: salesOrderId,
             deal_id: dealId || '',
             school_name: tablet.schoolName,
             nucleus_id: tablet.nucleusId,
@@ -635,8 +580,7 @@ const InventoryManagement = () => {
           })
           .select()
           .single();
-
-        if (orderError) throw orderError;
+        if (orderError) throw new Error(`Order insertion failed: ${orderError.message}`);
 
         for (let i = 0; i < tablet.quantity; i++) {
           const serialNumber = tablet.serialNumbers[i] || generateDummyId('SN');
@@ -647,28 +591,29 @@ const InventoryManagement = () => {
               model: tablet.model,
               serial_number: serialNumber.trim(),
               warehouse: tablet.location,
-              sales_order: salesOrder || generateDummyId('SO'),
+              sales_order: salesOrderId,
               deal_id: dealId || '',
               school_name: tablet.schoolName,
               nucleus_id: tablet.nucleusId,
-              status: orderType === 'Stock' || orderType === 'Return' ? 'Available' : 'Assigned',
+              status: effectiveOrderType === 'Inward' ? 'Available' : 'Assigned',
               order_id: orderData.id,
             });
-
-          if (deviceError) throw deviceError;
+          if (deviceError) throw new Error(`Device insertion failed: ${deviceError.message}`);
         }
       }
 
       for (const tv of validTVs) {
+        const salesOrderId = salesOrder || generateDummyId('SO');
+        const effectiveOrderType = orderType === 'Stock' || orderType === 'Return' ? 'Inward' : 'Outward';
         const { data: orderData, error: orderError } = await supabase
           .from('orders')
           .insert({
-            order_type: orderType === 'Stock' || orderType === 'Return' ? 'Inward' : 'Outward',
+            order_type: effectiveOrderType,
             product: 'TV',
             model: tv.model,
             quantity: tv.quantity,
             warehouse: tv.location,
-            sales_order: salesOrder || generateDummyId('SO'),
+            sales_order: salesOrderId,
             deal_id: dealId || '',
             school_name: tv.schoolName,
             nucleus_id: tv.nucleusId,
@@ -677,8 +622,7 @@ const InventoryManagement = () => {
           })
           .select()
           .single();
-
-        if (orderError) throw orderError;
+        if (orderError) throw new Error(`Order insertion failed: ${orderError.message}`);
 
         for (let i = 0; i < tv.quantity; i++) {
           const serialNumber = tv.serialNumbers[i] || generateDummyId('SN');
@@ -689,15 +633,14 @@ const InventoryManagement = () => {
               model: tv.model,
               serial_number: serialNumber.trim(),
               warehouse: tv.location,
-              sales_order: salesOrder || generateDummyId('SO'),
+              sales_order: salesOrderId,
               deal_id: dealId || '',
               school_name: tv.schoolName,
               nucleus_id: tv.nucleusId,
-              status: orderType === 'Stock' || orderType === 'Return' ? 'Available' : 'Assigned',
+              status: effectiveOrderType === 'Inward' ? 'Available' : 'Assigned',
               order_id: orderData.id,
             });
-
-          if (deviceError) throw deviceError;
+          if (deviceError) throw new Error(`Device insertion failed: ${deviceError.message}`);
         }
       }
 
@@ -706,22 +649,13 @@ const InventoryManagement = () => {
       setDealId('');
       setTablets([]);
       setTvs([]);
-
       await loadOrders();
       await loadDevices();
-      await loadWarehouseSummary();
-
-      toast({
-        title: 'Success',
-        description: 'Order created successfully!',
-      });
+      await loadOrderSummary();
+      toast({ title: 'Success', description: 'Order created successfully!' });
     } catch (error) {
       console.error('Error creating order:', error);
-      toast({
-        title: 'Error',
-        description: 'Failed to create order',
-        variant: 'destructive',
-      });
+      toast({ title: 'Error', description: `Failed to create order: ${error instanceof Error ? error.message : 'Unknown error'}`, variant: 'destructive' });
     } finally {
       setLoading(false);
     }
@@ -730,6 +664,7 @@ const InventoryManagement = () => {
   const updateOrder = async (updatedOrder: Order) => {
     try {
       setLoading(true);
+      await supabase.from('devices').delete().eq('order_id', updatedOrder.id);
       const { error: orderError } = await supabase
         .from('orders')
         .update({
@@ -741,15 +676,10 @@ const InventoryManagement = () => {
           warehouse: updatedOrder.warehouse,
           serial_numbers: updatedOrder.serial_numbers,
           updated_at: new Date().toISOString(),
+          order_type: updatedOrder.order_type,
         })
         .eq('id', updatedOrder.id);
-
       if (orderError) throw orderError;
-
-      await supabase
-        .from('devices')
-        .delete()
-        .eq('order_id', updatedOrder.id);
 
       for (let i = 0; i < updatedOrder.quantity; i++) {
         const serialNumber = updatedOrder.serial_numbers[i] || generateDummyId('SN');
@@ -760,36 +690,25 @@ const InventoryManagement = () => {
             model: updatedOrder.model,
             serial_number: serialNumber.trim(),
             warehouse: updatedOrder.warehouse,
-            sales_order: updatedOrder.sales_order,
-            deal_id: updatedOrder.deal_id,
-            school_name: updatedOrder.school_name,
-            nucleus_id: updatedOrder.nucleus_id,
+            sales_order: updatedOrder.sales_order || generateDummyId('SO'),
+            deal_id: updatedOrder.deal_id || '',
+            school_name: updatedOrder.school_name || '',
+            nucleus_id: updatedOrder.nucleus_id || '',
             status: updatedOrder.order_type === 'Inward' ? 'Available' : 'Assigned',
             order_id: updatedOrder.id,
-            order_type: updatedOrder.order_type, // Added order_type
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
           });
-
         if (deviceError) throw deviceError;
       }
 
-      setOrders(prev => prev.map(order => 
-        order.id === updatedOrder.id ? updatedOrder : order
-      ));
-
+      setOrders(prev => prev.map(order => order.id === updatedOrder.id ? updatedOrder : order));
       await loadDevices();
-      await loadWarehouseSummary();
-
-      toast({
-        title: 'Success',
-        description: 'Order updated successfully',
-      });
+      await loadOrderSummary();
+      toast({ title: 'Success', description: 'Order updated successfully' });
     } catch (error) {
       console.error('Error updating order:', error);
-      toast({
-        title: 'Error',
-        description: 'Failed to update order',
-        variant: 'destructive',
-      });
+      toast({ title: 'Error', description: 'Failed to update order', variant: 'destructive' });
     } finally {
       setLoading(false);
     }
@@ -800,35 +719,19 @@ const InventoryManagement = () => {
       setLoading(true);
       await supabase
         .from('orders')
-        .update({ 
-          is_deleted: true, 
-          deleted_at: new Date().toISOString() 
-        })
+        .update({ is_deleted: true, deleted_at: new Date().toISOString() })
         .eq('id', orderId);
-
       await supabase
         .from('devices')
-        .update({ 
-          is_deleted: true, 
-          deleted_at: new Date().toISOString() 
-        })
+        .update({ is_deleted: true, deleted_at: new Date().toISOString() })
         .eq('order_id', orderId);
-
       await loadOrders();
       await loadDevices();
-      await loadWarehouseSummary();
-
-      toast({
-        title: 'Success',
-        description: 'Order and associated devices moved to archive',
-      });
+      await loadOrderSummary();
+      toast({ title: 'Success', description: 'Order and associated devices moved to archive' });
     } catch (error) {
       console.error('Error deleting order:', error);
-      toast({
-        title: 'Error',
-        description: 'Failed to delete order',
-        variant: 'destructive',
-      });
+      toast({ title: 'Error', description: 'Failed to delete order', variant: 'destructive' });
     } finally {
       setLoading(false);
     }
@@ -839,35 +742,19 @@ const InventoryManagement = () => {
       setLoading(true);
       await supabase
         .from('orders')
-        .update({ 
-          is_deleted: false, 
-          deleted_at: null 
-        })
+        .update({ is_deleted: false, deleted_at: null })
         .eq('id', orderId);
-
       await supabase
         .from('devices')
-        .update({ 
-          is_deleted: false, 
-          deleted_at: null 
-        })
+        .update({ is_deleted: false, deleted_at: null })
         .eq('order_id', orderId);
-
       await loadOrders();
       await loadDevices();
-      await loadWarehouseSummary();
-
-      toast({
-        title: 'Success',
-        description: 'Order restored successfully',
-      });
+      await loadOrderSummary();
+      toast({ title: 'Success', description: 'Order restored successfully' });
     } catch (error) {
       console.error('Error restoring order:', error);
-      toast({
-        title: 'Error',
-        description: 'Failed to restore order',
-        variant: 'destructive',
-      });
+      toast({ title: 'Error', description: 'Failed to restore order', variant: 'destructive' });
     } finally {
       setLoading(false);
     }
@@ -881,24 +768,10 @@ const InventoryManagement = () => {
   const handleScanResult = (scannedValue: string) => {
     if (currentSerialIndex) {
       const { itemId, index, type } = currentSerialIndex;
-      const allSerialNumbers = [
-        ...tablets.flatMap(t => t.serialNumbers || []),
-        ...tvs.flatMap(t => t.serialNumbers || []),
-      ].filter(sn => sn.trim());
-      
-      if (allSerialNumbers.includes(scannedValue)) {
-        toast({
-          title: 'Error',
-          description: 'Duplicate serial number detected',
-          variant: 'destructive',
-        });
-        return;
-      }
-
       if (type === 'tablet') {
         setTablets(tablets.map(tablet => {
           if (tablet.id === itemId) {
-            const newSerialNumbers = [...(tablet.serialNumbers || [])];
+            const newSerialNumbers = [...tablet.serialNumbers];
             newSerialNumbers[index] = scannedValue;
             return { ...tablet, serialNumbers: newSerialNumbers };
           }
@@ -907,7 +780,7 @@ const InventoryManagement = () => {
       } else {
         setTvs(tvs.map(tv => {
           if (tv.id === itemId) {
-            const newSerialNumbers = [...(tv.serialNumbers || [])];
+            const newSerialNumbers = [...tv.serialNumbers];
             newSerialNumbers[index] = scannedValue;
             return { ...tv, serialNumbers: newSerialNumbers };
           }
@@ -945,7 +818,6 @@ const InventoryManagement = () => {
     if (selectedWarehouse !== 'All' && device.warehouse !== selectedWarehouse) return false;
     if (selectedProduct !== 'All' && device.product !== selectedProduct) return false;
     if (selectedModel !== 'All' && device.model !== selectedModel) return false;
-    if (selectedOrderType !== 'All' && device.order_type !== selectedOrderType) return false;
     if (fromDate && new Date(device.created_at) < new Date(fromDate)) return false;
     if (toDate && new Date(device.created_at) > new Date(toDate)) return false;
     if (searchQuery) {
@@ -963,14 +835,9 @@ const InventoryManagement = () => {
 
   const downloadCSV = (data: any[], filename: string) => {
     if (data.length === 0) {
-      toast({
-        title: 'No Data',
-        description: 'No data available to download',
-        variant: 'destructive',
-      });
+      toast({ title: 'No Data', description: 'No data available to download', variant: 'destructive' });
       return;
     }
-
     const headers = Object.keys(data[0]);
     const csvContent = [
       headers.join(','),
@@ -984,7 +851,6 @@ const InventoryManagement = () => {
           .join(',')
       ),
     ].join('\n');
-
     const blob = new Blob([csvContent], { type: 'text/csv' });
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -1057,11 +923,7 @@ const InventoryManagement = () => {
                 <Card key={tablet.id} className="p-4">
                   <div className="flex justify-between items-start mb-4">
                     <h4 className="font-medium">Tablet {tablets.indexOf(tablet) + 1}</h4>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => removeTablet(tablet.id)}
-                    >
+                    <Button variant="outline" size="sm" onClick={() => removeTablet(tablet.id)}>
                       <Trash2 className="w-4 h-4" />
                     </Button>
                   </div>
@@ -1199,11 +1061,7 @@ const InventoryManagement = () => {
                 <Card key={tv.id} className="p-4">
                   <div className="flex justify-between items-start mb-4">
                     <h4 className="font-medium">TV {tvs.indexOf(tv) + 1}</h4>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => removeTV(tv.id)}
-                    >
+                    <Button variant="outline" size="sm" onClick={() => removeTV(tv.id)}>
                       <Trash2 className="w-4 h-4" />
                     </Button>
                   </div>
@@ -1339,9 +1197,7 @@ const InventoryManagement = () => {
             </SelectTrigger>
             <SelectContent>
               {warehouseOptions.map((warehouse) => (
-                <SelectItem key={warehouse} value={warehouse}>
-                  {warehouse}
-                </SelectItem>
+                <SelectItem key={warehouse} value={warehouse}>{warehouse}</SelectItem>
               ))}
             </SelectContent>
           </Select>
@@ -1351,9 +1207,7 @@ const InventoryManagement = () => {
             </SelectTrigger>
             <SelectContent>
               {productOptions.map((product) => (
-                <SelectItem key={product} value={product}>
-                  {product}
-                </SelectItem>
+                <SelectItem key={product} value={product}>{product}</SelectItem>
               ))}
             </SelectContent>
           </Select>
@@ -1363,29 +1217,13 @@ const InventoryManagement = () => {
             </SelectTrigger>
             <SelectContent>
               {modelOptions.map((model) => (
-                <SelectItem key={model} value={model}>
-                  {model}
-                </SelectItem>
+                <SelectItem key={model} value={model}>{model}</SelectItem>
               ))}
             </SelectContent>
           </Select>
-          <Input
-            type="date"
-            value={fromDate}
-            onChange={(e) => setFromDate(e.target.value)}
-            placeholder="From Date"
-          />
-          <Input
-            type="date"
-            value={toDate}
-            onChange={(e) => setToDate(e.target.value)}
-            placeholder="To Date"
-          />
-          <Button
-            variant={showDeleted ? 'destructive' : 'outline'}
-            onClick={() => setShowDeleted(!showDeleted)}
-            className="w-full"
-          >
+          <Input type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)} placeholder="From Date" />
+          <Input type="date" value={toDate} onChange={(e) => setToDate(e.target.value)} placeholder="To Date" />
+          <Button variant={showDeleted ? 'destructive' : 'outline'} onClick={() => setShowDeleted(!showDeleted)} className="w-full">
             {showDeleted ? <RotateCcw className="h-4 w-4 mr-2" /> : <Archive className="h-4 w-4 mr-2" />}
             {showDeleted ? 'Show Active' : 'Show Deleted'}
           </Button>
@@ -1426,16 +1264,10 @@ const InventoryManagement = () => {
                   <TableCell>{formatDate(order.order_date)}</TableCell>
                   <TableCell>
                     <div className="flex gap-2">
-                      <Button variant="ghost" size="sm" onClick={() => {
-                        setViewingOrder(order);
-                        setShowViewDialog(true);
-                      }}>
+                      <Button variant="ghost" size="sm" onClick={() => { setViewingOrder(order); setShowViewDialog(true); }}>
                         <Eye className="h-4 w-4" />
                       </Button>
-                      <Button variant="ghost" size="sm" onClick={() => {
-                        setEditingOrder(order);
-                        setShowEditDialog(true);
-                      }}>
+                      <Button variant="ghost" size="sm" onClick={() => { setEditingOrder(order); setShowEditDialog(true); }}>
                         <Edit className="h-4 w-4" />
                       </Button>
                       {!order.is_deleted && (
@@ -1497,9 +1329,7 @@ const InventoryManagement = () => {
             </SelectTrigger>
             <SelectContent>
               {warehouseOptions.map((warehouse) => (
-                <SelectItem key={warehouse} value={warehouse}>
-                  {warehouse}
-                </SelectItem>
+                <SelectItem key={warehouse} value={warehouse}>{warehouse}</SelectItem>
               ))}
             </SelectContent>
           </Select>
@@ -1509,9 +1339,7 @@ const InventoryManagement = () => {
             </SelectTrigger>
             <SelectContent>
               {productOptions.map((product) => (
-                <SelectItem key={product} value={product}>
-                  {product}
-                </SelectItem>
+                <SelectItem key={product} value={product}>{product}</SelectItem>
               ))}
             </SelectContent>
           </Select>
@@ -1521,41 +1349,13 @@ const InventoryManagement = () => {
             </SelectTrigger>
             <SelectContent>
               {modelOptions.map((model) => (
-                <SelectItem key={model} value={model}>
-                  {model}
-                </SelectItem>
+                <SelectItem key={model} value={model}>{model}</SelectItem>
               ))}
             </SelectContent>
           </Select>
-          <Select value={selectedOrderType} onValueChange={setSelectedOrderType}>
-            <SelectTrigger>
-              <SelectValue placeholder="All Order Types" />
-            </SelectTrigger>
-            <SelectContent>
-              {orderTypeOptions.map((type) => (
-                <SelectItem key={type} value={type}>
-                  {type}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Input
-            type="date"
-            value={fromDate}
-            onChange={(e) => setFromDate(e.target.value)}
-            placeholder="From Date"
-          />
-          <Input
-            type="date"
-            value={toDate}
-            onChange={(e) => setToDate(e.target.value)}
-            placeholder="To Date"
-          />
-          <Button
-            variant={showDeleted ? 'destructive' : 'outline'}
-            onClick={() => setShowDeleted(!showDeleted)}
-            className="w-full"
-          >
+          <Input type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)} placeholder="From Date" />
+          <Input type="date" value={toDate} onChange={(e) => setToDate(e.target.value)} placeholder="To Date" />
+          <Button variant={showDeleted ? 'destructive' : 'outline'} onClick={() => setShowDeleted(!showDeleted)} className="w-full">
             {showDeleted ? <RotateCcw className="h-4 w-4 mr-2" /> : <Archive className="h-4 w-4 mr-2" />}
             {showDeleted ? 'Show Active' : 'Show Deleted'}
           </Button>
@@ -1569,7 +1369,6 @@ const InventoryManagement = () => {
                 <TableHead>Serial Number</TableHead>
                 <TableHead>Warehouse</TableHead>
                 <TableHead>Status</TableHead>
-                <TableHead>Order Type</TableHead>
                 <TableHead>Sales Order</TableHead>
                 <TableHead>School Name</TableHead>
                 <TableHead>Deal ID</TableHead>
@@ -1597,11 +1396,6 @@ const InventoryManagement = () => {
                       {device.status}
                     </Badge>
                   </TableCell>
-                  <TableCell>
-                    <Badge variant={device.order_type === 'Inward' ? 'default' : 'secondary'}>
-                      {device.order_type || '-'}
-                    </Badge>
-                  </TableCell>
                   <TableCell>{device.sales_order || '-'}</TableCell>
                   <TableCell>{device.school_name || '-'}</TableCell>
                   <TableCell>{device.deal_id || '-'}</TableCell>
@@ -1616,10 +1410,17 @@ const InventoryManagement = () => {
     </Card>
   );
 
-  const renderWarehouseSummary = () => {
-    const totalInward = warehouseSummary.reduce((sum, item) => sum + item.inward, 0);
-    const totalOutward = warehouseSummary.reduce((sum, item) => sum + item.outward, 0);
-    const totalAvailable = warehouseSummary.reduce((sum, item) => sum + item.available, 0);
+  const renderOrderSummary = () => {
+    const filteredSummary = orderSummary.filter((summary) => {
+      if (selectedWarehouse !== 'All' && summary.warehouse !== selectedWarehouse) return false;
+      if (selectedProduct !== 'All' && summary.product !== selectedProduct) return false;
+      if (selectedModel !== 'All' && summary.model !== selectedModel) return false;
+      return true;
+    });
+
+    const totalInward = filteredSummary.reduce((sum, item) => sum + (item.inward || 0), 0);
+    const totalOutward = filteredSummary.reduce((sum, item) => sum + (item.outward || 0), 0);
+    const totalAvailable = filteredSummary.reduce((sum, item) => sum + (item.available || 0), 0);
 
     return (
       <div className="space-y-6">
@@ -1652,9 +1453,7 @@ const InventoryManagement = () => {
                     </SelectTrigger>
                     <SelectContent>
                       {warehouseOptions.map((warehouse) => (
-                        <SelectItem key={warehouse} value={warehouse}>
-                          {warehouse}
-                        </SelectItem>
+                        <SelectItem key={warehouse} value={warehouse}>{warehouse}</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
@@ -1667,9 +1466,7 @@ const InventoryManagement = () => {
                     </SelectTrigger>
                     <SelectContent>
                       {productOptions.map((product) => (
-                        <SelectItem key={product} value={product}>
-                          {product}
-                        </SelectItem>
+                        <SelectItem key={product} value={product}>{product}</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
@@ -1682,37 +1479,21 @@ const InventoryManagement = () => {
                     </SelectTrigger>
                     <SelectContent>
                       {modelOptions.map((model) => (
-                        <SelectItem key={model} value={model}>
-                          {model}
-                        </SelectItem>
+                        <SelectItem key={model} value={model}>{model}</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
                 </div>
                 <div>
                   <Label className="text-sm font-medium">From Date</Label>
-                  <Input
-                    type="date"
-                    value={fromDate}
-                    onChange={(e) => setFromDate(e.target.value)}
-                    placeholder="dd-mm-yyyy"
-                  />
+                  <Input type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)} placeholder="dd-mm-yyyy" />
                 </div>
                 <div>
                   <Label className="text-sm font-medium">To Date</Label>
-                  <Input
-                    type="date"
-                    value={toDate}
-                    onChange={(e) => setToDate(e.target.value)}
-                    placeholder="dd-mm-yyyy"
-                  />
+                  <Input type="date" value={toDate} onChange={(e) => setToDate(e.target.value)} placeholder="dd-mm-yyyy" />
                 </div>
                 <div className="flex items-end">
-                  <Button
-                    variant={showDeleted ? 'destructive' : 'outline'}
-                    onClick={() => setShowDeleted(!showDeleted)}
-                    className="w-full"
-                  >
+                  <Button variant={showDeleted ? 'destructive' : 'outline'} onClick={() => setShowDeleted(!showDeleted)} className="w-full">
                     Show Deleted
                   </Button>
                 </div>
@@ -1724,12 +1505,12 @@ const InventoryManagement = () => {
           <CardHeader>
             <div className="flex justify-between items-center">
               <div>
-                <CardTitle>Warehouse Summary</CardTitle>
+                <CardTitle>Order Summary</CardTitle>
                 <CardDescription>
                   Updated: {formatDate(new Date().toISOString())} {new Date().toLocaleTimeString('en-GB', { hour12: false })}
                 </CardDescription>
               </div>
-              <Button variant="outline" onClick={() => downloadCSV(warehouseSummary, 'warehouse-summary.csv')}>
+              <Button variant="outline" onClick={() => downloadCSV(orderSummary, 'order-summary.csv')}>
                 <Download className="h-4 w-4 mr-2" />
                 Download CSV
               </Button>
@@ -1754,6 +1535,7 @@ const InventoryManagement = () => {
               <Table>
                 <TableHeader>
                   <TableRow>
+                    <TableHead>Warehouse</TableHead>
                     <TableHead>Product</TableHead>
                     <TableHead>Model</TableHead>
                     <TableHead className="text-center">Inward</TableHead>
@@ -1762,28 +1544,16 @@ const InventoryManagement = () => {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {warehouseSummary
-                    .filter((summary) => {
-                      if (selectedWarehouse !== 'All' && summary.warehouse !== selectedWarehouse) return false;
-                      if (selectedProduct !== 'All' && summary.product !== selectedProduct) return false;
-                      if (selectedModel !== 'All' && summary.model !== selectedModel) return false;
-                      return true;
-                    })
-                    .map((summary, index) => (
-                      <TableRow key={index}>
-                        <TableCell>{summary.product}</TableCell>
-                        <TableCell>{summary.model}</TableCell>
-                        <TableCell className="text-center">
-                          <span className="text-green-600 font-semibold">{summary.inward}</span>
-                        </TableCell>
-                        <TableCell className="text-center">
-                          <span className="text-red-600 font-semibold">{summary.outward}</span>
-                        </TableCell>
-                        <TableCell className="text-center">
-                          <span className="text-blue-600 font-semibold">{summary.available}</span>
-                        </TableCell>
-                      </TableRow>
-                    ))}
+                  {filteredSummary.map((summary, index) => (
+                    <TableRow key={index}>
+                      <TableCell>{summary.warehouse}</TableCell>
+                      <TableCell>{summary.product}</TableCell>
+                      <TableCell>{summary.model}</TableCell>
+                      <TableCell className="text-center"><span className="text-green-600 font-semibold">{summary.inward || 0}</span></TableCell>
+                      <TableCell className="text-center"><span className="text-red-600 font-semibold">{summary.outward || 0}</span></TableCell>
+                      <TableCell className="text-center"><span className="text-blue-600 font-semibold">{summary.available || 0}</span></TableCell>
+                    </TableRow>
+                  ))}
                 </TableBody>
               </Table>
             </div>
@@ -1811,9 +1581,9 @@ const InventoryManagement = () => {
               <Archive className="w-4 h-4 mr-2" />
               View Orders
             </TabsTrigger>
-            <TabsTrigger value="warehouse">
+            <TabsTrigger value="order">
               <BarChart3 className="w-4 h-4 mr-2" />
-              Warehouse Summary
+              Order Summary
             </TabsTrigger>
             <TabsTrigger value="devices">
               <Archive className="w-4 h-4 mr-2" />
@@ -1827,8 +1597,8 @@ const InventoryManagement = () => {
           <TabsContent value="view" className="space-y-6">
             {renderOrdersTable()}
           </TabsContent>
-          <TabsContent value="warehouse" className="space-y-6">
-            {renderWarehouseSummary()}
+          <TabsContent value="order" className="space-y-6">
+            {renderOrderSummary()}
           </TabsContent>
           <TabsContent value="devices" className="space-y-6">
             {renderDevicesTable()}
@@ -1837,10 +1607,7 @@ const InventoryManagement = () => {
 
         <EnhancedBarcodeScanner
           isOpen={showScanner}
-          onClose={() => {
-            setShowScanner(false);
-            setCurrentSerialIndex(null);
-          }}
+          onClose={() => { setShowScanner(false); setCurrentSerialIndex(null); }}
           onScan={handleScanResult}
         />
 
@@ -1931,10 +1698,7 @@ const InventoryManagement = () => {
                   {!viewingOrder.is_deleted && (
                     <Button
                       variant="destructive"
-                      onClick={() => {
-                        softDeleteOrder(viewingOrder.id);
-                        setShowViewDialog(false);
-                      }}
+                      onClick={() => { softDeleteOrder(viewingOrder.id); setShowViewDialog(false); }}
                     >
                       <Trash2 className="h-4 w-4 mr-2" />
                       Delete
@@ -1942,10 +1706,7 @@ const InventoryManagement = () => {
                   )}
                   {viewingOrder.is_deleted && (
                     <Button
-                      onClick={() => {
-                        restoreOrder(viewingOrder.id);
-                        setShowViewDialog(false);
-                      }}
+                      onClick={() => { restoreOrder(viewingOrder.id); setShowViewDialog(false); }}
                     >
                       <RotateCcw className="h-4 w-4 mr-2" />
                       Restore
