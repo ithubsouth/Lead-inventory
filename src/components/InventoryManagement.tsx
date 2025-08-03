@@ -906,8 +906,8 @@ const InventoryManagement = () => {
     if (selectedWarehouse !== 'All' && order.warehouse !== selectedWarehouse) return false;
     if (selectedProduct !== 'All' && order.product !== selectedProduct) return false;
     if (selectedModel !== 'All' && order.model !== selectedModel) return false;
-    if (fromDate && new Date(order.order_date) < new Date(fromDate)) return false;
-    if (toDate && new Date(order.order_date) > new Date(toDate)) return false;
+    if (fromDate && new Date(order.order_date) <= new Date(fromDate)) return false;
+    if (toDate && new Date(order.order_date) >= new Date(toDate)) return false;
     if (searchQuery) {
       const query = searchQuery.toLowerCase();
       return (
