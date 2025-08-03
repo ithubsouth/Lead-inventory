@@ -54,6 +54,7 @@ interface Order {
   is_deleted: boolean;
   created_by?: string;
   updated_by?: string;
+  status?: 'Success' | 'Failed' | 'Pending';
 }
 
 interface Device {
@@ -105,18 +106,12 @@ const EditOrderForm = ({ order, onSave, onCancel }: {
   const { toast } = useToast();
 
   const addSerialNumber = (serial: string) => {
-    if (serial && !formData.serial_numbers.includes(serial)) {
+    if (serial) {
       setFormData(prev => ({
         ...prev,
-        serial_numbers: [...prev.serial_numbers, serial]
+        serial_numbers: [...prev.serial_numbers, serial.trim()]
       }));
       setNewSerialNumber('');
-    } else if (formData.serial_numbers.includes(serial)) {
-      toast({
-        title: "Duplicate Serial Number",
-        description: "This serial number already exists in this order",
-        variant: "destructive"
-      });
     }
   };
 
@@ -128,8 +123,9 @@ const EditOrderForm = ({ order, onSave, onCancel }: {
   };
 
   const updateSerialNumber = (index: number, value: string) => {
+    const trimmedValue = value.trim();
     const newSerialNumbers = [...formData.serial_numbers];
-    newSerialNumbers[index] = value;
+    newSerialNumbers[index] = trimmedValue;
     setFormData(prev => ({
       ...prev,
       serial_numbers: newSerialNumbers
@@ -422,12 +418,56 @@ const InventoryManagement = () => {
   const loadOrders = async () => {
     try {
       setLoading(true);
-      const { data, error } = await supabase
+      // Fetch orders
+      const { data: ordersData, error: ordersError } = await supabase
         .from('orders')
         .select('*')
         .order('created_at', { ascending: false });
-      if (error) throw error;
-      setOrders((data as Order[]) || []);
+      if (ordersError) throw ordersError;
+
+      // Fetch devices to determine order status
+      const { data: devicesData, error: devicesError } = await supabase
+        .from('devices')
+        .select('order_id, serial_number');
+      if (devicesError) throw devicesError;
+
+      // Map devices by order_id for easier lookups
+      const devicesByOrderId = new Map<string, string[]>();
+      devicesData.forEach((device: { order_id: string; serial_number: string }) => {
+        if (device.order_id) {
+          if (!devicesByOrderId.has(device.order_id)) {
+            devicesByOrderId.set(device.order_id, []);
+          }
+          devicesByOrderId.get(device.order_id)!.push(device.serial_number);
+        }
+      });
+
+      // Compute status for each order
+      const ordersWithStatus = (ordersData || []).map((order: Order) => {
+        const orderDevices = devicesByOrderId.get(order.id) || [];
+        const validSerials = order.serial_numbers.filter((sn) => sn.trim());
+
+        if (validSerials.length === 0) {
+          return { ...order, status: 'Pending' };
+        }
+
+        const allSerialsMatch = validSerials.every((sn) =>
+          orderDevices.includes(sn.trim())
+        );
+        const anySerialsMatch = validSerials.some((sn) =>
+          orderDevices.includes(sn.trim())
+        );
+
+        if (allSerialsMatch && validSerials.length === orderDevices.length) {
+          return { ...order, status: 'Success' };
+        } else if (!anySerialsMatch || validSerials.length !== orderDevices.length) {
+          return { ...order, status: 'Failed' };
+        } else {
+          return { ...order, status: 'Pending' };
+        }
+      });
+
+      setOrders(ordersWithStatus);
     } catch (error) {
       console.error('Error loading orders:', error);
       toast({ title: 'Error', description: 'Failed to load orders', variant: 'destructive' });
@@ -560,6 +600,35 @@ const InventoryManagement = () => {
       const validTablets = tablets.filter(t => t.schoolName.trim() && t.model && t.location && t.quantity > 0);
       const validTVs = tvs.filter(t => t.schoolName.trim() && t.model && t.location && t.quantity > 0);
 
+      // Validate tablet serial numbers
+      for (const tablet of validTablets) {
+        const validSerials = tablet.serialNumbers.filter(sn => sn.trim());
+        if (validSerials.length !== tablet.quantity) {
+          toast({
+            title: "Validation Error",
+            description: `Number of serial numbers (${validSerials.length}) does not match quantity (${tablet.quantity}) for tablet order`,
+            variant: "destructive"
+          });
+          setLoading(false);
+          return;
+        }
+      }
+
+      // Validate TV serial numbers
+      for (const tv of validTVs) {
+        const validSerials = tv.serialNumbers.filter(sn => sn.trim());
+        if (validSerials.length !== tv.quantity) {
+          toast({
+            title: "Validation Error",
+            description: `Number of serial numbers (${validSerials.length}) does not match quantity (${tv.quantity}) for TV order`,
+            variant: "destructive"
+          });
+          setLoading(false);
+          return;
+        }
+      }
+
+      // Insert tablet orders
       for (const tablet of validTablets) {
         const salesOrderId = salesOrder || generateDummyId('SO');
         const effectiveOrderType = orderType === 'Stock' || orderType === 'Return' ? 'Inward' : 'Outward';
@@ -577,6 +646,9 @@ const InventoryManagement = () => {
             nucleus_id: tablet.nucleusId,
             serial_numbers: tablet.serialNumbers.filter(sn => sn.trim()),
             order_date: new Date().toISOString(),
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+            is_deleted: false,
           })
           .select()
           .single();
@@ -597,11 +669,15 @@ const InventoryManagement = () => {
               nucleus_id: tablet.nucleusId,
               status: effectiveOrderType === 'Inward' ? 'Available' : 'Assigned',
               order_id: orderData.id,
+              created_at: new Date().toISOString(),
+              updated_at: new Date().toISOString(),
+              is_deleted: false,
             });
           if (deviceError) throw new Error(`Device insertion failed: ${deviceError.message}`);
         }
       }
 
+      // Insert TV orders
       for (const tv of validTVs) {
         const salesOrderId = salesOrder || generateDummyId('SO');
         const effectiveOrderType = orderType === 'Stock' || orderType === 'Return' ? 'Inward' : 'Outward';
@@ -619,6 +695,9 @@ const InventoryManagement = () => {
             nucleus_id: tv.nucleusId,
             serial_numbers: tv.serialNumbers.filter(sn => sn.trim()),
             order_date: new Date().toISOString(),
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+            is_deleted: false,
           })
           .select()
           .single();
@@ -639,6 +718,9 @@ const InventoryManagement = () => {
               nucleus_id: tv.nucleusId,
               status: effectiveOrderType === 'Inward' ? 'Available' : 'Assigned',
               order_id: orderData.id,
+              created_at: new Date().toISOString(),
+              updated_at: new Date().toISOString(),
+              is_deleted: false,
             });
           if (deviceError) throw new Error(`Device insertion failed: ${deviceError.message}`);
         }
@@ -664,6 +746,17 @@ const InventoryManagement = () => {
   const updateOrder = async (updatedOrder: Order) => {
     try {
       setLoading(true);
+      const validSerials = updatedOrder.serial_numbers.filter(sn => sn.trim());
+      if (updatedOrder.quantity !== validSerials.length) {
+        toast({
+          title: "Validation Error",
+          description: "The number of serial numbers must match the quantity",
+          variant: "destructive"
+        });
+        setLoading(false);
+        return;
+      }
+
       await supabase.from('devices').delete().eq('order_id', updatedOrder.id);
       const { error: orderError } = await supabase
         .from('orders')
@@ -674,7 +767,7 @@ const InventoryManagement = () => {
           nucleus_id: updatedOrder.nucleus_id,
           quantity: updatedOrder.quantity,
           warehouse: updatedOrder.warehouse,
-          serial_numbers: updatedOrder.serial_numbers,
+          serial_numbers: validSerials,
           updated_at: new Date().toISOString(),
           order_type: updatedOrder.order_type,
         })
@@ -698,6 +791,7 @@ const InventoryManagement = () => {
             order_id: updatedOrder.id,
             created_at: new Date().toISOString(),
             updated_at: new Date().toISOString(),
+            is_deleted: false,
           });
         if (deviceError) throw deviceError;
       }
@@ -772,7 +866,7 @@ const InventoryManagement = () => {
         setTablets(tablets.map(tablet => {
           if (tablet.id === itemId) {
             const newSerialNumbers = [...tablet.serialNumbers];
-            newSerialNumbers[index] = scannedValue;
+            newSerialNumbers[index] = scannedValue.trim();
             return { ...tablet, serialNumbers: newSerialNumbers };
           }
           return tablet;
@@ -781,7 +875,7 @@ const InventoryManagement = () => {
         setTvs(tvs.map(tv => {
           if (tv.id === itemId) {
             const newSerialNumbers = [...tv.serialNumbers];
-            newSerialNumbers[index] = scannedValue;
+            newSerialNumbers[index] = scannedValue.trim();
             return { ...tv, serialNumbers: newSerialNumbers };
           }
           return tv;
@@ -1242,6 +1336,7 @@ const InventoryManagement = () => {
                 <TableHead>Deal ID</TableHead>
                 <TableHead>Nucleus ID</TableHead>
                 <TableHead>Order Date</TableHead>
+                <TableHead>Status</TableHead>
                 <TableHead>Actions</TableHead>
               </TableRow>
             </TableHeader>
@@ -1262,6 +1357,19 @@ const InventoryManagement = () => {
                   <TableCell>{order.deal_id || '-'}</TableCell>
                   <TableCell>{order.nucleus_id || '-'}</TableCell>
                   <TableCell>{formatDate(order.order_date)}</TableCell>
+                  <TableCell>
+                    <Badge
+                      variant={
+                        order.status === 'Success'
+                          ? 'default'
+                          : order.status === 'Failed'
+                          ? 'destructive'
+                          : 'secondary'
+                      }
+                    >
+                      {order.status}
+                    </Badge>
+                  </TableCell>
                   <TableCell>
                     <div className="flex gap-2">
                       <Button variant="ghost" size="sm" onClick={() => { setViewingOrder(order); setShowViewDialog(true); }}>
@@ -1672,6 +1780,20 @@ const InventoryManagement = () => {
                       <div>
                         <Label className="text-sm font-medium text-muted-foreground">Order Date</Label>
                         <p>{formatDate(viewingOrder.order_date)}</p>
+                      </div>
+                      <div>
+                        <Label className="text-sm font-medium text-muted-foreground">Status</Label>
+                        <Badge
+                          variant={
+                            viewingOrder.status === 'Success'
+                              ? 'default'
+                              : viewingOrder.status === 'Failed'
+                              ? 'destructive'
+                              : 'secondary'
+                          }
+                        >
+                          {viewingOrder.status}
+                        </Badge>
                       </div>
                     </CardContent>
                   </Card>
