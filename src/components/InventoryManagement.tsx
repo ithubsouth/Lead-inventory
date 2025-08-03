@@ -818,8 +818,8 @@ const InventoryManagement = () => {
     if (selectedWarehouse !== 'All' && device.warehouse !== selectedWarehouse) return false;
     if (selectedProduct !== 'All' && device.product !== selectedProduct) return false;
     if (selectedModel !== 'All' && device.model !== selectedModel) return false;
-    if (fromDate && new Date(device.created_at) < new Date(fromDate)) return false;
-    if (toDate && new Date(device.created_at) > new Date(toDate)) return false;
+    if (fromDate && new Date(device.created_at) <= new Date(fromDate)) return false;
+    if (toDate && new Date(device.created_at) >= new Date(toDate)) return false;
     if (searchQuery) {
       const query = searchQuery.toLowerCase();
       return (
