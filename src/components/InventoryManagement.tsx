@@ -446,28 +446,29 @@ const InventoryManagement = () => {
         }
       });
 
-      const ordersWithStatus = (ordersData || []).map((order: Order) => {
+      const ordersWithStatus = (ordersData || []).map((order: any) => {
         const orderDevices = devicesByOrderId.get(order.id) || [];
-        const validSerials = order.serial_numbers.filter((sn) => sn.trim());
+        const validSerials = order.serial_numbers.filter((sn: string) => sn.trim());
 
+        // Determine status based on device creation
+        let status: 'Success' | 'Failed' | 'Pending' = 'Pending';
+        
         if (validSerials.length === 0) {
-          return { ...order, status: 'Pending' };
-        }
-
-        const allSerialsMatch = validSerials.every((sn) =>
-          orderDevices.includes(sn.trim())
-        );
-        const anySerialsMatch = validSerials.some((sn) =>
-          orderDevices.includes(sn.trim())
-        );
-
-        if (allSerialsMatch && validSerials.length === orderDevices.length) {
-          return { ...order, status: 'Success' };
-        } else if (!anySerialsMatch || validSerials.length !== orderDevices.length) {
-          return { ...order, status: 'Failed' };
+          status = 'Pending';
+        } else if (orderDevices.length === validSerials.length) {
+          status = 'Success';
+        } else if (orderDevices.length === 0) {
+          status = 'Failed';
         } else {
-          return { ...order, status: 'Pending' };
+          status = 'Pending';
         }
+
+        return {
+          ...order,
+          order_type: order.order_type as 'Inward' | 'Outward',
+          product: order.product as 'Tablet' | 'TV',
+          status
+        } as Order;
       });
 
       setOrders(ordersWithStatus);
