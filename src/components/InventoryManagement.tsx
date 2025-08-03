@@ -15,8 +15,6 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 
 interface TabletItem {
   id: string;
-  nucleusId?: string;
-  schoolName: string;
   model: string;
   sdCardSize?: string;
   profileId?: string;
@@ -27,8 +25,6 @@ interface TabletItem {
 
 interface TVItem {
   id: string;
-  nucleusId?: string;
-  schoolName: string;
   model: string;
   quantity: number;
   location: string;
@@ -154,6 +150,14 @@ const EditOrderForm = ({ order, onSave, onCancel }: {
   };
 
   const validateForm = () => {
+    if (!formData.school_name?.trim()) {
+      toast({
+        title: "Validation Error",
+        description: "School Name is required",
+        variant: "destructive"
+      });
+      return false;
+    }
     const validSerials = formData.serial_numbers.filter(sn => sn.trim());
     if (formData.quantity !== validSerials.length) {
       toast({
@@ -203,10 +207,11 @@ const EditOrderForm = ({ order, onSave, onCancel }: {
               />
             </div>
             <div>
-              <Label className="text-sm font-medium text-muted-foreground">School Name</Label>
+              <Label className="text-sm font-medium text-muted-foreground">School Name *</Label>
               <Input
                 value={formData.school_name || ''}
                 onChange={(e) => setFormData(prev => ({ ...prev, school_name: e.target.value }))}
+                required
               />
             </div>
             <div>
@@ -385,6 +390,8 @@ const InventoryManagement = () => {
   const [orderType, setOrderType] = useState('');
   const [salesOrder, setSalesOrder] = useState('');
   const [dealId, setDealId] = useState('');
+  const [nucleusId, setNucleusId] = useState('');
+  const [schoolName, setSchoolName] = useState('');
   const [tablets, setTablets] = useState<TabletItem[]>([]);
   const [tvs, setTvs] = useState<TVItem[]>([]);
 
@@ -418,20 +425,17 @@ const InventoryManagement = () => {
   const loadOrders = async () => {
     try {
       setLoading(true);
-      // Fetch orders
       const { data: ordersData, error: ordersError } = await supabase
         .from('orders')
         .select('*')
         .order('created_at', { ascending: false });
       if (ordersError) throw ordersError;
 
-      // Fetch devices to determine order status
       const { data: devicesData, error: devicesError } = await supabase
         .from('devices')
         .select('order_id, serial_number');
       if (devicesError) throw devicesError;
 
-      // Map devices by order_id for easier lookups
       const devicesByOrderId = new Map<string, string[]>();
       devicesData.forEach((device: { order_id: string; serial_number: string }) => {
         if (device.order_id) {
@@ -442,7 +446,6 @@ const InventoryManagement = () => {
         }
       });
 
-      // Compute status for each order
       const ordersWithStatus = (ordersData || []).map((order: Order) => {
         const orderDevices = devicesByOrderId.get(order.id) || [];
         const validSerials = order.serial_numbers.filter((sn) => sn.trim());
@@ -536,12 +539,12 @@ const InventoryManagement = () => {
   };
 
   const addTablet = () => {
-    const newTablet: TabletItem = { id: generateId(), nucleusId: '', schoolName: '', model: '', sdCardSize: '', profileId: '', quantity: 1, location: '', serialNumbers: [] };
+    const newTablet: TabletItem = { id: generateId(), model: '', sdCardSize: '', profileId: '', quantity: 1, location: '', serialNumbers: [] };
     setTablets([...tablets, newTablet]);
   };
 
   const addTV = () => {
-    const newTV: TVItem = { id: generateId(), nucleusId: '', schoolName: '', model: '', quantity: 1, location: '', serialNumbers: [] };
+    const newTV: TVItem = { id: generateId(), model: '', quantity: 1, location: '', serialNumbers: [] };
     setTvs([...tvs, newTV]);
   };
 
@@ -583,11 +586,41 @@ const InventoryManagement = () => {
       toast({ title: 'Error', description: 'Please select an order type', variant: 'destructive' });
       return false;
     }
-    const hasValidTablets = tablets.some(t => t.schoolName.trim() && t.model && t.location && t.quantity > 0);
-    const hasValidTVs = tvs.some(t => t.schoolName.trim() && t.model && t.location && t.quantity > 0);
-    if (!hasValidTablets && !hasValidTVs) {
-      toast({ title: 'Error', description: 'Please add at least one tablet or TV with school name, model, location, and quantity', variant: 'destructive' });
+    if (!schoolName.trim()) {
+      toast({ title: 'Error', description: 'School Name is required', variant: 'destructive' });
       return false;
+    }
+    const hasValidTablets = tablets.some(t => t.model && t.location && t.quantity > 0);
+    const hasValidTVs = tvs.some(t => t.model && t.location && t.quantity > 0);
+    if (!hasValidTablets && !hasValidTVs) {
+      toast({ title: 'Error', description: 'Please add at least one tablet or TV with model, location, and quantity', variant: 'destructive' });
+      return false;
+    }
+    const validTablets = tablets.filter(t => t.model && t.location && t.quantity > 0);
+    const validTVs = tvs.filter(t => t.model && t.location && t.quantity > 0);
+
+    for (const tablet of validTablets) {
+      const validSerials = tablet.serialNumbers.filter(sn => sn.trim());
+      if (validSerials.length !== tablet.quantity) {
+        toast({
+          title: "Validation Error",
+          description: `Number of serial numbers (${validSerials.length}) does not match quantity (${tablet.quantity}) for tablet order`,
+          variant: "destructive"
+        });
+        return false;
+      }
+    }
+
+    for (const tv of validTVs) {
+      const validSerials = tv.serialNumbers.filter(sn => sn.trim());
+      if (validSerials.length !== tv.quantity) {
+        toast({
+          title: "Validation Error",
+          description: `Number of serial numbers (${validSerials.length}) does not match quantity (${tv.quantity}) for TV order`,
+          variant: "destructive"
+        });
+        return false;
+      }
     }
     return true;
   };
@@ -597,38 +630,9 @@ const InventoryManagement = () => {
 
     setLoading(true);
     try {
-      const validTablets = tablets.filter(t => t.schoolName.trim() && t.model && t.location && t.quantity > 0);
-      const validTVs = tvs.filter(t => t.schoolName.trim() && t.model && t.location && t.quantity > 0);
+      const validTablets = tablets.filter(t => t.model && t.location && t.quantity > 0);
+      const validTVs = tvs.filter(t => t.model && t.location && t.quantity > 0);
 
-      // Validate tablet serial numbers
-      for (const tablet of validTablets) {
-        const validSerials = tablet.serialNumbers.filter(sn => sn.trim());
-        if (validSerials.length !== tablet.quantity) {
-          toast({
-            title: "Validation Error",
-            description: `Number of serial numbers (${validSerials.length}) does not match quantity (${tablet.quantity}) for tablet order`,
-            variant: "destructive"
-          });
-          setLoading(false);
-          return;
-        }
-      }
-
-      // Validate TV serial numbers
-      for (const tv of validTVs) {
-        const validSerials = tv.serialNumbers.filter(sn => sn.trim());
-        if (validSerials.length !== tv.quantity) {
-          toast({
-            title: "Validation Error",
-            description: `Number of serial numbers (${validSerials.length}) does not match quantity (${tv.quantity}) for TV order`,
-            variant: "destructive"
-          });
-          setLoading(false);
-          return;
-        }
-      }
-
-      // Insert tablet orders
       for (const tablet of validTablets) {
         const salesOrderId = salesOrder || generateDummyId('SO');
         const effectiveOrderType = orderType === 'Stock' || orderType === 'Return' ? 'Inward' : 'Outward';
@@ -642,8 +646,8 @@ const InventoryManagement = () => {
             warehouse: tablet.location,
             sales_order: salesOrderId,
             deal_id: dealId || '',
-            school_name: tablet.schoolName,
-            nucleus_id: tablet.nucleusId,
+            school_name: schoolName,
+            nucleus_id: nucleusId || '',
             serial_numbers: tablet.serialNumbers.filter(sn => sn.trim()),
             order_date: new Date().toISOString(),
             created_at: new Date().toISOString(),
@@ -665,8 +669,8 @@ const InventoryManagement = () => {
               warehouse: tablet.location,
               sales_order: salesOrderId,
               deal_id: dealId || '',
-              school_name: tablet.schoolName,
-              nucleus_id: tablet.nucleusId,
+              school_name: schoolName,
+              nucleus_id: nucleusId || '',
               status: effectiveOrderType === 'Inward' ? 'Available' : 'Assigned',
               order_id: orderData.id,
               created_at: new Date().toISOString(),
@@ -677,7 +681,6 @@ const InventoryManagement = () => {
         }
       }
 
-      // Insert TV orders
       for (const tv of validTVs) {
         const salesOrderId = salesOrder || generateDummyId('SO');
         const effectiveOrderType = orderType === 'Stock' || orderType === 'Return' ? 'Inward' : 'Outward';
@@ -691,8 +694,8 @@ const InventoryManagement = () => {
             warehouse: tv.location,
             sales_order: salesOrderId,
             deal_id: dealId || '',
-            school_name: tv.schoolName,
-            nucleus_id: tv.nucleusId,
+            school_name: schoolName,
+            nucleus_id: nucleusId || '',
             serial_numbers: tv.serialNumbers.filter(sn => sn.trim()),
             order_date: new Date().toISOString(),
             created_at: new Date().toISOString(),
@@ -714,8 +717,8 @@ const InventoryManagement = () => {
               warehouse: tv.location,
               sales_order: salesOrderId,
               deal_id: dealId || '',
-              school_name: tv.schoolName,
-              nucleus_id: tv.nucleusId,
+              school_name: schoolName,
+              nucleus_id: nucleusId || '',
               status: effectiveOrderType === 'Inward' ? 'Available' : 'Assigned',
               order_id: orderData.id,
               created_at: new Date().toISOString(),
@@ -729,6 +732,8 @@ const InventoryManagement = () => {
       setOrderType('');
       setSalesOrder('');
       setDealId('');
+      setNucleusId('');
+      setSchoolName('');
       setTablets([]);
       setTvs([]);
       await loadOrders();
@@ -747,6 +752,15 @@ const InventoryManagement = () => {
     try {
       setLoading(true);
       const validSerials = updatedOrder.serial_numbers.filter(sn => sn.trim());
+      if (!updatedOrder.school_name?.trim()) {
+        toast({
+          title: "Validation Error",
+          description: "School Name is required",
+          variant: "destructive"
+        });
+        setLoading(false);
+        return;
+      }
       if (updatedOrder.quantity !== validSerials.length) {
         toast({
           title: "Validation Error",
@@ -785,7 +799,7 @@ const InventoryManagement = () => {
             warehouse: updatedOrder.warehouse,
             sales_order: updatedOrder.sales_order || generateDummyId('SO'),
             deal_id: updatedOrder.deal_id || '',
-            school_name: updatedOrder.school_name || '',
+            school_name: updatedOrder.school_name,
             nucleus_id: updatedOrder.nucleus_id || '',
             status: updatedOrder.order_type === 'Inward' ? 'Available' : 'Assigned',
             order_id: updatedOrder.id,
@@ -966,7 +980,7 @@ const InventoryManagement = () => {
           <CardTitle>Order Information</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             <div>
               <Label htmlFor="orderType">Order Type *</Label>
               <Select value={orderType} onValueChange={setOrderType}>
@@ -996,6 +1010,23 @@ const InventoryManagement = () => {
                 placeholder="Optional"
               />
             </div>
+            <div>
+              <Label htmlFor="schoolName">School Name *</Label>
+              <Input
+                value={schoolName}
+                onChange={(e) => setSchoolName(e.target.value)}
+                placeholder="Required"
+                required
+              />
+            </div>
+            <div>
+              <Label htmlFor="nucleusId">Nucleus ID</Label>
+              <Input
+                value={nucleusId}
+                onChange={(e) => setNucleusId(e.target.value)}
+                placeholder="Optional"
+              />
+            </div>
           </div>
         </CardContent>
       </Card>
@@ -1022,22 +1053,6 @@ const InventoryManagement = () => {
                     </Button>
                   </div>
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                    <div>
-                      <Label>Nucleus ID</Label>
-                      <Input
-                        value={tablet.nucleusId || ''}
-                        onChange={(e) => updateTablet(tablet.id, 'nucleusId', e.target.value)}
-                        placeholder="Optional"
-                      />
-                    </div>
-                    <div>
-                      <Label>School Name *</Label>
-                      <Input
-                        value={tablet.schoolName}
-                        onChange={(e) => updateTablet(tablet.id, 'schoolName', e.target.value)}
-                        placeholder="Required"
-                      />
-                    </div>
                     <div>
                       <Label>Model *</Label>
                       <Select
@@ -1160,22 +1175,6 @@ const InventoryManagement = () => {
                     </Button>
                   </div>
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                    <div>
-                      <Label>Nucleus ID</Label>
-                      <Input
-                        value={tv.nucleusId || ''}
-                        onChange={(e) => updateTV(tv.id, 'nucleusId', e.target.value)}
-                        placeholder="Optional"
-                      />
-                    </div>
-                    <div>
-                      <Label>School Name *</Label>
-                      <Input
-                        value={tv.schoolName}
-                        onChange={(e) => updateTV(tv.id, 'schoolName', e.target.value)}
-                        placeholder="Required"
-                      />
-                    </div>
                     <div>
                       <Label>Model *</Label>
                       <Select
