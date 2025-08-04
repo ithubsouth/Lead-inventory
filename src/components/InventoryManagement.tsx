@@ -59,7 +59,7 @@ interface Device {
   model: string;
   serial_number: string;
   warehouse: string;
-  status: 'Available' | 'Assigned' | 'Maintenance';
+  status: 'Available' | 'Assigned' | 'Unassigned';
   order_id?: string;
   sales_order?: string;
   deal_id?: string;
@@ -450,7 +450,6 @@ const InventoryManagement = () => {
         const orderDevices = devicesByOrderId.get(order.id) || [];
         const validSerials = order.serial_numbers.filter((sn: string) => sn.trim());
 
-        // Determine status based on device creation
         let status: 'Success' | 'Failed' | 'Pending' = 'Pending';
         
         if (validSerials.length === 0) {
@@ -487,7 +486,46 @@ const InventoryManagement = () => {
         .select('*')
         .order('created_at', { ascending: false });
       if (error) throw error;
-      setDevices((data as Device[]) || []);
+
+      // Fetch related order details to determine order_type
+      const orderIds = [...new Set(data.map((device: Device) => device.order_id).filter(id => id))];
+      const { data: ordersData, error: ordersError } = await supabase
+        .from('orders')
+        .select('id, order_type')
+        .in('id', orderIds);
+      if (ordersError) throw ordersError;
+
+      const orderTypeMap = new Map(ordersData.map((order: { id: string; order_type: 'Inward' | 'Outward' }) => [order.id, order.order_type]));
+
+      // Group devices by serial number and track the latest entry per serial number
+      const serialNumberMap = new Map<string, { device: Device; orderType: 'Inward' | 'Outward' | undefined }>();
+      data.forEach((device: Device) => {
+        const orderType = device.order_id ? orderTypeMap.get(device.order_id) : undefined;
+        if (!serialNumberMap.has(device.serial_number) || new Date(device.created_at) > new Date(serialNumberMap.get(device.serial_number)!.device.created_at)) {
+          serialNumberMap.set(device.serial_number, { device, orderType });
+        }
+      });
+
+      // Update statuses based on order_type and duplicate handling
+      const updatedDevices = data.map((device: Device) => {
+        const latestEntry = serialNumberMap.get(device.serial_number);
+        const isLatest = latestEntry?.device.id === device.id;
+        const orderType = device.order_id ? orderTypeMap.get(device.order_id) : undefined;
+
+        let status: 'Available' | 'Assigned' | 'Unassigned';
+        if (isLatest) {
+          status = orderType === 'Outward' ? 'Assigned' : 'Available'; // Latest entry follows order_type
+        } else {
+          status = 'Unassigned'; // Earlier duplicates are Unassigned
+        }
+
+        return {
+          ...device,
+          status,
+        };
+      });
+
+      setDevices(updatedDevices || []);
     } catch (error) {
       console.error('Error loading devices:', error);
       toast({ title: 'Error', description: 'Failed to load devices', variant: 'destructive' });
@@ -1498,7 +1536,7 @@ const InventoryManagement = () => {
                           ? 'default'
                           : device.status === 'Assigned'
                           ? 'secondary'
-                          : 'destructive'
+                          : 'outline'
                       }
                     >
                       {device.status}
