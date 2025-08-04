@@ -446,7 +446,7 @@ const InventoryManagement = () => {
             // Sort by created_at, latest first
             devices.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
             
-            // Keep the latest device status, update others to Unassigned
+            // Keep the latest device status unchanged, update all others to Unassigned
             for (let i = 1; i < devices.length; i++) {
               await supabase
                 .from('devices')
@@ -458,6 +458,9 @@ const InventoryManagement = () => {
             }
           }
         }
+        
+        // Reload devices to show updated statuses
+        await loadDevices();
       }
     } catch (error) {
       console.error('Error handling duplicate serial numbers:', error);
@@ -807,6 +810,7 @@ const InventoryManagement = () => {
       await loadOrders();
       await loadDevices();
       await loadOrderSummary();
+      await handleDuplicateSerialNumbers();
       toast({ title: 'Success', description: 'Order created successfully!' });
     } catch (error) {
       console.error('Error creating order:', error);
@@ -892,6 +896,7 @@ const InventoryManagement = () => {
       setOrders(prev => prev.map(order => order.id === updatedOrder.id ? updatedOrder : order));
       await loadDevices();
       await loadOrderSummary();
+      await handleDuplicateSerialNumbers();
       toast({ title: 'Success', description: 'Order updated successfully' });
     } catch (error) {
       console.error('Error updating order:', error);
@@ -1492,6 +1497,10 @@ const InventoryManagement = () => {
             <Button variant="outline" onClick={() => downloadCSV(filteredDevices, 'devices.csv')}>
               <Download className="h-4 w-4 mr-2" />
               Download CSV
+            </Button>
+            <Button variant="outline" onClick={handleDuplicateSerialNumbers}>
+              <RotateCcw className="h-4 w-4 mr-2" />
+              Fix Duplicates
             </Button>
           </div>
         </div>
