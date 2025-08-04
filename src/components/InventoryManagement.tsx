@@ -417,7 +417,52 @@ const InventoryManagement = () => {
     loadOrders();
     loadDevices();
     loadOrderSummary();
+    handleDuplicateSerialNumbers();
   }, []);
+
+  const handleDuplicateSerialNumbers = async () => {
+    try {
+      // Get all devices with serial numbers that appear multiple times
+      const { data: allDevices, error } = await supabase
+        .from('devices')
+        .select('*')
+        .eq('is_deleted', false)
+        .order('created_at', { ascending: true });
+
+      if (error) throw error;
+
+      if (allDevices) {
+        // Group devices by serial number
+        const serialGroups = allDevices.reduce((acc, device) => {
+          const serial = device.serial_number;
+          if (!acc[serial]) acc[serial] = [];
+          acc[serial].push(device as Device);
+          return acc;
+        }, {} as Record<string, Device[]>);
+
+        // For each serial number with multiple devices, keep latest as Available/Assigned, mark others as Unassigned
+        for (const [serialNumber, devices] of Object.entries(serialGroups)) {
+          if (devices.length > 1) {
+            // Sort by created_at, latest first
+            devices.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+            
+            // Keep the latest device status, update others to Unassigned
+            for (let i = 1; i < devices.length; i++) {
+              await supabase
+                .from('devices')
+                .update({ 
+                  status: 'Unassigned',
+                  updated_at: new Date().toISOString()
+                })
+                .eq('id', devices[i].id);
+            }
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Error handling duplicate serial numbers:', error);
+    }
+  };
 
   const generateId = () => Math.random().toString(36).substr(2, 9);
   const generateDummyId = (prefix: string) => `${prefix}-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
@@ -661,6 +706,17 @@ const InventoryManagement = () => {
 
         for (let i = 0; i < tablet.quantity; i++) {
           const serialNumber = tablet.serialNumbers[i] || generateDummyId('SN');
+          
+          // Update existing devices with same serial number to "Unassigned" status
+          await supabase
+            .from('devices')
+            .update({ 
+              status: 'Unassigned',
+              updated_at: new Date().toISOString()
+            })
+            .eq('serial_number', serialNumber.trim())
+            .eq('is_deleted', false);
+
           const { error: deviceError } = await supabase
             .from('devices')
             .insert({
@@ -709,6 +765,17 @@ const InventoryManagement = () => {
 
         for (let i = 0; i < tv.quantity; i++) {
           const serialNumber = tv.serialNumbers[i] || generateDummyId('SN');
+          
+          // Update existing devices with same serial number to "Unassigned" status
+          await supabase
+            .from('devices')
+            .update({ 
+              status: 'Unassigned',
+              updated_at: new Date().toISOString()
+            })
+            .eq('serial_number', serialNumber.trim())
+            .eq('is_deleted', false);
+
           const { error: deviceError } = await supabase
             .from('devices')
             .insert({
@@ -791,6 +858,17 @@ const InventoryManagement = () => {
 
       for (let i = 0; i < updatedOrder.quantity; i++) {
         const serialNumber = updatedOrder.serial_numbers[i] || generateDummyId('SN');
+        
+        // Update existing devices with same serial number to "Unassigned" status
+        await supabase
+          .from('devices')
+          .update({ 
+            status: 'Unassigned',
+            updated_at: new Date().toISOString()
+          })
+          .eq('serial_number', serialNumber.trim())
+          .eq('is_deleted', false);
+
         const { error: deviceError } = await supabase
           .from('devices')
           .insert({
