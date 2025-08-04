@@ -125,11 +125,11 @@ const EnhancedBarcodeScanner: React.FC<EnhancedBarcodeScannerProps> = ({
   const getAspectRatio = () => {
     switch (scanMode) {
       case 'barcode':
-        return 'aspect-[4/3]'; // Wider for barcodes
+        return 'aspect-[3/1]'; // Wider for barcodes
       case 'qr':
         return 'aspect-square'; // Square for QR codes
       case 'text':
-        return 'aspect-[3/2]'; // Standard for text
+        return 'aspect-[3/1]'; // Standard for text
       default:
         return 'aspect-square';
     }
