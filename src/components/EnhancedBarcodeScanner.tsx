@@ -57,7 +57,7 @@ const EnhancedBarcodeScanner: React.FC<EnhancedBarcodeScannerProps> = ({
       try {
         const videoElement = webcamRef.current.video;
         
-        if (videoElement.videoWidth > 0) {
+        if (videoElement.videoWidth > 0 && videoElement.videoHeight > 0) {
           const canvas = document.createElement('canvas');
           const context = canvas.getContext('2d');
           
@@ -78,14 +78,16 @@ const EnhancedBarcodeScanner: React.FC<EnhancedBarcodeScannerProps> = ({
                     description: `Scanned: ${scannedText}`,
                   });
                 } else if (scanningRef.current) {
-                  setTimeout(scanImage, 1); // Scan every 1 millisecond
+                  setTimeout(scanImage, 1); // Continue scanning every 1ms
                 }
               })
               .catch(() => {
                 if (scanningRef.current) {
-                  setTimeout(scanImage, 1); // Retry every 1 millisecond
+                  setTimeout(scanImage, 1); // Continue scanning on error
                 }
               });
+          } else if (scanningRef.current) {
+            setTimeout(scanImage, 1);
           }
         } else if (scanningRef.current) {
           setTimeout(scanImage, 1);
@@ -97,7 +99,8 @@ const EnhancedBarcodeScanner: React.FC<EnhancedBarcodeScannerProps> = ({
       }
     };
 
-    setTimeout(scanImage, 10);
+    // Wait a bit for camera to initialize then start scanning
+    setTimeout(scanImage, 500);
   };
 
   const handleManualScan = () => {
@@ -152,7 +155,7 @@ const EnhancedBarcodeScanner: React.FC<EnhancedBarcodeScannerProps> = ({
     }
   };
 
-  const handleTextInput = () => {
+  const handleTextInput = async () => {
     if (!webcamRef.current?.video) return;
     
     try {
@@ -167,16 +170,38 @@ const EnhancedBarcodeScanner: React.FC<EnhancedBarcodeScannerProps> = ({
           canvas.height = videoElement.videoHeight;
           context.drawImage(videoElement, 0, 0);
           
-          // For text recognition, we'd typically use OCR libraries like Tesseract.js
-          // For now, let's allow manual text input as fallback
-          const inputText = prompt("Enter the text you see in the image:");
-          if (inputText && inputText.trim()) {
-            onScan(inputText.trim());
-            onClose();
-            toast({
-              title: "Text Added",
-              description: `Added: ${inputText.trim()}`,
-            });
+          // Use Tesseract.js for OCR text recognition
+          try {
+            const { createWorker } = await import('tesseract.js');
+            const worker = await createWorker('eng');
+            const { data: { text } } = await worker.recognize(canvas.toDataURL());
+            await worker.terminate();
+            
+            if (text && text.trim()) {
+              onScan(text.trim());
+              onClose();
+              toast({
+                title: "Text Recognized",
+                description: `Captured: ${text.trim()}`,
+              });
+            } else {
+              toast({
+                title: "No Text Found",
+                description: "Please ensure text is clearly visible",
+                variant: "destructive"
+              });
+            }
+          } catch (ocrError) {
+            // Fallback to manual input if OCR fails
+            const inputText = prompt("OCR failed. Enter the text manually:");
+            if (inputText && inputText.trim()) {
+              onScan(inputText.trim());
+              onClose();
+              toast({
+                title: "Text Added",
+                description: `Added: ${inputText.trim()}`,
+              });
+            }
           }
         }
       }

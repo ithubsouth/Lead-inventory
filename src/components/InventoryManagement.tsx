@@ -7,7 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
-import { Download, Package, BarChart3, Archive, RotateCcw, Plus, Trash2, Search, Camera, Eye, Edit, X } from 'lucide-react';
+import { Download, Package, BarChart3, Archive, RotateCcw, Plus, Trash2, Search, Camera, Eye, Edit, X, Minus } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import EnhancedBarcodeScanner from './EnhancedBarcodeScanner';
@@ -244,12 +244,32 @@ const EditOrderForm = ({ order, onSave, onCancel }: {
             </div>
             <div>
               <Label className="text-sm font-medium text-muted-foreground">Quantity</Label>
-              <Input
-                type="number"
-                value={formData.quantity}
-                onChange={(e) => handleQuantityChange(parseInt(e.target.value) || 1)}
-                min="1"
-              />
+              <div className="flex items-center gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => handleQuantityChange(formData.quantity - 1)}
+                  disabled={formData.quantity <= 1}
+                >
+                  <Minus className="h-4 w-4" />
+                </Button>
+                <Input
+                  type="number"
+                  value={formData.quantity}
+                  onChange={(e) => handleQuantityChange(parseInt(e.target.value) || 1)}
+                  min="1"
+                  className="text-center"
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => handleQuantityChange(formData.quantity + 1)}
+                >
+                  <Plus className="h-4 w-4" />
+                </Button>
+              </div>
             </div>
             <div>
               <Label className="text-sm font-medium text-muted-foreground">Warehouse</Label>
@@ -1134,12 +1154,32 @@ const InventoryManagement = () => {
                     </div>
                     <div>
                       <Label>Quantity *</Label>
-                      <Input
-                        type="number"
-                        value={tablet.quantity}
-                        onChange={(e) => updateTablet(tablet.id, 'quantity', parseInt(e.target.value) || 1)}
-                        min="1"
-                      />
+                      <div className="flex items-center gap-2">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => updateTablet(tablet.id, 'quantity', tablet.quantity - 1)}
+                          disabled={tablet.quantity <= 1}
+                        >
+                          <Minus className="h-4 w-4" />
+                        </Button>
+                        <Input
+                          type="number"
+                          value={tablet.quantity}
+                          onChange={(e) => updateTablet(tablet.id, 'quantity', parseInt(e.target.value) || 1)}
+                          min="1"
+                          className="text-center"
+                        />
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => updateTablet(tablet.id, 'quantity', tablet.quantity + 1)}
+                        >
+                          <Plus className="h-4 w-4" />
+                        </Button>
+                      </div>
                     </div>
                     <div>
                       <Label>Location *</Label>
@@ -1232,12 +1272,32 @@ const InventoryManagement = () => {
                     </div>
                     <div>
                       <Label>Quantity *</Label>
-                      <Input
-                        type="number"
-                        value={tv.quantity}
-                        onChange={(e) => updateTV(tv.id, 'quantity', parseInt(e.target.value) || 1)}
-                        min="1"
-                      />
+                      <div className="flex items-center gap-2">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => updateTV(tv.id, 'quantity', tv.quantity - 1)}
+                          disabled={tv.quantity <= 1}
+                        >
+                          <Minus className="h-4 w-4" />
+                        </Button>
+                        <Input
+                          type="number"
+                          value={tv.quantity}
+                          onChange={(e) => updateTV(tv.id, 'quantity', parseInt(e.target.value) || 1)}
+                          min="1"
+                          className="text-center"
+                        />
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => updateTV(tv.id, 'quantity', tv.quantity + 1)}
+                        >
+                          <Plus className="h-4 w-4" />
+                        </Button>
+                      </div>
                     </div>
                     <div>
                       <Label>Location *</Label>
