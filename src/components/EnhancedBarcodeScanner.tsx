@@ -79,12 +79,12 @@ const EnhancedBarcodeScanner: React.FC<EnhancedBarcodeScannerProps> = ({
                     description: `Scanned: ${scannedText}`,
                   });
                 } else if (scanningRef.current) {
-                  setTimeout(scanImage, 100); // Continuous scanning
+                  setTimeout(scanImage, 100);
                 }
               })
               .catch(() => {
                 if (scanningRef.current) {
-                  setTimeout(scanImage, 100); // Continue scanning on error
+                  setTimeout(scanImage, 100);
                 }
               });
           } else if (scanningRef.current) {
@@ -100,7 +100,6 @@ const EnhancedBarcodeScanner: React.FC<EnhancedBarcodeScannerProps> = ({
       }
     };
 
-    // Wait for camera to initialize then start scanning
     setTimeout(scanImage, 500);
   };
 
@@ -171,7 +170,6 @@ const EnhancedBarcodeScanner: React.FC<EnhancedBarcodeScannerProps> = ({
           canvas.height = videoElement.videoHeight;
           context.drawImage(videoElement, 0, 0);
           
-          // Use Tesseract.js for OCR text recognition
           try {
             const { createWorker } = await import('tesseract.js');
             const worker = await createWorker('eng');
@@ -184,7 +182,6 @@ const EnhancedBarcodeScanner: React.FC<EnhancedBarcodeScannerProps> = ({
             const { data: { text } } = await worker.recognize(canvas.toDataURL());
             await worker.terminate();
             
-            // Clean and validate the text
             const cleanText = text
               .split('\n')
               .map(line => line.trim())
@@ -257,7 +254,6 @@ const EnhancedBarcodeScanner: React.FC<EnhancedBarcodeScannerProps> = ({
   return (
     <Dialog open={isOpen} onOpenChange={handleClose}>
       <DialogContent className="max-w-sm p-0 gap-0 bg-scanner-bg border-none">
-        {/* Header */}
         <DialogHeader className="p-4 pb-2 bg-scanner-bg">
           <div className="flex items-center justify-between">
             <DialogTitle className="flex items-center gap-2 text-scanner-text text-lg">
@@ -276,7 +272,6 @@ const EnhancedBarcodeScanner: React.FC<EnhancedBarcodeScannerProps> = ({
         </DialogHeader>
         
         <div className="space-y-4 bg-scanner-bg">
-          {/* Mode Selection */}
           <div className="px-4">
             <div className="flex gap-1 bg-muted/20 p-1 rounded-lg">
               <Button
@@ -300,7 +295,6 @@ const EnhancedBarcodeScanner: React.FC<EnhancedBarcodeScannerProps> = ({
             </div>
           </div>
 
-          {/* Camera View */}
           <div className="relative aspect-[4/3] bg-black mx-4 rounded-lg overflow-hidden">
             <Webcam
               ref={webcamRef}
@@ -311,16 +305,13 @@ const EnhancedBarcodeScanner: React.FC<EnhancedBarcodeScannerProps> = ({
               style={{ transform: `scale(${zoom})`, transformOrigin: 'center' }}
             />
             
-            {/* Scanning Overlay */}
             <div className="absolute inset-0 flex items-center justify-center">
               {scanMode === 'barcode' ? (
-                /* Barcode scanning frame */
                 <div className="relative">
                   <div 
                     className="border-2 border-scanner-overlay rounded-lg bg-transparent"
                     style={{ width: '250px', height: '80px' }}
                   >
-                    {/* Corner brackets */}
                     <div className="absolute -top-1 -left-1 w-6 h-6">
                       <div className="absolute top-0 left-0 w-full h-1 bg-scanner-overlay rounded"></div>
                       <div className="absolute top-0 left-0 w-1 h-full bg-scanner-overlay rounded"></div>
@@ -340,7 +331,6 @@ const EnhancedBarcodeScanner: React.FC<EnhancedBarcodeScannerProps> = ({
                   </div>
                 </div>
               ) : (
-                /* Text reading overlay */
                 <div className="border-2 border-dashed border-scanner-overlay rounded-lg p-4 bg-black/20">
                   <div className="text-center text-scanner-text">
                     <Type className="w-8 h-8 mx-auto mb-2" />
@@ -350,7 +340,6 @@ const EnhancedBarcodeScanner: React.FC<EnhancedBarcodeScannerProps> = ({
               )}
             </div>
 
-            {/* Zoom Controls */}
             <div className="absolute top-4 right-4 flex flex-col gap-2">
               <Button
                 size="sm"
@@ -371,7 +360,6 @@ const EnhancedBarcodeScanner: React.FC<EnhancedBarcodeScannerProps> = ({
             </div>
           </div>
           
-          {/* Instructions */}
           <div className="px-4">
             <div className="text-center space-y-2">
               <p className="text-sm text-scanner-text font-medium">
@@ -390,7 +378,6 @@ const EnhancedBarcodeScanner: React.FC<EnhancedBarcodeScannerProps> = ({
             </div>
           </div>
           
-          {/* Action Buttons */}
           <div className="px-4 pb-4 space-y-2">
             {scanMode === 'barcode' ? (
               <Button 
