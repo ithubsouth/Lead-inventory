@@ -1,415 +1,307 @@
-import React, { useRef, useEffect, useState } from 'react';
-import Webcam from 'react-webcam';
-import { BrowserMultiFormatReader } from '@zxing/library';
+import { useState, useRef, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { ScanBarcode, Type, X, Scan, ZoomIn, ZoomOut } from 'lucide-react';
+import { Card, CardContent } from '@/components/ui/card';
+import { Camera, X, RotateCcw, ZoomIn, ZoomOut, ScanBarcode } from 'lucide-react';
+import { BrowserMultiFormatReader } from '@zxing/library';
 import { useToast } from '@/hooks/use-toast';
 
 interface EnhancedBarcodeScannerProps {
   isOpen: boolean;
   onClose: () => void;
   onScan: (result: string) => void;
+  totalIFPQty?: string; // Optional prop to enforce quantity limit
+  existingSerials?: string[]; // Optional prop to check for duplicates
 }
 
-type ScanMode = 'barcode' | 'text';
-
-const EnhancedBarcodeScanner: React.FC<EnhancedBarcodeScannerProps> = ({ 
-  isOpen, 
-  onClose, 
-  onScan 
-}) => {
-  const webcamRef = useRef<Webcam>(null);
-  const [scanMode, setScanMode] = useState<ScanMode>('barcode');
-  const readerRef = useRef<BrowserMultiFormatReader | null>(null);
-  const scanningRef = useRef<boolean>(false);
+export const EnhancedBarcodeScanner = ({
+  isOpen,
+  onClose,
+  onScan,
+  totalIFPQty = '0',
+  existingSerials = [],
+}: EnhancedBarcodeScannerProps) => {
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [isScanning, setIsScanning] = useState(false);
+  const [error, setError] = useState<string>('');
   const [zoom, setZoom] = useState(1);
+  const [tapPosition, setTapPosition] = useState<{ x: number; y: number } | null>(null);
+  const codeReader = useRef<BrowserMultiFormatReader>();
+  const streamRef = useRef<MediaStream | null>(null);
   const { toast } = useToast();
 
   useEffect(() => {
-    if (isOpen && scanMode === 'barcode') {
-      initializeReader();
-      startContinuousScanning();
+    if (isOpen) {
+      startScanning();
+    } else {
+      stopScanning();
     }
 
     return () => {
       stopScanning();
     };
-  }, [isOpen, scanMode]);
+  }, [isOpen]);
 
-  const initializeReader = () => {
-    if (readerRef.current) {
-      readerRef.current.reset();
-    }
-
-    if (scanMode === 'barcode') {
-      readerRef.current = new BrowserMultiFormatReader();
-    }
-  };
-
-  const startContinuousScanning = async () => {
-    if (!readerRef.current || !webcamRef.current?.video || scanningRef.current || scanMode !== 'barcode') return;
-
-    scanningRef.current = true;
-    
-    const scanImage = () => {
-      if (!isOpen || !readerRef.current || !webcamRef.current?.video || !scanningRef.current) return;
-      
-      try {
-        const videoElement = webcamRef.current.video;
-        
-        if (videoElement.videoWidth > 0 && videoElement.videoHeight > 0) {
-          const canvas = document.createElement('canvas');
-          const context = canvas.getContext('2d');
-          
-          if (context) {
-            canvas.width = videoElement.videoWidth;
-            canvas.height = videoElement.videoHeight;
-            context.drawImage(videoElement, 0, 0);
-            
-            readerRef.current.decodeFromImageUrl(canvas.toDataURL())
-              .then((result) => {
-                if (result && scanningRef.current) {
-                  const scannedText = result.getText();
-                  onScan(scannedText);
-                  stopScanning();
-                  onClose();
-                  toast({
-                    title: "Scan Successful",
-                    description: `Scanned: ${scannedText}`,
-                  });
-                } else if (scanningRef.current) {
-                  setTimeout(scanImage, 100);
-                }
-              })
-              .catch(() => {
-                if (scanningRef.current) {
-                  setTimeout(scanImage, 100);
-                }
-              });
-          } else if (scanningRef.current) {
-            setTimeout(scanImage, 100);
-          }
-        } else if (scanningRef.current) {
-          setTimeout(scanImage, 100);
-        }
-      } catch (error) {
-        if (scanningRef.current) {
-          setTimeout(scanImage, 100);
-        }
-      }
-    };
-
-    setTimeout(scanImage, 500);
-  };
-
-  const handleManualScan = () => {
-    if (!readerRef.current || !webcamRef.current?.video || scanMode !== 'barcode') return;
-    
+  const startScanning = async () => {
     try {
-      const videoElement = webcamRef.current.video;
-      
-      if (videoElement.videoWidth > 0) {
-        const canvas = document.createElement('canvas');
-        const context = canvas.getContext('2d');
-        
-        if (context) {
-          canvas.width = videoElement.videoWidth;
-          canvas.height = videoElement.videoHeight;
-          context.drawImage(videoElement, 0, 0);
-          
-          readerRef.current.decodeFromImageUrl(canvas.toDataURL())
-            .then((result) => {
-              if (result) {
-                const scannedText = result.getText();
-                onScan(scannedText);
-                stopScanning();
-                onClose();
-                toast({
-                  title: "Scan Successful",
-                  description: `Scanned: ${scannedText}`,
-                });
-              } else {
-                toast({
-                  title: "No Code Found",
-                  description: "Please position the code clearly in view",
-                  variant: "destructive"
-                });
-              }
-            })
-            .catch(() => {
-              toast({
-                title: "Scan Failed",
-                description: "Unable to read code. Please try again.",
-                variant: "destructive"
-              });
-            });
-        }
-      }
-    } catch (error) {
-      toast({
-        title: "Scanner Error",
-        description: "Please try again",
-        variant: "destructive"
-      });
-    }
-  };
+      setError('');
+      setIsScanning(true);
 
-  const handleTextInput = async () => {
-    if (!webcamRef.current?.video) return;
-    
-    try {
-      const videoElement = webcamRef.current.video;
-      
-      if (videoElement.videoWidth > 0) {
-        const canvas = document.createElement('canvas');
-        const context = canvas.getContext('2d');
-        
-        if (context) {
-          canvas.width = videoElement.videoWidth;
-          canvas.height = videoElement.videoHeight;
-          context.drawImage(videoElement, 0, 0);
-          
-          try {
-            const { createWorker } = await import('tesseract.js');
-            const worker = await createWorker('eng');
-            
-            toast({
-              title: "Processing",
-              description: "Reading text from image...",
-            });
-            
-            const { data: { text } } = await worker.recognize(canvas.toDataURL());
-            await worker.terminate();
-            
-            const cleanText = text
-              .split('\n')
-              .map(line => line.trim())
-              .filter(line => line.length > 0)
-              .join(' ')
-              .replace(/[^\w\s\-_.,@]/g, '')
-              .trim();
-              
-            if (cleanText && cleanText.length > 2) {
-              onScan(cleanText);
-              onClose();
-              toast({
-                title: "Text Recognized",
-                description: `Captured: ${cleanText.substring(0, 50)}${cleanText.length > 50 ? '...' : ''}`,
-              });
-            } else {
-              toast({
-                title: "No Clear Text Found",
-                description: "Please ensure text is clearly visible and well-lit",
-                variant: "destructive"
-              });
-            }
-          } catch (ocrError) {
-            toast({
-              title: "Text Recognition Failed",
-              description: "Please try with better lighting or clearer text",
-              variant: "destructive"
-            });
-          }
-        }
+      if (!codeReader.current) {
+        codeReader.current = new BrowserMultiFormatReader();
+        codeReader.current.timeBetweenDecodingAttempts = 50; // Fast scanning
       }
-    } catch (error) {
-      toast({
-        title: "Camera Error",
-        description: "Unable to capture image",
-        variant: "destructive"
+
+      const videoElement = videoRef.current;
+      if (!videoElement) return;
+
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: {
+          facingMode: 'environment',
+          width: { ideal: 1920, min: 640 },
+          height: { ideal: 1080, min: 480 },
+          frameRate: { ideal: 30, min: 15 },
+        },
       });
+
+      videoElement.srcObject = stream;
+      streamRef.current = stream;
+
+      videoElement.setAttribute('playsinline', 'true');
+      videoElement.setAttribute('webkit-playsinline', 'true');
+
+      await videoElement.play();
+
+      codeReader.current.decodeFromVideoDevice(undefined, videoElement, (result, err) => {
+        if (result) {
+          const scannedText = result.getText().trim();
+          validateAndHandleScan(scannedText);
+        }
+        if (err && !(err.name === 'NotFoundException')) {
+          console.error('Barcode scanning error:', err);
+          setError('Failed to scan barcode. Please try again.');
+          setIsScanning(false);
+        }
+      });
+    } catch (err) {
+      console.error('Error starting barcode scanner:', err);
+      setError('Failed to access camera. Please ensure camera permissions are granted.');
+      setIsScanning(false);
     }
   };
 
   const stopScanning = () => {
-    scanningRef.current = false;
-    if (readerRef.current) {
-      readerRef.current.reset();
+    if (codeReader.current) {
+      codeReader.current.reset();
+    }
+
+    const videoElement = videoRef.current;
+    if (videoElement && videoElement.srcObject) {
+      const stream = videoElement.srcObject as MediaStream;
+      stream.getTracks().forEach((track) => track.stop());
+      videoElement.srcObject = null;
+    }
+
+    setIsScanning(false);
+    streamRef.current = null;
+  };
+
+  const validateAndHandleScan = (scannedText: string) => {
+    const isDuplicate = existingSerials.some(
+      (item) => (typeof item === 'string' ? item : item.serial) === scannedText
+    );
+    const ifpQty = parseInt(totalIFPQty) || 0;
+    const isWithinLimit = ifpQty === 0 || existingSerials.length < ifpQty;
+
+    if (isDuplicate) {
+      toast({
+        title: 'Duplicate Serial Number',
+        description: `Serial number ${scannedText} has already been added to the list`,
+        variant: 'destructive',
+      });
+    } else if (!isWithinLimit) {
+      toast({
+        title: 'Quantity Limit Reached',
+        description: `Cannot add more than ${ifpQty} serial numbers (IFP quantity limit)`,
+        variant: 'destructive',
+      });
+    } else {
+      onScan(scannedText);
+      stopScanning();
+      onClose();
+      toast({
+        title: 'Serial Number Scanned',
+        description: `Serial number ${scannedText} scanned successfully`,
+      });
     }
   };
 
-  const handleClose = () => {
-    stopScanning();
-    onClose();
+  const handleRetry = () => {
+    setError('');
+    startScanning();
   };
 
   const handleZoomIn = () => {
-    setZoom(prev => Math.min(prev + 0.2, 3));
+    setZoom((prev) => Math.min(prev + 0.5, 3));
   };
 
   const handleZoomOut = () => {
-    setZoom(prev => Math.max(prev - 0.2, 0.5));
+    setZoom((prev) => Math.max(prev - 0.5, 1));
   };
 
-  const getVideoConstraints = () => {
-    return { 
-      width: { ideal: 1280 }, 
-      height: { ideal: 720 }, 
-      facingMode: "environment",
-      zoom: zoom
-    };
+  const handleVideoClick = (event: React.MouseEvent<HTMLVideoElement>) => {
+    const rect = event.currentTarget.getBoundingClientRect();
+    const x = ((event.clientX - rect.left) / rect.width) * 100;
+    const y = ((event.clientY - rect.top) / rect.height) * 100;
+
+    setTapPosition({ x, y });
+
+    setTimeout(() => setTapPosition(null), 500);
+
+    if (codeReader.current && videoRef.current) {
+      try {
+        codeReader.current.decodeFromVideoDevice(undefined, videoRef.current, (result, err) => {
+          if (result) {
+            const scannedText = result.getText().trim();
+            validateAndHandleScan(scannedText);
+          }
+          if (err && !(err.name === 'NotFoundException')) {
+            console.error('Tap scan error:', err);
+            toast({
+              title: 'Scan Failed',
+              description: 'Unable to read barcode. Please try again.',
+              variant: 'destructive',
+            });
+          }
+        });
+      } catch (error) {
+        console.error('Error scanning at tap position:', error);
+        toast({
+          title: 'Scanner Error',
+          description: 'Please try again.',
+          variant: 'destructive',
+        });
+      }
+    }
   };
+
+  if (!isOpen) return null;
 
   return (
-    <Dialog open={isOpen} onOpenChange={handleClose}>
-      <DialogContent className="max-w-sm p-0 gap-0 bg-scanner-bg border-none">
-        <DialogHeader className="p-4 pb-2 bg-scanner-bg">
-          <div className="flex items-center justify-between">
-            <DialogTitle className="flex items-center gap-2 text-scanner-text text-lg">
-              <ScanBarcode className="w-5 h-5" />
-              Scan {scanMode === 'barcode' ? 'Barcode' : 'Text'}
-            </DialogTitle>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={handleClose}
-              className="text-scanner-text hover:bg-white/10 h-8 w-8 p-0"
-            >
-              <X className="w-5 h-5" />
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+      <Card className="w-full max-w-md">
+        <CardContent className="p-6">
+          <div className="flex justify-between items-center mb-4">
+            <h3 className="text-lg font-semibold flex items-center gap-2">
+              <ScanBarcode className="h-5 w-5" />
+              Scan Barcode
+            </h3>
+            <Button variant="outline" size="sm" onClick={onClose}>
+              <X className="h-4 w-4" />
             </Button>
           </div>
-        </DialogHeader>
-        
-        <div className="space-y-4 bg-scanner-bg">
-          <div className="px-4">
-            <div className="flex gap-1 bg-muted/20 p-1 rounded-lg">
-              <Button
-                variant={scanMode === 'barcode' ? 'default' : 'ghost'}
-                size="sm"
-                onClick={() => setScanMode('barcode')}
-                className="flex-1 text-xs"
-              >
-                <ScanBarcode className="w-3 h-3 mr-1" />
-                Barcode
-              </Button>
-              <Button
-                variant={scanMode === 'text' ? 'default' : 'ghost'}
-                size="sm"
-                onClick={() => setScanMode('text')}
-                className="flex-1 text-xs"
-              >
-                <Type className="w-3 h-3 mr-1" />
-                Text
+
+          {error ? (
+            <div className="text-center space-y-4">
+              <div className="text-red-500 text-sm">{error}</div>
+              <Button onClick={handleRetry} className="w-full">
+                <RotateCcw className="h-4 w-4 mr-2" />
+                Try Again
               </Button>
             </div>
-          </div>
+          ) : (
+            <div className="space-y-4">
+              <div ref={containerRef} className="relative bg-black rounded-lg overflow-hidden">
+                <video
+                  ref={videoRef}
+                  className="w-full h-64 object-cover cursor-crosshair"
+                  autoPlay
+                  playsInline
+                  muted
+                  onClick={handleVideoClick}
+                  style={{
+                    imageRendering: 'crisp-edges',
+                    filter: 'contrast(1.1) brightness(1.1)',
+                    transform: `scale(${zoom})`,
+                    transformOrigin: 'center center',
+                    transition: 'transform 0.2s ease-out',
+                  }}
+                />
+                {isScanning && (
+                  <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                    <div className="border-2 border-primary bg-transparent w-3/4 h-1/2 rounded-lg">
+                      <div className="absolute -top-1 -left-1 w-6 h-6">
+                        <div className="absolute top-0 left-0 w-full h-1 bg-primary rounded"></div>
+                        <div className="absolute top-0 left-0 w-1 h-full bg-primary rounded"></div>
+                      </div>
+                      <div className="absolute -top-1 -right-1 w-6 h-6">
+                        <div className="absolute top-0 right-0 w-full h-1 bg-primary rounded"></div>
+                        <div className="absolute top-0 right-0 w-1 h-full bg-primary rounded"></div>
+                      </div>
+                      <div className="absolute -bottom-1 -left-1 w-6 h-6">
+                        <div className="absolute bottom-0 left-0 w-full h-1 bg-primary rounded"></div>
+                        <div className="absolute bottom-0 left-0 w-1 h-full bg-primary rounded"></div>
+                      </div>
+                      <div className="absolute -bottom-1 -right-1 w-6 h-6">
+                        <div className="absolute bottom-0 right-0 w-full h-1 bg-primary rounded"></div>
+                        <div className="absolute bottom-0 right-0 w-1 h-full bg-primary rounded"></div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+                {tapPosition && (
+                  <div
+                    className="absolute w-8 h-8 border-2 border-blue-400 rounded-full bg-blue-400/20 animate-ping pointer-events-none"
+                    style={{
+                      left: `${tapPosition.x}%`,
+                      top: `${tapPosition.y}%`,
+                      transform: 'translate(-50%, -50%)',
+                    }}
+                  />
+                )}
 
-          <div className="relative aspect-[4/3] bg-black mx-4 rounded-lg overflow-hidden">
-            <Webcam
-              ref={webcamRef}
-              audio={false}
-              screenshotFormat="image/jpeg"
-              videoConstraints={getVideoConstraints()}
-              className="w-full h-full object-cover"
-              style={{ transform: `scale(${zoom})`, transformOrigin: 'center' }}
-            />
-            
-            <div className="absolute inset-0 flex items-center justify-center">
-              {scanMode === 'barcode' ? (
-                <div className="relative">
-                  <div 
-                    className="border-2 border-scanner-overlay rounded-lg bg-transparent"
-                    style={{ width: '250px', height: '80px' }}
+                <div className="absolute bottom-2 right-2 flex gap-1">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-8 w-8 p-0 bg-black/50 border-white/20 text-white hover:bg-white/20"
+                    onClick={handleZoomOut}
+                    disabled={zoom <= 1}
                   >
-                    <div className="absolute -top-1 -left-1 w-6 h-6">
-                      <div className="absolute top-0 left-0 w-full h-1 bg-scanner-overlay rounded"></div>
-                      <div className="absolute top-0 left-0 w-1 h-full bg-scanner-overlay rounded"></div>
-                    </div>
-                    <div className="absolute -top-1 -right-1 w-6 h-6">
-                      <div className="absolute top-0 right-0 w-full h-1 bg-scanner-overlay rounded"></div>
-                      <div className="absolute top-0 right-0 w-1 h-full bg-scanner-overlay rounded"></div>
-                    </div>
-                    <div className="absolute -bottom-1 -left-1 w-6 h-6">
-                      <div className="absolute bottom-0 left-0 w-full h-1 bg-scanner-overlay rounded"></div>
-                      <div className="absolute bottom-0 left-0 w-1 h-full bg-scanner-overlay rounded"></div>
-                    </div>
-                    <div className="absolute -bottom-1 -right-1 w-6 h-6">
-                      <div className="absolute bottom-0 right-0 w-full h-1 bg-scanner-overlay rounded"></div>
-                      <div className="absolute bottom-0 right-0 w-1 h-full bg-scanner-overlay rounded"></div>
-                    </div>
-                  </div>
+                    <ZoomOut className="h-3 w-3" />
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-8 w-8 p-0 bg-black/50 border-white/20 text-white hover:bg-white/20"
+                    onClick={handleZoomIn}
+                    disabled={zoom >= 3}
+                  >
+                    <ZoomIn className="h-3 w-3" />
+                  </Button>
                 </div>
-              ) : (
-                <div className="border-2 border-dashed border-scanner-overlay rounded-lg p-4 bg-black/20">
-                  <div className="text-center text-scanner-text">
-                    <Type className="w-8 h-8 mx-auto mb-2" />
-                    <span className="text-sm">Position text clearly</span>
-                  </div>
-                </div>
-              )}
-            </div>
 
-            <div className="absolute top-4 right-4 flex flex-col gap-2">
-              <Button
-                size="sm"
-                variant="secondary"
-                onClick={handleZoomIn}
-                className="w-8 h-8 p-0 bg-black/50 border-none hover:bg-black/70"
-              >
-                <ZoomIn className="w-4 h-4 text-white" />
-              </Button>
-              <Button
-                size="sm"
-                variant="secondary"
-                onClick={handleZoomOut}
-                className="w-8 h-8 p-0 bg-black/50 border-none hover:bg-black/70"
-              >
-                <ZoomOut className="w-4 h-4 text-white" />
-              </Button>
-            </div>
-          </div>
-          
-          <div className="px-4">
-            <div className="text-center space-y-2">
-              <p className="text-sm text-scanner-text font-medium">
-                {scanMode === 'barcode' ? 
-                  'Tap on a barcode to scan it directly' : 
-                  'Position text clearly in view'
-                }
-              </p>
-              <div className="flex items-center justify-center gap-2 text-xs text-muted-foreground">
-                <ZoomIn className="w-3 h-3" />
-                <span>Use zoom controls or tap specific {scanMode === 'barcode' ? 'barcodes' : 'text'} to scan</span>
+                {zoom > 1 && (
+                  <div className="absolute top-2 right-2 bg-black/50 text-white text-xs px-2 py-1 rounded">
+                    {zoom.toFixed(1)}x
+                  </div>
+                )}
               </div>
-              <p className="text-xs text-muted-foreground">
-                Keep steady and ensure good lighting for best results
-              </p>
+
+              <div className="text-center text-sm text-muted-foreground space-y-2">
+                <p>Tap on a barcode to scan it directly</p>
+                <p className="text-xs">🔍 Use zoom controls or tap specific barcodes to scan</p>
+                <p className="text-xs">📱 Keep steady and ensure good lighting for best results</p>
+              </div>
+
+              <Button variant="outline" className="w-full" onClick={onClose}>
+                Cancel
+              </Button>
             </div>
-          </div>
-          
-          <div className="px-4 pb-4 space-y-2">
-            {scanMode === 'barcode' ? (
-              <Button 
-                onClick={handleManualScan} 
-                variant="default" 
-                className="w-full bg-primary hover:bg-primary/90"
-              >
-                <Scan className="w-4 h-4 mr-2" />
-                Scan Now
-              </Button>
-            ) : (
-              <Button 
-                onClick={handleTextInput} 
-                variant="default" 
-                className="w-full bg-primary hover:bg-primary/90"
-              >
-                <Type className="w-4 h-4 mr-2" />
-                Read Text
-              </Button>
-            )}
-            
-            <Button 
-              onClick={handleClose} 
-              variant="outline" 
-              className="w-full border-muted-foreground/30 text-muted-foreground hover:bg-muted/20"
-            >
-              Cancel
-            </Button>
-          </div>
-        </div>
-      </DialogContent>
-    </Dialog>
+          )}
+        </CardContent>
+      </Card>
+    </div>
   );
 };
 
