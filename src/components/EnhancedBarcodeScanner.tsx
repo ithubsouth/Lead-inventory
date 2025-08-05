@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
-import { Camera, X, RotateCcw, ZoomIn, ZoomOut, ScanBarcode } from 'lucide-react';
+import { Camera, X, ZoomIn, ZoomOut, ScanBarcode } from 'lucide-react';
 import { BrowserMultiFormatReader } from '@zxing/library';
 import { useToast } from '@/hooks/use-toast';
 
@@ -23,7 +23,6 @@ export const EnhancedBarcodeScanner = ({
   const videoRef = useRef<HTMLVideoElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [isScanning, setIsScanning] = useState(false);
-  const [error, setError] = useState<string>('');
   const [zoom, setZoom] = useState(1);
   const [tapPosition, setTapPosition] = useState<{ x: number; y: number } | null>(null);
   const codeReader = useRef<BrowserMultiFormatReader>();
@@ -44,7 +43,6 @@ export const EnhancedBarcodeScanner = ({
 
   const startScanning = async () => {
     try {
-      setError('');
       setIsScanning(true);
 
       if (!codeReader.current) {
@@ -53,9 +51,8 @@ export const EnhancedBarcodeScanner = ({
       }
 
       const videoElement = videoRef.current;
-      if (!videoElement) throw new Error('Video element not found');
+      if (!videoElement) return;
 
-      // Request camera with fallback to lower resolutions if needed
       const stream = await navigator.mediaDevices.getUserMedia({
         video: {
           facingMode: 'environment',
@@ -65,7 +62,6 @@ export const EnhancedBarcodeScanner = ({
         },
       }).catch(async (err) => {
         console.error('Initial camera access failed:', err);
-        // Retry with minimal constraints
         return await navigator.mediaDevices.getUserMedia({
           video: { facingMode: 'environment', width: 640, height: 480 },
         });
@@ -77,38 +73,24 @@ export const EnhancedBarcodeScanner = ({
       videoElement.setAttribute('playsinline', 'true');
       videoElement.setAttribute('webkit-playsinline', 'true');
 
-      await videoElement.play().catch((playErr) => {
-        console.error('Video play failed:', playErr);
-        throw new Error('Unable to play video stream');
-      });
+      await videoElement.play();
 
-      const decodeLoop = () => {
-        if (!codeReader.current || !videoElement || !isScanning) return;
-
+      if (codeReader.current) {
         codeReader.current.decodeFromVideoDevice(undefined, videoElement, (result, err) => {
           if (result) {
             const scannedText = result.getText().trim();
             validateAndHandleScan(scannedText);
-          } else if (err) {
-            if (err.name !== 'NotFoundException') {
-              console.error('Decoding error:', err);
-              setError('Failed to scan barcode. Retrying...');
-            }
-            // Continue scanning with a slight delay to avoid overwhelming
-            setTimeout(() => requestAnimationFrame(decodeLoop), 500);
-          } else {
-            requestAnimationFrame(decodeLoop);
+          }
+          // Continue scanning silently on any error
+          if (err) {
+            console.error('Decoding error:', err);
           }
         });
-      };
-
-      requestAnimationFrame(decodeLoop);
+      }
     } catch (err) {
       console.error('Scanner initialization error:', err);
-      setError('Failed to access camera. Retrying...');
-      setIsScanning(false);
-      // Retry after a short delay
-      setTimeout(startScanning, 3000);
+      // Silent retry
+      setTimeout(startScanning, 1000);
     }
   };
 
@@ -156,11 +138,6 @@ export const EnhancedBarcodeScanner = ({
         description: `Serial number ${scannedText} scanned successfully`,
       });
     }
-  };
-
-  const handleRetry = () => {
-    setError('');
-    startScanning();
   };
 
   const handleZoomIn = () => {
@@ -223,104 +200,94 @@ export const EnhancedBarcodeScanner = ({
             </Button>
           </div>
 
-          {error ? (
-            <div className="text-center space-y-4">
-              <div className="text-red-500 text-sm">{error}</div>
-              <Button onClick={handleRetry} className="w-full">
-                <RotateCcw className="h-4 w-4 mr-2" />
-                Try Again
-              </Button>
-            </div>
-          ) : (
-            <div className="space-y-4">
-              <div ref={containerRef} className="relative bg-black rounded-lg overflow-hidden">
-                <video
-                  ref={videoRef}
-                  className="w-full h-64 object-cover cursor-crosshair"
-                  autoPlay
-                  playsInline
-                  muted
-                  onClick={handleVideoClick}
-                  style={{
-                    imageRendering: 'crisp-edges',
-                    filter: 'contrast(1.1) brightness(1.1)',
-                    transform: `scale(${zoom})`,
-                    transformOrigin: 'center center',
-                    transition: 'transform 0.2s ease-out',
-                  }}
-                />
-                {isScanning && (
-                  <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                    <div className="border-2 border-primary bg-transparent w-3/4 h-1/2 rounded-lg">
-                      <div className="absolute -top-1 -left-1 w-6 h-6">
-                        <div className="absolute top-0 left-0 w-full h-1 bg-primary rounded"></div>
-                        <div className="absolute top-0 left-0 w-1 h-full bg-primary rounded"></div>
-                      </div>
-                      <div className="absolute -top-1 -right-1 w-6 h-6">
-                        <div className="absolute top-0 right-0 w-full h-1 bg-primary rounded"></div>
-                        <div className="absolute top-0 right-0 w-1 h-full bg-primary rounded"></div>
-                      </div>
-                      <div className="absolute -bottom-1 -left-1 w-6 h-6">
-                        <div className="absolute bottom-0 left-0 w-full h-1 bg-primary rounded"></div>
-                        <div className="absolute bottom-0 left-0 w-1 h-full bg-primary rounded"></div>
-                      </div>
-                      <div className="absolute -bottom-1 -right-1 w-6 h-6">
-                        <div className="absolute bottom-0 right-0 w-full h-1 bg-primary rounded"></div>
-                        <div className="absolute bottom-0 right-0 w-1 h-full bg-primary rounded"></div>
-                      </div>
+          <div className="space-y-4">
+            <div ref={containerRef} className="relative bg-black rounded-lg overflow-hidden">
+              <video
+                ref={videoRef}
+                className="w-full h-48 object-cover cursor-crosshair"
+                autoPlay
+                playsInline
+                muted
+                onClick={handleVideoClick}
+                style={{
+                  imageRendering: 'crisp-edges',
+                  filter: 'contrast(1.1) brightness(1.1)',
+                  transform: `scale(${zoom})`,
+                  transformOrigin: 'center center',
+                  transition: 'transform 0.2s ease-out',
+                }}
+              />
+              {isScanning && (
+                <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                  <div className="border-2 border-primary bg-transparent w-3/4 h-1/2 rounded-lg">
+                    <div className="absolute -top-1 -left-1 w-6 h-6">
+                      <div className="absolute top-0 left-0 w-full h-1 bg-primary rounded"></div>
+                      <div className="absolute top-0 left-0 w-1 h-full bg-primary rounded"></div>
+                    </div>
+                    <div className="absolute -top-1 -right-1 w-6 h-6">
+                      <div className="absolute top-0 right-0 w-full h-1 bg-primary rounded"></div>
+                      <div className="absolute top-0 right-0 w-1 h-full bg-primary rounded"></div>
+                    </div>
+                    <div className="absolute -bottom-1 -left-1 w-6 h-6">
+                      <div className="absolute bottom-0 left-0 w-full h-1 bg-primary rounded"></div>
+                      <div className="absolute bottom-0 left-0 w-1 h-full bg-primary rounded"></div>
+                    </div>
+                    <div className="absolute -bottom-1 -right-1 w-6 h-6">
+                      <div className="absolute bottom-0 right-0 w-full h-1 bg-primary rounded"></div>
+                      <div className="absolute bottom-0 right-0 w-1 h-full bg-primary rounded"></div>
                     </div>
                   </div>
-                )}
-                {tapPosition && (
-                  <div
-                    className="absolute w-8 h-8 border-2 border-blue-400 rounded-full bg-blue-400/20 animate-ping pointer-events-none"
-                    style={{
-                      left: `${tapPosition.x}%`,
-                      top: `${tapPosition.y}%`,
-                      transform: 'translate(-50%, -50%)',
-                    }}
-                  />
-                )}
-
-                <div className="absolute bottom-2 right-2 flex gap-1">
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="h-8 w-8 p-0 bg-black/50 border-white/20 text-white hover:bg-white/20"
-                    onClick={handleZoomOut}
-                    disabled={zoom <= 1}
-                  >
-                    <ZoomOut className="h-3 w-3" />
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="h-8 w-8 p-0 bg-black/50 border-white/20 text-white hover:bg-white/20"
-                    onClick={handleZoomIn}
-                    disabled={zoom >= 3}
-                  >
-                    <ZoomIn className="h-3 w-3" />
-                  </Button>
                 </div>
+              )}
+              {tapPosition && (
+                <div
+                  className="absolute w-8 h-8 border-2 border-blue-400 rounded-full bg-blue-400/20 animate-ping pointer-events-none"
+                  style={{
+                    left: `${tapPosition.x}%`,
+                    top: `${tapPosition.y}%`,
+                    transform: 'translate(-50%, -50%)',
+                  }}
+                />
+              )}
 
-                {zoom > 1 && (
-                  <div className="absolute top-2 right-2 bg-black/50 text-white text-xs px-2 py-1 rounded">
-                    {zoom.toFixed(1)}x
-                  </div>
-                )}
+              <div className="absolute bottom-2 right-2 flex gap-1">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-8 w-8 p-0 bg-black/50 border-white/20 text-white hover:bg-white/20"
+                  onClick={handleZoomOut}
+                  disabled={zoom <= 1}
+                >
+                  <ZoomOut className="h-3 w-3" />
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-8 w-8 p-0 bg-black/50 border-white/20 text-white hover:bg-white/20"
+                  onClick={handleZoomIn}
+                  disabled={zoom >= 3}
+                >
+                  <ZoomIn className="h-3 w-3" />
+                </Button>
               </div>
 
-              <div className="text-center text-sm text-muted-foreground space-y-2">
-                <p>Tap on a barcode to scan it directly</p>
-                <p className="text-xs">🔍 Use zoom controls or tap specific barcodes to scan</p>
-                <p className="text-xs">📱 Keep steady and ensure good lighting for best results</p>
-              </div>
-
-              <Button variant="outline" className="w-full" onClick={onClose}>
-                Cancel
-              </Button>
+              {zoom > 1 && (
+                <div className="absolute top-2 right-2 bg-black/50 text-white text-xs px-2 py-1 rounded">
+                  {zoom.toFixed(1)}x
+                </div>
+              )}
             </div>
-          )}
+
+            <div className="text-center text-sm text-muted-foreground space-y-2">
+              <p>Tap on a barcode to scan it directly</p>
+              <p className="text-xs">🔍 Use zoom controls or tap specific barcodes to scan</p>
+              <p className="text-xs">📱 Keep steady and ensure good lighting for best results</p>
+            </div>
+
+            <Button variant="outline" className="w-full" onClick={onClose}>
+              Cancel
+            </Button>
+          </div>
         </CardContent>
       </Card>
     </div>
