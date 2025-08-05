@@ -9,8 +9,8 @@ interface EnhancedBarcodeScannerProps {
   isOpen: boolean;
   onClose: () => void;
   onScan: (result: string) => void;
-  totalIFPQty?: string; // Optional prop to enforce quantity limit
-  existingSerials?: string[]; // Optional prop to check for duplicates
+  totalIFPQty?: string;
+  existingSerials?: string[];
 }
 
 export const EnhancedBarcodeScanner = ({
@@ -49,19 +49,26 @@ export const EnhancedBarcodeScanner = ({
 
       if (!codeReader.current) {
         codeReader.current = new BrowserMultiFormatReader();
-        codeReader.current.timeBetweenDecodingAttempts = 50; // Fast scanning
+        codeReader.current.timeBetweenDecodingAttempts = 50;
       }
 
       const videoElement = videoRef.current;
-      if (!videoElement) return;
+      if (!videoElement) throw new Error('Video element not found');
 
+      // Request camera with fallback to lower resolutions if needed
       const stream = await navigator.mediaDevices.getUserMedia({
         video: {
           facingMode: 'environment',
           width: { ideal: 1920, min: 640 },
           height: { ideal: 1080, min: 480 },
-          frameRate: { ideal: 30, min: 15 },
+          frameRate: { ideal: 30, min: 10 },
         },
+      }).catch(async (err) => {
+        console.error('Initial camera access failed:', err);
+        // Retry with minimal constraints
+        return await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: 'environment', width: 640, height: 480 },
+        });
       });
 
       videoElement.srcObject = stream;
@@ -70,23 +77,38 @@ export const EnhancedBarcodeScanner = ({
       videoElement.setAttribute('playsinline', 'true');
       videoElement.setAttribute('webkit-playsinline', 'true');
 
-      await videoElement.play();
-
-      codeReader.current.decodeFromVideoDevice(undefined, videoElement, (result, err) => {
-        if (result) {
-          const scannedText = result.getText().trim();
-          validateAndHandleScan(scannedText);
-        }
-        if (err && !(err.name === 'NotFoundException')) {
-          console.error('Barcode scanning error:', err);
-          setError('Failed to scan barcode. Please try again.');
-          setIsScanning(false);
-        }
+      await videoElement.play().catch((playErr) => {
+        console.error('Video play failed:', playErr);
+        throw new Error('Unable to play video stream');
       });
+
+      const decodeLoop = () => {
+        if (!codeReader.current || !videoElement || !isScanning) return;
+
+        codeReader.current.decodeFromVideoDevice(undefined, videoElement, (result, err) => {
+          if (result) {
+            const scannedText = result.getText().trim();
+            validateAndHandleScan(scannedText);
+          } else if (err) {
+            if (err.name !== 'NotFoundException') {
+              console.error('Decoding error:', err);
+              setError('Failed to scan barcode. Retrying...');
+            }
+            // Continue scanning with a slight delay to avoid overwhelming
+            setTimeout(() => requestAnimationFrame(decodeLoop), 500);
+          } else {
+            requestAnimationFrame(decodeLoop);
+          }
+        });
+      };
+
+      requestAnimationFrame(decodeLoop);
     } catch (err) {
-      console.error('Error starting barcode scanner:', err);
-      setError('Failed to access camera. Please ensure camera permissions are granted.');
+      console.error('Scanner initialization error:', err);
+      setError('Failed to access camera. Retrying...');
       setIsScanning(false);
+      // Retry after a short delay
+      setTimeout(startScanning, 3000);
     }
   };
 
