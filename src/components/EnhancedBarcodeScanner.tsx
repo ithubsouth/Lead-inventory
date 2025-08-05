@@ -219,7 +219,7 @@ export const EnhancedBarcodeScanner = ({
               />
               {isScanning && (
                 <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                  <div className="border-2 border-primary bg-transparent w-3/4 h-1/2 rounded-lg">
+                  <div className="border-2 border-primary bg-transparent w-3/4 h-1/4 rounded-lg">
                     <div className="absolute -top-1 -left-1 w-6 h-6">
                       <div className="absolute top-0 left-0 w-full h-1 bg-primary rounded"></div>
                       <div className="absolute top-0 left-0 w-1 h-full bg-primary rounded"></div>
