@@ -488,7 +488,7 @@ const InventoryManagement = () => {
       if (error) throw error;
 
       // Fetch related order details to determine order_type
-      const orderIds = [...new Set(data.map((device: Device) => device.order_id).filter(id => id))];
+      const orderIds = [...new Set(data.map((device: any) => device.order_id).filter(id => id))];
       const { data: ordersData, error: ordersError } = await supabase
         .from('orders')
         .select('id, order_type')
@@ -498,8 +498,8 @@ const InventoryManagement = () => {
       const orderTypeMap = new Map(ordersData.map((order: { id: string; order_type: 'Inward' | 'Outward' }) => [order.id, order.order_type]));
 
       // Group devices by serial number and track the latest entry per serial number
-      const serialNumberMap = new Map<string, { device: Device; orderType: 'Inward' | 'Outward' | undefined }>();
-      data.forEach((device: Device) => {
+      const serialNumberMap = new Map<string, { device: any; orderType: 'Inward' | 'Outward' | undefined }>();
+      data.forEach((device: any) => {
         const orderType = device.order_id ? orderTypeMap.get(device.order_id) : undefined;
         if (!serialNumberMap.has(device.serial_number) || new Date(device.created_at) > new Date(serialNumberMap.get(device.serial_number)!.device.created_at)) {
           serialNumberMap.set(device.serial_number, { device, orderType });
@@ -507,7 +507,7 @@ const InventoryManagement = () => {
       });
 
       // Update statuses based on order_type and duplicate handling
-      const updatedDevices = data.map((device: Device) => {
+      const updatedDevices = data.map((device: any) => {
         const latestEntry = serialNumberMap.get(device.serial_number);
         const isLatest = latestEntry?.device.id === device.id;
         const orderType = device.order_id ? orderTypeMap.get(device.order_id) : undefined;

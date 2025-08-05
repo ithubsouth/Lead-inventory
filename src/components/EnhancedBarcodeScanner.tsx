@@ -78,26 +78,26 @@ const EnhancedBarcodeScanner: React.FC<EnhancedBarcodeScannerProps> = ({
                     description: `Scanned: ${scannedText}`,
                   });
                 } else if (scanningRef.current) {
-                  setTimeout(scanImage, 1000); // Scan every 1 second
+                  setTimeout(scanImage, 1); // Scan every 1 millisecond
                 }
               })
               .catch(() => {
                 if (scanningRef.current) {
-                  setTimeout(scanImage, 1000); // Retry every 1 second
+                  setTimeout(scanImage, 1); // Retry every 1 millisecond
                 }
               });
           }
         } else if (scanningRef.current) {
-          setTimeout(scanImage, 1000);
+          setTimeout(scanImage, 1);
         }
       } catch (error) {
         if (scanningRef.current) {
-          setTimeout(scanImage, 1000);
+          setTimeout(scanImage, 1);
         }
       }
     };
 
-    setTimeout(scanImage, 300);
+    setTimeout(scanImage, 10);
   };
 
   const handleManualScan = () => {
@@ -153,14 +153,43 @@ const EnhancedBarcodeScanner: React.FC<EnhancedBarcodeScannerProps> = ({
   };
 
   const handleTextInput = () => {
-    const inputText = prompt("Enter text manually:");
-    if (inputText && inputText.trim()) {
-      onScan(inputText.trim());
-      onClose();
-      toast({
-        title: "Text Added",
-        description: `Added: ${inputText.trim()}`,
-      });
+    if (!webcamRef.current?.video) return;
+    
+    try {
+      const videoElement = webcamRef.current.video;
+      
+      if (videoElement.videoWidth > 0) {
+        const canvas = document.createElement('canvas');
+        const context = canvas.getContext('2d');
+        
+        if (context) {
+          canvas.width = videoElement.videoWidth;
+          canvas.height = videoElement.videoHeight;
+          context.drawImage(videoElement, 0, 0);
+          
+          // For text recognition, we'd typically use OCR libraries like Tesseract.js
+          // For now, let's allow manual text input as fallback
+          const inputText = prompt("Enter the text you see in the image:");
+          if (inputText && inputText.trim()) {
+            onScan(inputText.trim());
+            onClose();
+            toast({
+              title: "Text Added",
+              description: `Added: ${inputText.trim()}`,
+            });
+          }
+        }
+      }
+    } catch (error) {
+      const inputText = prompt("Enter text manually:");
+      if (inputText && inputText.trim()) {
+        onScan(inputText.trim());
+        onClose();
+        toast({
+          title: "Text Added",
+          description: `Added: ${inputText.trim()}`,
+        });
+      }
     }
   };
 
@@ -245,7 +274,7 @@ const EnhancedBarcodeScanner: React.FC<EnhancedBarcodeScannerProps> = ({
               </div>
               
               <div className="text-center text-sm text-muted-foreground">
-                Position the barcode/QR code within the frame - scanning every 1 second
+                Position the barcode/QR code within the frame - scanning continuously
               </div>
               
               <div className="flex gap-2">
@@ -262,15 +291,33 @@ const EnhancedBarcodeScanner: React.FC<EnhancedBarcodeScannerProps> = ({
           ) : (
             <>
               {/* Text Input Mode */}
-              <div className="text-center p-8 bg-muted rounded-lg">
-                <Type className="w-16 h-16 mx-auto mb-4 text-muted-foreground" />
-                <p className="text-lg font-medium mb-2">Text Reader Mode</p>
-                <p className="text-sm text-muted-foreground mb-4">
-                  Manually enter text instead of scanning
-                </p>
-                <Button onClick={handleTextInput} className="w-full">
+              {/* Camera View for Text Reading */}
+              <div className={`relative ${getAspectRatio()} bg-muted rounded-lg overflow-hidden`}>
+                <Webcam
+                  ref={webcamRef}
+                  audio={false}
+                  screenshotFormat="image/jpeg"
+                  videoConstraints={getVideoConstraints()}
+                  className="w-full h-full object-cover"
+                />
+                
+                {/* Text reading overlay */}
+                <div className="absolute inset-0 border-2 border-secondary rounded-lg">
+                  <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 text-center text-white bg-black/50 p-2 rounded">
+                    <Type className="w-6 h-6 mx-auto mb-1" />
+                    <span className="text-sm">Point camera at text</span>
+                  </div>
+                </div>
+              </div>
+              
+              <div className="text-center text-sm text-muted-foreground">
+                Position text clearly in view and click "Read Text" to capture
+              </div>
+              
+              <div className="flex gap-2">
+                <Button onClick={handleTextInput} className="flex-1">
                   <Type className="w-4 h-4 mr-2" />
-                  Enter Text
+                  Read Text
                 </Button>
               </div>
               
