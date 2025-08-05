@@ -7,11 +7,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
-import { Download, Package, BarChart3, Archive, RotateCcw, Plus, Trash2, Search, Camera, Eye, Edit, X, Minus } from 'lucide-react';
+import { Download, Package, BarChart3, Archive, RotateCcw, Plus, Trash2, Search, Camera, Eye, Edit, X, Minus, Upload } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import EnhancedBarcodeScanner from './EnhancedBarcodeScanner';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 
 interface TabletItem {
   id: string;
@@ -397,6 +397,7 @@ const InventoryManagement = () => {
   const [editingOrder, setEditingOrder] = useState<Order | null>(null);
   const [showViewDialog, setShowViewDialog] = useState(false);
   const [showEditDialog, setShowEditDialog] = useState(false);
+  const [showImportDialog, setShowImportDialog] = useState(false);
   const { toast } = useToast();
 
   const [selectedWarehouse, setSelectedWarehouse] = useState<string>('All');
@@ -805,6 +806,99 @@ const InventoryManagement = () => {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleCSVImport = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const text = e.target?.result as string;
+      const lines = text.split('\n').filter(line => line.trim());
+      const headers = lines[0].split(',').map(h => h.trim());
+      
+      // Expected CSV format: order_type,product,model,quantity,warehouse,sales_order,deal_id,school_name,nucleus_id,serial_numbers
+      if (headers.length < 9) {
+        toast({
+          title: "Invalid CSV Format",
+          description: "CSV must have at least 9 columns: order_type,product,model,quantity,warehouse,sales_order,deal_id,school_name,nucleus_id,serial_numbers",
+          variant: "destructive"
+        });
+        return;
+      }
+
+      const importedData = lines.slice(1).map((line, index) => {
+        const values = line.split(',').map(v => v.trim());
+        const serialNumbers = values[9] ? values[9].split(';').map(s => s.trim()).filter(s => s) : [];
+        
+        return {
+          order_type: values[0] as 'Inward' | 'Outward',
+          product: values[1] as 'Tablet' | 'TV',
+          model: values[2],
+          quantity: parseInt(values[3]) || 1,
+          warehouse: values[4],
+          sales_order: values[5],
+          deal_id: values[6],
+          school_name: values[7],
+          nucleus_id: values[8],
+          serial_numbers: serialNumbers
+        };
+      });
+
+      // Process the imported data
+      importedData.forEach(data => {
+        if (data.product === 'Tablet') {
+          const newTablet: TabletItem = {
+            id: generateId(),
+            model: data.model,
+            quantity: data.quantity,
+            location: data.warehouse,
+            serialNumbers: data.serial_numbers
+          };
+          setTablets(prev => [...prev, newTablet]);
+        } else if (data.product === 'TV') {
+          const newTV: TVItem = {
+            id: generateId(),
+            model: data.model,
+            quantity: data.quantity,
+            location: data.warehouse,
+            serialNumbers: data.serial_numbers
+          };
+          setTvs(prev => [...prev, newTV]);
+        }
+        
+        // Set other form fields from the first row
+        if (importedData.indexOf(data) === 0) {
+          setOrderType(data.order_type);
+          setSalesOrder(data.sales_order);
+          setDealId(data.deal_id);
+          setSchoolName(data.school_name);
+          setNucleusId(data.nucleus_id);
+        }
+      });
+
+      setShowImportDialog(false);
+      toast({
+        title: "Import Successful",
+        description: `Imported ${importedData.length} items successfully`,
+      });
+    };
+
+    reader.readAsText(file);
+  };
+
+  const downloadCSVTemplate = () => {
+    const template = 'order_type,product,model,quantity,warehouse,sales_order,deal_id,school_name,nucleus_id,serial_numbers\nInward,Tablet,TB301FU,2,Trichy,SO001,DEAL001,Example School,NUC001,"SN001;SN002"\nInward,TV,Hyundai TV - 43",1,Bangalore,SO002,DEAL002,Another School,NUC002,SN003';
+    const blob = new Blob([template], { type: 'text/csv' });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.style.display = 'none';
+    a.href = url;
+    a.download = 'order_import_template.csv';
+    document.body.appendChild(a);
+    a.click();
+    window.URL.revokeObjectURL(url);
   };
 
   const updateOrder = async (updatedOrder: Order) => {
@@ -1353,6 +1447,53 @@ const InventoryManagement = () => {
       <Button onClick={createOrder} disabled={loading} className="w-full" size="lg">
         {loading ? 'Creating...' : 'Create Order'}
       </Button>
+
+      {/* Import Orders Section */}
+      <Card className="mt-6">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Upload className="w-5 h-5" />
+            Import Orders
+          </CardTitle>
+          <CardDescription>
+            Bulk import orders from CSV file
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex gap-2">
+            <Dialog open={showImportDialog} onOpenChange={setShowImportDialog}>
+              <DialogTrigger asChild>
+                <Button variant="outline" className="flex-1">
+                  <Upload className="w-4 h-4 mr-2" />
+                  Import CSV
+                </Button>
+              </DialogTrigger>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>Import Orders from CSV</DialogTitle>
+                </DialogHeader>
+                <div className="space-y-4">
+                  <div className="text-sm text-muted-foreground">
+                    Upload a CSV file with the following format:
+                    <br />
+                    order_type, product, model, quantity, warehouse, sales_order, deal_id, school_name, nucleus_id, serial_numbers
+                  </div>
+                  <Input
+                    type="file"
+                    accept=".csv"
+                    onChange={handleCSVImport}
+                  />
+                </div>
+              </DialogContent>
+            </Dialog>
+            
+            <Button onClick={downloadCSVTemplate} variant="outline" className="flex-1">
+              <Download className="w-4 h-4 mr-2" />
+              Download Template
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
     </div>
   );
 

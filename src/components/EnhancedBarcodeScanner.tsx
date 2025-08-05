@@ -78,29 +78,29 @@ const EnhancedBarcodeScanner: React.FC<EnhancedBarcodeScannerProps> = ({
                     description: `Scanned: ${scannedText}`,
                   });
                 } else if (scanningRef.current) {
-                  setTimeout(scanImage, 1); // Continue scanning every 1ms
+                  requestAnimationFrame(scanImage); // Continue scanning at maximum speed
                 }
               })
               .catch(() => {
                 if (scanningRef.current) {
-                  setTimeout(scanImage, 1); // Continue scanning on error
+                  requestAnimationFrame(scanImage); // Continue scanning on error
                 }
               });
           } else if (scanningRef.current) {
-            setTimeout(scanImage, 1);
+            requestAnimationFrame(scanImage);
           }
         } else if (scanningRef.current) {
-          setTimeout(scanImage, 1);
+          requestAnimationFrame(scanImage);
         }
       } catch (error) {
         if (scanningRef.current) {
-          setTimeout(scanImage, 1);
+          requestAnimationFrame(scanImage);
         }
       }
     };
 
     // Wait a bit for camera to initialize then start scanning
-    setTimeout(scanImage, 500);
+    setTimeout(scanImage, 100);
   };
 
   const handleManualScan = () => {
@@ -172,25 +172,26 @@ const EnhancedBarcodeScanner: React.FC<EnhancedBarcodeScannerProps> = ({
           
           // Use Tesseract.js for OCR text recognition
           try {
-            const { createWorker } = await import('tesseract.js');
-            const worker = await createWorker('eng');
-            const { data: { text } } = await worker.recognize(canvas.toDataURL());
-            await worker.terminate();
-            
-            if (text && text.trim()) {
-              onScan(text.trim());
-              onClose();
-              toast({
-                title: "Text Recognized",
-                description: `Captured: ${text.trim()}`,
-              });
-            } else {
-              toast({
-                title: "No Text Found",
-                description: "Please ensure text is clearly visible",
-                variant: "destructive"
-              });
-            }
+              const { createWorker } = await import('tesseract.js');
+              const worker = await createWorker('eng');
+              const { data: { text } } = await worker.recognize(canvas.toDataURL());
+              await worker.terminate();
+              
+              const cleanText = text.trim().replace(/[^\w\s]/g, '');
+              if (cleanText && cleanText.length > 0) {
+                onScan(cleanText);
+                onClose();
+                toast({
+                  title: "Text Recognized",
+                  description: `Captured: ${cleanText}`,
+                });
+              } else {
+                toast({
+                  title: "No Text Found",
+                  description: "Please ensure text is clearly visible",
+                  variant: "destructive"
+                });
+              }
           } catch (ocrError) {
             // Fallback to manual input if OCR fails
             const inputText = prompt("OCR failed. Enter the text manually:");
@@ -283,13 +284,10 @@ const EnhancedBarcodeScanner: React.FC<EnhancedBarcodeScannerProps> = ({
                   className="w-full h-full object-cover"
                 />
                 
-                {/* Scanning overlay */}
-                <div className="absolute inset-0 border-2 border-primary rounded-lg">
-                  <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 border-2 border-primary rounded-lg opacity-50"
-                    style={{
-                      width: '80%',
-                      height: '40%'
-                    }}>
+                {/* Scanning overlay - Single box */}
+                <div className="absolute inset-0 flex items-center justify-center">
+                  <div className="border-2 border-primary rounded-lg bg-transparent" 
+                    style={{ width: '70%', height: '35%' }}>
                     <div className="absolute top-0 left-0 w-6 h-6 border-t-4 border-l-4 border-primary"></div>
                     <div className="absolute top-0 right-0 w-6 h-6 border-t-4 border-r-4 border-primary"></div>
                     <div className="absolute bottom-0 left-0 w-6 h-6 border-b-4 border-l-4 border-primary"></div>
