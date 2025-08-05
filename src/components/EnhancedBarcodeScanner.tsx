@@ -3,7 +3,7 @@ import Webcam from 'react-webcam';
 import { BrowserMultiFormatReader } from '@zxing/library';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { ScanBarcode, Type, X, Scan } from 'lucide-react';
+import { ScanBarcode, Type, X, Scan, ZoomIn, ZoomOut } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 
 interface EnhancedBarcodeScannerProps {
@@ -23,6 +23,7 @@ const EnhancedBarcodeScanner: React.FC<EnhancedBarcodeScannerProps> = ({
   const [scanMode, setScanMode] = useState<ScanMode>('barcode');
   const readerRef = useRef<BrowserMultiFormatReader | null>(null);
   const scanningRef = useRef<boolean>(false);
+  const [zoom, setZoom] = useState(1);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -78,29 +79,29 @@ const EnhancedBarcodeScanner: React.FC<EnhancedBarcodeScannerProps> = ({
                     description: `Scanned: ${scannedText}`,
                   });
                 } else if (scanningRef.current) {
-                  requestAnimationFrame(scanImage); // Continue scanning at maximum speed
+                  setTimeout(scanImage, 100); // Continuous scanning
                 }
               })
               .catch(() => {
                 if (scanningRef.current) {
-                  requestAnimationFrame(scanImage); // Continue scanning on error
+                  setTimeout(scanImage, 100); // Continue scanning on error
                 }
               });
           } else if (scanningRef.current) {
-            requestAnimationFrame(scanImage);
+            setTimeout(scanImage, 100);
           }
         } else if (scanningRef.current) {
-          requestAnimationFrame(scanImage);
+          setTimeout(scanImage, 100);
         }
       } catch (error) {
         if (scanningRef.current) {
-          requestAnimationFrame(scanImage);
+          setTimeout(scanImage, 100);
         }
       }
     };
 
-    // Wait a bit for camera to initialize then start scanning
-    setTimeout(scanImage, 100);
+    // Wait for camera to initialize then start scanning
+    setTimeout(scanImage, 500);
   };
 
   const handleManualScan = () => {
@@ -172,50 +173,55 @@ const EnhancedBarcodeScanner: React.FC<EnhancedBarcodeScannerProps> = ({
           
           // Use Tesseract.js for OCR text recognition
           try {
-              const { createWorker } = await import('tesseract.js');
-              const worker = await createWorker('eng');
-              const { data: { text } } = await worker.recognize(canvas.toDataURL());
-              await worker.terminate();
+            const { createWorker } = await import('tesseract.js');
+            const worker = await createWorker('eng');
+            
+            toast({
+              title: "Processing",
+              description: "Reading text from image...",
+            });
+            
+            const { data: { text } } = await worker.recognize(canvas.toDataURL());
+            await worker.terminate();
+            
+            // Clean and validate the text
+            const cleanText = text
+              .split('\n')
+              .map(line => line.trim())
+              .filter(line => line.length > 0)
+              .join(' ')
+              .replace(/[^\w\s\-_.,@]/g, '')
+              .trim();
               
-              const cleanText = text.trim().replace(/[^\w\s]/g, '');
-              if (cleanText && cleanText.length > 0) {
-                onScan(cleanText);
-                onClose();
-                toast({
-                  title: "Text Recognized",
-                  description: `Captured: ${cleanText}`,
-                });
-              } else {
-                toast({
-                  title: "No Text Found",
-                  description: "Please ensure text is clearly visible",
-                  variant: "destructive"
-                });
-              }
-          } catch (ocrError) {
-            // Fallback to manual input if OCR fails
-            const inputText = prompt("OCR failed. Enter the text manually:");
-            if (inputText && inputText.trim()) {
-              onScan(inputText.trim());
+            if (cleanText && cleanText.length > 2) {
+              onScan(cleanText);
               onClose();
               toast({
-                title: "Text Added",
-                description: `Added: ${inputText.trim()}`,
+                title: "Text Recognized",
+                description: `Captured: ${cleanText.substring(0, 50)}${cleanText.length > 50 ? '...' : ''}`,
+              });
+            } else {
+              toast({
+                title: "No Clear Text Found",
+                description: "Please ensure text is clearly visible and well-lit",
+                variant: "destructive"
               });
             }
+          } catch (ocrError) {
+            toast({
+              title: "Text Recognition Failed",
+              description: "Please try with better lighting or clearer text",
+              variant: "destructive"
+            });
           }
         }
       }
     } catch (error) {
-      const inputText = prompt("Enter text manually:");
-      if (inputText && inputText.trim()) {
-        onScan(inputText.trim());
-        onClose();
-        toast({
-          title: "Text Added",
-          description: `Added: ${inputText.trim()}`,
-        });
-      }
+      toast({
+        title: "Camera Error",
+        description: "Unable to capture image",
+        variant: "destructive"
+      });
     }
   };
 
@@ -231,127 +237,189 @@ const EnhancedBarcodeScanner: React.FC<EnhancedBarcodeScannerProps> = ({
     onClose();
   };
 
-  const getAspectRatio = () => {
-    return scanMode === 'barcode' ? 'aspect-[4/1]' : 'aspect-[4/1]';
+  const handleZoomIn = () => {
+    setZoom(prev => Math.min(prev + 0.2, 3));
+  };
+
+  const handleZoomOut = () => {
+    setZoom(prev => Math.max(prev - 0.2, 0.5));
   };
 
   const getVideoConstraints = () => {
-    return { width: 800, height: 600, facingMode: "environment" };
+    return { 
+      width: { ideal: 1280 }, 
+      height: { ideal: 720 }, 
+      facingMode: "environment",
+      zoom: zoom
+    };
   };
 
   return (
     <Dialog open={isOpen} onOpenChange={handleClose}>
-      <DialogContent className="max-w-md">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <ScanBarcode className="w-5 h-5" />
-            Enhanced Scanner
-          </DialogTitle>
-        </DialogHeader>
-        
-        <div className="space-y-4">
-          {/* Scan Mode Selection */}
-          <div className="flex gap-2">
+      <DialogContent className="max-w-sm p-0 gap-0 bg-scanner-bg border-none">
+        {/* Header */}
+        <DialogHeader className="p-4 pb-2 bg-scanner-bg">
+          <div className="flex items-center justify-between">
+            <DialogTitle className="flex items-center gap-2 text-scanner-text text-lg">
+              <ScanBarcode className="w-5 h-5" />
+              Scan {scanMode === 'barcode' ? 'Barcode' : 'Text'}
+            </DialogTitle>
             <Button
-              variant={scanMode === 'barcode' ? 'default' : 'outline'}
+              variant="ghost"
               size="sm"
-              onClick={() => setScanMode('barcode')}
-              className="flex-1"
+              onClick={handleClose}
+              className="text-scanner-text hover:bg-white/10 h-8 w-8 p-0"
             >
-              <ScanBarcode className="w-4 h-4 mr-1" />
-              Scan Barcode/QR
-            </Button>
-            <Button
-              variant={scanMode === 'text' ? 'default' : 'outline'}
-              size="sm"
-              onClick={() => setScanMode('text')}
-              className="flex-1"
-            >
-              <Type className="w-4 h-4 mr-1" />
-              Text Reader
+              <X className="w-5 h-5" />
             </Button>
           </div>
+        </DialogHeader>
+        
+        <div className="space-y-4 bg-scanner-bg">
+          {/* Mode Selection */}
+          <div className="px-4">
+            <div className="flex gap-1 bg-muted/20 p-1 rounded-lg">
+              <Button
+                variant={scanMode === 'barcode' ? 'default' : 'ghost'}
+                size="sm"
+                onClick={() => setScanMode('barcode')}
+                className="flex-1 text-xs"
+              >
+                <ScanBarcode className="w-3 h-3 mr-1" />
+                Barcode
+              </Button>
+              <Button
+                variant={scanMode === 'text' ? 'default' : 'ghost'}
+                size="sm"
+                onClick={() => setScanMode('text')}
+                className="flex-1 text-xs"
+              >
+                <Type className="w-3 h-3 mr-1" />
+                Text
+              </Button>
+            </div>
+          </div>
 
-          {scanMode === 'barcode' ? (
-            <>
-              {/* Camera View */}
-              <div className={`relative ${getAspectRatio()} bg-muted rounded-lg overflow-hidden`}>
-                <Webcam
-                  ref={webcamRef}
-                  audio={false}
-                  screenshotFormat="image/jpeg"
-                  videoConstraints={getVideoConstraints()}
-                  className="w-full h-full object-cover"
-                />
-                
-                {/* Scanning overlay - Single box */}
-                <div className="absolute inset-0 flex items-center justify-center">
-                  <div className="border-2 border-primary rounded-lg bg-transparent" 
-                    style={{ width: '70%', height: '35%' }}>
-                    <div className="absolute top-0 left-0 w-6 h-6 border-t-4 border-l-4 border-primary"></div>
-                    <div className="absolute top-0 right-0 w-6 h-6 border-t-4 border-r-4 border-primary"></div>
-                    <div className="absolute bottom-0 left-0 w-6 h-6 border-b-4 border-l-4 border-primary"></div>
-                    <div className="absolute bottom-0 right-0 w-6 h-6 border-b-4 border-r-4 border-primary"></div>
+          {/* Camera View */}
+          <div className="relative aspect-[4/3] bg-black mx-4 rounded-lg overflow-hidden">
+            <Webcam
+              ref={webcamRef}
+              audio={false}
+              screenshotFormat="image/jpeg"
+              videoConstraints={getVideoConstraints()}
+              className="w-full h-full object-cover"
+              style={{ transform: `scale(${zoom})`, transformOrigin: 'center' }}
+            />
+            
+            {/* Scanning Overlay */}
+            <div className="absolute inset-0 flex items-center justify-center">
+              {scanMode === 'barcode' ? (
+                /* Barcode scanning frame */
+                <div className="relative">
+                  <div 
+                    className="border-2 border-scanner-overlay rounded-lg bg-transparent"
+                    style={{ width: '250px', height: '80px' }}
+                  >
+                    {/* Corner brackets */}
+                    <div className="absolute -top-1 -left-1 w-6 h-6">
+                      <div className="absolute top-0 left-0 w-full h-1 bg-scanner-overlay rounded"></div>
+                      <div className="absolute top-0 left-0 w-1 h-full bg-scanner-overlay rounded"></div>
+                    </div>
+                    <div className="absolute -top-1 -right-1 w-6 h-6">
+                      <div className="absolute top-0 right-0 w-full h-1 bg-scanner-overlay rounded"></div>
+                      <div className="absolute top-0 right-0 w-1 h-full bg-scanner-overlay rounded"></div>
+                    </div>
+                    <div className="absolute -bottom-1 -left-1 w-6 h-6">
+                      <div className="absolute bottom-0 left-0 w-full h-1 bg-scanner-overlay rounded"></div>
+                      <div className="absolute bottom-0 left-0 w-1 h-full bg-scanner-overlay rounded"></div>
+                    </div>
+                    <div className="absolute -bottom-1 -right-1 w-6 h-6">
+                      <div className="absolute bottom-0 right-0 w-full h-1 bg-scanner-overlay rounded"></div>
+                      <div className="absolute bottom-0 right-0 w-1 h-full bg-scanner-overlay rounded"></div>
+                    </div>
                   </div>
                 </div>
-              </div>
-              
-              <div className="text-center text-sm text-muted-foreground">
-                Position the barcode/QR code within the frame - scanning continuously
-              </div>
-              
-              <div className="flex gap-2">
-                <Button onClick={handleManualScan} variant="default" className="flex-1">
-                  <Scan className="w-4 h-4 mr-2" />
-                  Manual Scan
-                </Button>
-                <Button onClick={handleClose} variant="outline" className="flex-1">
-                  <X className="w-4 h-4 mr-2" />
-                  Close
-                </Button>
-              </div>
-            </>
-          ) : (
-            <>
-              {/* Text Input Mode */}
-              {/* Camera View for Text Reading */}
-              <div className={`relative ${getAspectRatio()} bg-muted rounded-lg overflow-hidden`}>
-                <Webcam
-                  ref={webcamRef}
-                  audio={false}
-                  screenshotFormat="image/jpeg"
-                  videoConstraints={getVideoConstraints()}
-                  className="w-full h-full object-cover"
-                />
-                
-                {/* Text reading overlay */}
-                <div className="absolute inset-0 border-2 border-secondary rounded-lg">
-                  <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 text-center text-white bg-black/50 p-2 rounded">
-                    <Type className="w-6 h-6 mx-auto mb-1" />
-                    <span className="text-sm">Point camera at text</span>
+              ) : (
+                /* Text reading overlay */
+                <div className="border-2 border-dashed border-scanner-overlay rounded-lg p-4 bg-black/20">
+                  <div className="text-center text-scanner-text">
+                    <Type className="w-8 h-8 mx-auto mb-2" />
+                    <span className="text-sm">Position text clearly</span>
                   </div>
                 </div>
+              )}
+            </div>
+
+            {/* Zoom Controls */}
+            <div className="absolute top-4 right-4 flex flex-col gap-2">
+              <Button
+                size="sm"
+                variant="secondary"
+                onClick={handleZoomIn}
+                className="w-8 h-8 p-0 bg-black/50 border-none hover:bg-black/70"
+              >
+                <ZoomIn className="w-4 h-4 text-white" />
+              </Button>
+              <Button
+                size="sm"
+                variant="secondary"
+                onClick={handleZoomOut}
+                className="w-8 h-8 p-0 bg-black/50 border-none hover:bg-black/70"
+              >
+                <ZoomOut className="w-4 h-4 text-white" />
+              </Button>
+            </div>
+          </div>
+          
+          {/* Instructions */}
+          <div className="px-4">
+            <div className="text-center space-y-2">
+              <p className="text-sm text-scanner-text font-medium">
+                {scanMode === 'barcode' ? 
+                  'Tap on a barcode to scan it directly' : 
+                  'Position text clearly in view'
+                }
+              </p>
+              <div className="flex items-center justify-center gap-2 text-xs text-muted-foreground">
+                <ZoomIn className="w-3 h-3" />
+                <span>Use zoom controls or tap specific {scanMode === 'barcode' ? 'barcodes' : 'text'} to scan</span>
               </div>
-              
-              <div className="text-center text-sm text-muted-foreground">
-                Position text clearly in view and click "Read Text" to capture
-              </div>
-              
-              <div className="flex gap-2">
-                <Button onClick={handleTextInput} className="flex-1">
-                  <Type className="w-4 h-4 mr-2" />
-                  Read Text
-                </Button>
-              </div>
-              
-              <div className="flex gap-2">
-                <Button onClick={handleClose} variant="outline" className="flex-1">
-                  <X className="w-4 h-4 mr-2" />
-                  Close
-                </Button>
-              </div>
-            </>
-          )}
+              <p className="text-xs text-muted-foreground">
+                Keep steady and ensure good lighting for best results
+              </p>
+            </div>
+          </div>
+          
+          {/* Action Buttons */}
+          <div className="px-4 pb-4 space-y-2">
+            {scanMode === 'barcode' ? (
+              <Button 
+                onClick={handleManualScan} 
+                variant="default" 
+                className="w-full bg-primary hover:bg-primary/90"
+              >
+                <Scan className="w-4 h-4 mr-2" />
+                Scan Now
+              </Button>
+            ) : (
+              <Button 
+                onClick={handleTextInput} 
+                variant="default" 
+                className="w-full bg-primary hover:bg-primary/90"
+              >
+                <Type className="w-4 h-4 mr-2" />
+                Read Text
+              </Button>
+            )}
+            
+            <Button 
+              onClick={handleClose} 
+              variant="outline" 
+              className="w-full border-muted-foreground/30 text-muted-foreground hover:bg-muted/20"
+            >
+              Cancel
+            </Button>
+          </div>
         </div>
       </DialogContent>
     </Dialog>
