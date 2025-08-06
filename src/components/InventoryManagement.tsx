@@ -578,46 +578,61 @@ const loadOrders = async () => {
     setLoading(true);
 
     let allOrders: any[] = [];
+    let allDevices: any[] = [];
     const batchSize = 1000; // Fetch 1000 rows per batch
     let page = 0;
-    let hasMore = true;
+    let hasMoreOrders = true;
+    let hasMoreDevices = true;
 
-    // Fetch orders in batches until all are retrieved
-    while (hasMore) {
+    // Fetch all orders in batches
+    while (hasMoreOrders) {
       const { data, error } = await supabase
         .from('orders')
         .select('*')
         .order('created_at', { ascending: false })
         .range(page * batchSize, (page + 1) * batchSize - 1);
       if (error) {
-        console.error(`Supabase error on batch ${page}:`, error);
+        console.error(`Supabase error on orders batch ${page}:`, error);
         throw error;
       }
 
-      console.log(`Batch ${page} fetched: ${data.length} orders`);
+      console.log(`Orders batch ${page} fetched: ${data.length} orders`);
       allOrders = [...allOrders, ...data];
-
-      // Stop if fewer than batchSize rows are returned (end of data)
-      hasMore = data.length === batchSize;
+      hasMoreOrders = data.length === batchSize;
       page += 1;
     }
 
     console.log('Total orders fetched from Supabase:', allOrders.length);
 
-    // Fetch devices to map serial numbers to order IDs
-    const { data: devicesData, error: devicesError } = await supabase
-      .from('devices')
-      .select('order_id, serial_number');
-    if (devicesError) throw devicesError;
+    // Fetch all devices in batches
+    page = 0; // Reset page for devices
+    while (hasMoreDevices) {
+      const { data, error } = await supabase
+        .from('devices')
+        .select('order_id, serial_number')
+        .range(page * batchSize, (page + 1) * batchSize - 1);
+      if (error) {
+        console.error(`Supabase error on devices batch ${page}:`, error);
+        throw error;
+      }
+
+      console.log(`Devices batch ${page} fetched: ${data.length} devices`);
+      allDevices = [...allDevices, ...data];
+      hasMoreDevices = data.length === batchSize;
+      page += 1;
+    }
+
+    console.log('Total devices fetched from Supabase:', allDevices.length);
 
     // Create a map of order IDs to their serial numbers from devices
     const devicesByOrderId = new Map<string, string[]>();
-    devicesData.forEach((device: { order_id: string; serial_number: string }) => {
-      if (device.order_id) {
+    allDevices.forEach((device: { order_id: string; serial_number: string }) => {
+      if (device.order_id && device.serial_number) {
+        const normalizedSerial = device.serial_number.trim().toUpperCase();
         if (!devicesByOrderId.has(device.order_id)) {
           devicesByOrderId.set(device.order_id, []);
         }
-        devicesByOrderId.get(device.order_id)!.push(device.serial_number);
+        devicesByOrderId.get(device.order_id)!.push(normalizedSerial);
       }
     });
 
@@ -633,8 +648,36 @@ const loadOrders = async () => {
         ...order,
         order_type: order.order_type as 'Inward' | 'Outward',
         product: order.product as 'Tablet' | 'TV',
-        serial_numbers: order.serial_numbers || [],
+        serial_numbers: (order.serial_numbers || []).map((sn: string) => sn.trim().toUpperCase()),
       });
+    });
+
+    // Collect all serial numbers across all orders to detect duplicates
+    const allSerials = new Map<string, { orderId: string; salesOrder: string }[]>();
+    allOrders.forEach((order: any) => {
+      const salesOrder = order.sales_order || 'No Sales Order';
+      (order.serial_numbers || []).forEach((serial: string) => {
+        const normalizedSerial = serial.trim().toUpperCase();
+        if (normalizedSerial) {
+          if (!allSerials.has(normalizedSerial)) {
+            allSerials.set(normalizedSerial, []);
+          }
+          allSerials.get(normalizedSerial)!.push({ orderId: order.id, salesOrder });
+        }
+      });
+    });
+
+    // Identify duplicate serial numbers (appearing in multiple orders)
+    const duplicateSerials = new Set<string>();
+    allSerials.forEach((orders, serial) => {
+      // Consider a serial number a duplicate only if it appears in multiple orders
+      if (orders.length > 1) {
+        const uniqueSalesOrders = new Set(orders.map(o => o.salesOrder));
+        if (uniqueSalesOrders.size > 1) {
+          // Duplicate across different sales orders
+          duplicateSerials.add(serial);
+        }
+      }
     });
 
     // Process each order to determine its status
@@ -643,28 +686,9 @@ const loadOrders = async () => {
       const groupKey = `${salesOrder}-${order.product}-${order.model}-${order.warehouse}`;
       const groupOrders = orderGroups.get(groupKey) || [];
 
-      // Collect all serial numbers for the group
-      const allGroupSerials = groupOrders
-        .flatMap((o: Order) => o.serial_numbers.filter((sn: string) => sn.trim()))
-        .filter((sn: string) => sn.trim());
-
-      // Calculate the total quantity for the group
-      const totalGroupQuantity = groupOrders.reduce((sum: number, o: Order) => sum + o.quantity, 0);
-
-      // Get serial numbers for this specific order
-      const orderSerials = (order.serial_numbers || []).filter((sn: string) => sn.trim());
+      // Get serial numbers for this specific order (normalized)
+      const orderSerials = (order.serial_numbers || []).map((sn: string) => sn.trim().toUpperCase()).filter((sn: string) => sn);
       const orderDeviceCount = devicesByOrderId.get(order.id)?.length || 0;
-
-      // Check for duplicate serial numbers within Zulu
-      const seenSerials = new Set<string>();
-      const duplicateSerials = new Set<string>();
-      allGroupSerials.forEach((serial: string) => {
-        if (seenSerials.has(serial)) {
-          duplicateSerials.add(serial);
-        } else {
-          seenSerials.add(serial);
-        }
-      });
 
       // Initialize status and status details
       let status: 'Success' | 'Failed' | 'Pending' = 'Pending';
@@ -674,27 +698,35 @@ const loadOrders = async () => {
       if (orderSerials.length === 0) {
         status = 'Pending';
         statusDetails = 'No serial numbers provided';
-      } else if (duplicateSerials.size > 0) {
+      } else if (orderSerials.some((sn: string) => duplicateSerials.has(sn))) {
+        const duplicates = orderSerials.filter((sn: string) => duplicateSerials.has(sn));
         status = 'Failed';
-        statusDetails = `Duplicates: ${[...duplicateSerials].join(', ')}`;
-      } else if (orderSerials.length === order.quantity && orderDeviceCount === order.quantity) {
-        status = 'Success';
-        statusDetails = `All ${order.quantity} serial numbers present and valid`;
-      } else {
+        statusDetails = `Duplicate serial numbers found across sales orders: ${duplicates.join(', ')}`;
+      } else if (orderSerials.length !== order.quantity) {
         const missingCount = order.quantity - orderSerials.length;
-        if (missingCount > 0) {
-          const missingPositions = Array.from({ length: order.quantity }, (_, i) => i)
-            .filter(i => !orderSerials[i]);
+        const missingPositions = Array.from({ length: order.quantity }, (_, i) => i)
+          .filter(i => !orderSerials[i])
+          .map(p => p + 1);
+        status = 'Failed';
+        statusDetails = `Missing ${missingCount} serial number${missingCount > 1 ? 's' : ''} at position${missingCount > 1 ? 's' : ''} ${missingPositions.join(', ')} (Expected ${order.quantity}, got ${orderSerials.length})`;
+      } else if (orderDeviceCount !== order.quantity) {
+        status = 'Failed';
+        statusDetails = `Device count mismatch: Expected ${order.quantity}, got ${orderDeviceCount}`;
+      } else {
+        // Check if all serial numbers in the order match the devices
+        const deviceSerials = devicesByOrderId.get(order.id) || [];
+        const mismatchedSerials = orderSerials.filter(sn => !deviceSerials.includes(sn));
+        if (mismatchedSerials.length > 0) {
           status = 'Failed';
-          statusDetails = `Missing ${missingCount} serial number${missingCount > 1 ? 's' : ''} at position${missingCount > 1 ? 's' : ''} ${missingPositions.map(p => p + 1).join(', ')} (Expected ${order.quantity}, got ${orderSerials.length})`;
-        } else if (orderDeviceCount !== order.quantity) {
-          status = 'Failed';
-          statusDetails = `Device count mismatch: Expected ${order.quantity}, got ${orderDeviceCount}`;
+          statusDetails = `Mismatched serial numbers: ${mismatchedSerials.join(', ')} not found in devices`;
+        } else {
+          status = 'Success';
+          statusDetails = `All ${order.quantity} serial numbers present and valid`;
         }
       }
 
       return {
- ...order,
+        ...order,
         order_type: order.order_type as 'Inward' | 'Outward',
         product: order.product as 'Tablet' | 'TV',
         serial_numbers: order.serial_numbers || [],
