@@ -112,7 +112,7 @@ export const EnhancedBarcodeScanner = ({
 
   const validateAndHandleScan = (scannedText: string) => {
     const isDuplicate = existingSerials.some(
-      (item) => (typeof item === 'string' ? item : item.serial) === scannedText
+      (item) => (typeof item === 'string' ? item : item) === scannedText
     );
     const ifpQty = parseInt(totalIFPQty) || 0;
     const isWithinLimit = ifpQty === 0 || existingSerials.length < ifpQty;

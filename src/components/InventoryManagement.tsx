@@ -51,6 +51,7 @@ interface Order {
   created_by?: string;
   updated_by?: string;
   status?: 'Success' | 'Failed' | 'Pending';
+  orderCount?: string;
 }
 
 interface Device {
@@ -398,6 +399,16 @@ const InventoryManagement = () => {
   const [showViewDialog, setShowViewDialog] = useState(false);
   const [showEditDialog, setShowEditDialog] = useState(false);
   const [showImportDialog, setShowImportDialog] = useState(false);
+  const [showStatusDialog, setShowStatusDialog] = useState(false);
+  const [statusDialogOrder, setStatusDialogOrder] = useState<Order | null>(null);
+  const [statusError, setStatusError] = useState<string>('');
+  
+  // Pagination states
+  const [currentOrdersPage, setCurrentOrdersPage] = useState(1);
+  const [currentDevicesPage, setCurrentDevicesPage] = useState(1);
+  const [ordersPerPage] = useState(100);
+  const [devicesPerPage] = useState(100);
+  
   const { toast } = useToast();
 
   const [selectedWarehouse, setSelectedWarehouse] = useState<string>('All');
@@ -473,14 +484,19 @@ const InventoryManagement = () => {
 
         let status: 'Success' | 'Failed' | 'Pending' = 'Pending';
         
+        // Check for duplicates within the same sales order
+        const duplicateSerials = validSerials.filter((serial, index) => 
+          validSerials.indexOf(serial) !== index
+        );
+        
         if (validSerials.length === 0) {
-          status = 'Pending';
+          status = 'Pending'; // No serial numbers provided
+        } else if (duplicateSerials.length > 0) {
+          status = 'Failed'; // Duplicate serial numbers found
         } else if (orderDevices.length === validSerials.length) {
-          status = 'Success';
-        } else if (orderDevices.length === 0) {
-          status = 'Failed';
+          status = 'Success'; // All serial numbers available, no duplicates
         } else {
-          status = 'Pending';
+          status = 'Failed'; // Missing serial numbers
         }
 
         return {
@@ -1093,6 +1109,69 @@ const InventoryManagement = () => {
     }
     return true;
   });
+
+  // Group orders by sales order and calculate counts
+  const ordersBySalesOrder = filteredOrders.reduce((acc, order) => {
+    const salesOrder = order.sales_order || 'No Sales Order';
+    if (!acc[salesOrder]) {
+      acc[salesOrder] = [];
+    }
+    acc[salesOrder].push(order);
+    return acc;
+  }, {} as Record<string, Order[]>);
+
+  // Create display orders with order counts
+  const ordersWithCounts = Object.entries(ordersBySalesOrder).flatMap(([salesOrder, orders]) => 
+    orders.map((order, index) => ({
+      ...order,
+      orderCount: `${index + 1}/${orders.length}`
+    }))
+  );
+
+  // Check for duplicate serial numbers in same sales order for highlighting
+  const duplicateSerials = new Set<string>();
+  Object.values(ordersBySalesOrder).forEach(salesOrderGroup => {
+    const allSerials = salesOrderGroup.flatMap(order => order.serial_numbers);
+    const duplicates = allSerials.filter((serial, index) => allSerials.indexOf(serial) !== index);
+    duplicates.forEach(serial => duplicateSerials.add(serial));
+  });
+
+  // Pagination logic
+  const paginatedOrders = ordersWithCounts.slice(
+    (currentOrdersPage - 1) * ordersPerPage,
+    currentOrdersPage * ordersPerPage
+  );
+
+  const paginatedDevices = filteredDevices.slice(
+    (currentDevicesPage - 1) * devicesPerPage,
+    currentDevicesPage * devicesPerPage
+  );
+
+  const totalOrdersPages = Math.ceil(ordersWithCounts.length / ordersPerPage);
+  const totalDevicesPages = Math.ceil(filteredDevices.length / devicesPerPage);
+
+  const handleStatusClick = (order: Order) => {
+    if (order.status === 'Pending' || order.status === 'Failed') {
+      let errorMessage = '';
+      const validSerials = order.serial_numbers.filter(sn => sn.trim());
+      const duplicateSerials = validSerials.filter((serial, index) => 
+        validSerials.indexOf(serial) !== index
+      );
+      
+      if (validSerials.length === 0) {
+        errorMessage = 'No serial numbers provided for this order.';
+      } else if (duplicateSerials.length > 0) {
+        errorMessage = `Duplicate serial numbers found: ${duplicateSerials.join(', ')}`;
+      } else {
+        errorMessage = 'Some serial numbers are missing or not properly configured.';
+      }
+      
+      setStatusError(errorMessage);
+      setStatusDialogOrder(order);
+      setShowStatusDialog(true);
+    }
+  };
+
 
   const downloadCSV = (data: any[], filename: string) => {
     if (data.length === 0) {
@@ -1724,11 +1803,15 @@ const InventoryManagement = () => {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filteredDevices.map((device) => (
+              {paginatedDevices.map((device) => (
                 <TableRow key={device.id}>
                   <TableCell>{device.product}</TableCell>
                   <TableCell>{device.model}</TableCell>
-                  <TableCell className="font-mono">{device.serial_number}</TableCell>
+                  <TableCell 
+                    className={`font-mono ${duplicateSerials.has(device.serial_number) ? 'bg-red-100 text-red-800 border border-red-300' : ''}`}
+                  >
+                    {device.serial_number}
+                  </TableCell>
                   <TableCell>{device.warehouse}</TableCell>
                   <TableCell>
                     <Badge
@@ -1753,6 +1836,36 @@ const InventoryManagement = () => {
             </TableBody>
           </Table>
         </div>
+        
+        {/* Devices Pagination */}
+        {totalDevicesPages > 1 && (
+          <div className="flex items-center justify-between px-2 py-4">
+            <div className="text-sm text-muted-foreground">
+              Showing {((currentDevicesPage - 1) * devicesPerPage) + 1} to {Math.min(currentDevicesPage * devicesPerPage, filteredDevices.length)} of {filteredDevices.length} devices
+            </div>
+            <div className="flex items-center space-x-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setCurrentDevicesPage(prev => Math.max(1, prev - 1))}
+                disabled={currentDevicesPage === 1}
+              >
+                Previous
+              </Button>
+              <span className="text-sm">
+                Page {currentDevicesPage} of {totalDevicesPages}
+              </span>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setCurrentDevicesPage(prev => Math.min(totalDevicesPages, prev + 1))}
+                disabled={currentDevicesPage === totalDevicesPages}
+              >
+                Next
+              </Button>
+            </div>
+          </div>
+        )}
       </CardContent>
     </Card>
   );
@@ -2100,6 +2213,39 @@ const InventoryManagement = () => {
                   setEditingOrder(null);
                 }}
               />
+            )}
+          </DialogContent>
+        </Dialog>
+
+        {/* Status Error Dialog */}
+        <Dialog open={showStatusDialog} onOpenChange={setShowStatusDialog}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <X className="h-5 w-5 text-red-600" />
+                Order Status Error
+              </DialogTitle>
+            </DialogHeader>
+            {statusDialogOrder && (
+              <div className="space-y-4">
+                <div className="text-sm text-muted-foreground">
+                  <strong>Sales Order:</strong> {statusDialogOrder.sales_order}
+                </div>
+                <div className="text-sm text-muted-foreground">
+                  <strong>Product:</strong> {statusDialogOrder.product} - {statusDialogOrder.model}
+                </div>
+                <div className="p-4 bg-red-50 border border-red-200 rounded-lg">
+                  <p className="text-sm text-red-800 font-medium">Error Details:</p>
+                  <p className="text-sm text-red-700 mt-1">{statusError}</p>
+                </div>
+                <Button 
+                  variant="outline" 
+                  onClick={() => setShowStatusDialog(false)}
+                  className="w-full"
+                >
+                  Close
+                </Button>
+              </div>
             )}
           </DialogContent>
         </Dialog>
