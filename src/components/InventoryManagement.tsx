@@ -577,12 +577,32 @@ const loadOrders = async () => {
   try {
     setLoading(true);
 
-    // Fetch all orders from the 'orders' table, sorted by creation date
-    const { data: ordersData, error: ordersError } = await supabase
-      .from('orders')
-      .select('*')
-      .order('created_at', { ascending: false });
-    if (ordersError) throw ordersError;
+    let allOrders: any[] = [];
+    const batchSize = 1000; // Fetch 1000 rows per batch
+    let page = 0;
+    let hasMore = true;
+
+    // Fetch orders in batches until all are retrieved
+    while (hasMore) {
+      const { data, error } = await supabase
+        .from('orders')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .range(page * batchSize, (page + 1) * batchSize - 1);
+      if (error) {
+        console.error(`Supabase error on batch ${page}:`, error);
+        throw error;
+      }
+
+      console.log(`Batch ${page} fetched: ${data.length} orders`);
+      allOrders = [...allOrders, ...data];
+
+      // Stop if fewer than batchSize rows are returned (end of data)
+      hasMore = data.length === batchSize;
+      page += 1;
+    }
+
+    console.log('Total orders fetched from Supabase:', allOrders.length);
 
     // Fetch devices to map serial numbers to order IDs
     const { data: devicesData, error: devicesError } = await supabase
@@ -603,7 +623,7 @@ const loadOrders = async () => {
 
     // Group orders by Sales Order, Product, Model, and Warehouse
     const orderGroups = new Map<string, Order[]>();
-    (ordersData || []).forEach((order: any) => {
+    allOrders.forEach((order: any) => {
       const salesOrder = order.sales_order || 'No Sales Order';
       const groupKey = `${salesOrder}-${order.product}-${order.model}-${order.warehouse}`;
       if (!orderGroups.has(groupKey)) {
@@ -618,7 +638,7 @@ const loadOrders = async () => {
     });
 
     // Process each order to determine its status
-    const ordersWithStatus = (ordersData || []).map((order: any) => {
+    const ordersWithStatus = allOrders.map((order: any) => {
       const salesOrder = order.sales_order || 'No Sales Order';
       const groupKey = `${salesOrder}-${order.product}-${order.model}-${order.warehouse}`;
       const groupOrders = orderGroups.get(groupKey) || [];
@@ -635,7 +655,7 @@ const loadOrders = async () => {
       const orderSerials = (order.serial_numbers || []).filter((sn: string) => sn.trim());
       const orderDeviceCount = devicesByOrderId.get(order.id)?.length || 0;
 
-      // Check for duplicate serial numbers within the group
+      // Check for duplicate serial numbers within Zulu
       const seenSerials = new Set<string>();
       const duplicateSerials = new Set<string>();
       allGroupSerials.forEach((serial: string) => {
@@ -652,19 +672,15 @@ const loadOrders = async () => {
 
       // Status logic
       if (orderSerials.length === 0) {
-        // Case: No serial numbers provided for this order
         status = 'Pending';
         statusDetails = 'No serial numbers provided';
       } else if (duplicateSerials.size > 0) {
-        // Case: Duplicate serial numbers found within the group
         status = 'Failed';
         statusDetails = `Duplicates: ${[...duplicateSerials].join(', ')}`;
       } else if (orderSerials.length === order.quantity && orderDeviceCount === order.quantity) {
-        // Case: All serial numbers for this order are unique and match quantity and devices
         status = 'Success';
         statusDetails = `All ${order.quantity} serial numbers present and valid`;
       } else {
-        // Case: Missing serial numbers or mismatch with quantity/devices
         const missingCount = order.quantity - orderSerials.length;
         if (missingCount > 0) {
           const missingPositions = Array.from({ length: order.quantity }, (_, i) => i)
@@ -678,7 +694,7 @@ const loadOrders = async () => {
       }
 
       return {
-        ...order,
+ ...order,
         order_type: order.order_type as 'Inward' | 'Outward',
         product: order.product as 'Tablet' | 'TV',
         serial_numbers: order.serial_numbers || [],
@@ -695,59 +711,65 @@ const loadOrders = async () => {
     setLoading(false);
   }
 };
-  const loadDevices = async () => {
-    try {
+const loadDevices = async () => {
+  try {
+    setLoading(true);
+
+    let allDevices: any[] = [];
+    const batchSize = 1000; // Fetch 1000 rows per batch
+    let page = 0;
+    let hasMore = true;
+
+    // Fetch devices in batches until all are retrieved
+    while (hasMore) {
       const { data, error } = await supabase
         .from('devices')
         .select('*')
-        .order('created_at', { ascending: false });
-      if (error) throw error;
+        .order('created_at', { ascending: false })
+        .range(page * batchSize, (page + 1) * batchSize - 1);
+      if (error) {
+        console.error(`Supabase error on batch ${page}:`, error);
+        throw error;
+      }
 
-      // Fetch related order details to determine order_type
-      const orderIds = [...new Set(data.map((device: any) => device.order_id).filter(id => id))];
-      const { data: ordersData, error: ordersError } = await supabase
-        .from('orders')
-        .select('id, order_type')
-        .in('id', orderIds);
-      if (ordersError) throw ordersError;
+      console.log(`Batch ${page} fetched: ${data.length} devices`);
+      allDevices = [...allDevices, ...data];
 
-      const orderTypeMap = new Map(ordersData.map((order: { id: string; order_type: 'Inward' | 'Outward' }) => [order.id, order.order_type]));
-
-      // Group devices by serial number and track the latest entry per serial number
-      const serialNumberMap = new Map<string, { device: any; orderType: 'Inward' | 'Outward' | undefined }>();
-      data.forEach((device: any) => {
-        const orderType = device.order_id ? orderTypeMap.get(device.order_id) : undefined;
-        if (!serialNumberMap.has(device.serial_number) || new Date(device.created_at) > new Date(serialNumberMap.get(device.serial_number)!.device.created_at)) {
-          serialNumberMap.set(device.serial_number, { device, orderType });
-        }
-      });
-
-      // Update statuses based on order_type and duplicate handling
-      const updatedDevices = data.map((device: any) => {
-        const latestEntry = serialNumberMap.get(device.serial_number);
-        const isLatest = latestEntry?.device.id === device.id;
-        const orderType = device.order_id ? orderTypeMap.get(device.order_id) : undefined;
-
-        let status: 'Available' | 'Assigned' | 'Unassigned';
-        if (isLatest) {
-          status = orderType === 'Outward' ? 'Assigned' : 'Available'; // Latest entry follows order_type
-        } else {
-          status = 'Unassigned'; // Earlier duplicates are Unassigned
-        }
-
-        return {
-          ...device,
-          status,
-        };
-      });
-
-      setDevices(updatedDevices || []);
-    } catch (error) {
-      console.error('Error loading devices:', error);
-      toast({ title: 'Error', description: 'Failed to load devices', variant: 'destructive' });
+      // Stop if fewer than batchSize rows are returned (end of data)
+      hasMore = data.length === batchSize;
+      page += 1;
     }
-  };
 
+    console.log('Total devices fetched from Supabase:', allDevices.length);
+
+    // Fetch related order details to determine order_type
+    const orderIds = [...new Set(allDevices.map((device: any) => device.order_id).filter(id => id))];
+    const { data: ordersData, error: ordersError } = await supabase
+      .from('orders')
+      .select('id, order_type')
+      .in('id', orderIds);
+    if (ordersError) {
+      console.error('Supabase orders error details:', ordersError);
+      throw ordersError;
+    }
+
+    const orderTypeMap = new Map(ordersData.map((order: { id: string; order_type: 'Inward' | 'Outward' }) => [order.id, order.order_type]));
+
+    // Map devices and assign status based on order_type
+    const updatedDevices = allDevices.map((device: any) => ({
+      ...device,
+      status: device.order_id && orderTypeMap.get(device.order_id) === 'Outward' ? 'Assigned' : 'Available',
+    }));
+
+    console.log('Processed devices:', updatedDevices.length);
+    setDevices(updatedDevices || []);
+  } catch (error) {
+    console.error('Error loading devices:', error);
+    toast({ title: 'Error', description: 'Failed to load devices', variant: 'destructive' });
+  } finally {
+    setLoading(false);
+  }
+};
   const loadOrderSummary = async () => {
     try {
       setLoading(true);
