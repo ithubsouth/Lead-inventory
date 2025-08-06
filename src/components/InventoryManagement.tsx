@@ -576,7 +576,7 @@ const InventoryManagement = () => {
 const loadOrders = async () => {
   try {
     setLoading(true);
-    
+
     // Fetch all orders from the 'orders' table, sorted by creation date
     const { data: ordersData, error: ordersError } = await supabase
       .from('orders')
@@ -602,73 +602,86 @@ const loadOrders = async () => {
     });
 
     // Group orders by Sales Order, Product, Model, and Warehouse
-    const orderGroups = new Map<string, any[]>();
+    const orderGroups = new Map<string, Order[]>();
     (ordersData || []).forEach((order: any) => {
-      const groupKey = `${order.sales_order || 'No Sales Order'}-${order.product}-${order.model}-${order.warehouse}`;
+      const salesOrder = order.sales_order || 'No Sales Order';
+      const groupKey = `${salesOrder}-${order.product}-${order.model}-${order.warehouse}`;
       if (!orderGroups.has(groupKey)) {
         orderGroups.set(groupKey, []);
       }
-      orderGroups.get(groupKey)!.push(order);
+      orderGroups.get(groupKey)!.push({
+        ...order,
+        order_type: order.order_type as 'Inward' | 'Outward',
+        product: order.product as 'Tablet' | 'TV',
+        serial_numbers: order.serial_numbers || [],
+      });
     });
 
     // Process each order to determine its status
     const ordersWithStatus = (ordersData || []).map((order: any) => {
-      // Generate the group key for the current order
-      const groupKey = `${order.sales_order || 'No Sales Order'}-${order.product}-${order.model}-${order.warehouse}`;
+      const salesOrder = order.sales_order || 'No Sales Order';
+      const groupKey = `${salesOrder}-${order.product}-${order.model}-${order.warehouse}`;
       const groupOrders = orderGroups.get(groupKey) || [];
-      
-      // Collect all serial numbers for the group
-      const allGroupSerials = groupOrders.flatMap((o: any) => o.serial_numbers.filter((sn: string) => sn.trim()));
-      
-      // Calculate the total quantity for the group
-      const totalGroupQuantity = groupOrders.reduce((sum: number, o: any) => sum + o.quantity, 0);
-      
-      // Count the number of devices for all orders in the group
-      const groupDeviceCount = groupOrders.reduce((count: number, o: any) => {
-        const orderDevices = devicesByOrderId.get(o.id) || [];
-        return count + orderDevices.length;
-      }, 0);
 
-      // Calculate missing serial numbers for this specific order
-      const orderSerials = order.serial_numbers.filter((sn: string) => sn.trim());
-      const missingCount = order.quantity - orderSerials.length;
-      const missingInfo = missingCount > 0 ? `${missingCount}/${order.quantity}` : '';
+      // Collect all serial numbers for the group
+      const allGroupSerials = groupOrders
+        .flatMap((o: Order) => o.serial_numbers.filter((sn: string) => sn.trim()))
+        .filter((sn: string) => sn.trim());
+
+      // Calculate the total quantity for the group
+      const totalGroupQuantity = groupOrders.reduce((sum: number, o: Order) => sum + o.quantity, 0);
+
+      // Get serial numbers for this specific order
+      const orderSerials = (order.serial_numbers || []).filter((sn: string) => sn.trim());
+      const orderDeviceCount = devicesByOrderId.get(order.id)?.length || 0;
 
       // Check for duplicate serial numbers within the group
-      const duplicateSerials = allGroupSerials.filter((serial, index) => 
-        allGroupSerials.indexOf(serial) !== index
-      );
-      const duplicateCount = duplicateSerials.length;
-      const uniqueDuplicates = [...new Set(duplicateSerials)];
+      const seenSerials = new Set<string>();
+      const duplicateSerials = new Set<string>();
+      allGroupSerials.forEach((serial: string) => {
+        if (seenSerials.has(serial)) {
+          duplicateSerials.add(serial);
+        } else {
+          seenSerials.add(serial);
+        }
+      });
 
       // Initialize status and status details
       let status: 'Success' | 'Failed' | 'Pending' = 'Pending';
       let statusDetails = '';
 
-      // Status logic based on your requirements
-      if (allGroupSerials.length === 0) {
-        // Case: No serial numbers provided
+      // Status logic
+      if (orderSerials.length === 0) {
+        // Case: No serial numbers provided for this order
         status = 'Pending';
         statusDetails = 'No serial numbers provided';
-      } else if (duplicateCount > 0) {
+      } else if (duplicateSerials.size > 0) {
         // Case: Duplicate serial numbers found within the group
         status = 'Failed';
-        statusDetails = `Duplicates found: ${uniqueDuplicates.join(', ')} (${duplicateCount} duplicates)`;
-      } else if (allGroupSerials.length === totalGroupQuantity && groupDeviceCount === allGroupSerials.length) {
-        // Case: All serial numbers are unique, match the quantity, and devices are correctly recorded
+        statusDetails = `Duplicates: ${[...duplicateSerials].join(', ')}`;
+      } else if (orderSerials.length === order.quantity && orderDeviceCount === order.quantity) {
+        // Case: All serial numbers for this order are unique and match quantity and devices
         status = 'Success';
-        statusDetails = missingInfo || 'All serial numbers present';
+        statusDetails = `All ${order.quantity} serial numbers present and valid`;
       } else {
-        // Case: Missing serial numbers or mismatch with devices
-        status = 'Failed';
-        statusDetails = missingInfo ? `Missing: ${missingInfo}` : 'Some serial numbers missing or mismatched';
+        // Case: Missing serial numbers or mismatch with quantity/devices
+        const missingCount = order.quantity - orderSerials.length;
+        if (missingCount > 0) {
+          const missingPositions = Array.from({ length: order.quantity }, (_, i) => i)
+            .filter(i => !orderSerials[i]);
+          status = 'Failed';
+          statusDetails = `Missing ${missingCount} serial number${missingCount > 1 ? 's' : ''} at position${missingCount > 1 ? 's' : ''} ${missingPositions.map(p => p + 1).join(', ')} (Expected ${order.quantity}, got ${orderSerials.length})`;
+        } else if (orderDeviceCount !== order.quantity) {
+          status = 'Failed';
+          statusDetails = `Device count mismatch: Expected ${order.quantity}, got ${orderDeviceCount}`;
+        }
       }
 
-      // Return the order with calculated status and details
       return {
         ...order,
         order_type: order.order_type as 'Inward' | 'Outward',
         product: order.product as 'Tablet' | 'TV',
+        serial_numbers: order.serial_numbers || [],
         status,
         statusDetails,
       } as Order & { statusDetails: string };
@@ -1316,28 +1329,14 @@ const loadOrders = async () => {
   const totalOrdersPages = Math.ceil(ordersWithCounts.length / ordersPerPage);
   const totalDevicesPages = Math.ceil(filteredDevices.length / devicesPerPage);
 
-  const handleStatusClick = (order: Order) => {
-    if (order.status === 'Pending' || order.status === 'Failed') {
-      let errorMessage = '';
-      const validSerials = order.serial_numbers.filter(sn => sn.trim());
-      const duplicateSerials = validSerials.filter((serial, index) => 
-        validSerials.indexOf(serial) !== index
-      );
-      
-      if (validSerials.length === 0) {
-        errorMessage = 'No serial numbers provided for this order.';
-      } else if (duplicateSerials.length > 0) {
-        errorMessage = `Duplicate serial numbers found: ${duplicateSerials.join(', ')}`;
-      } else {
-        errorMessage = 'Some serial numbers are missing or not properly configured.';
-      }
-      
-      setStatusError(errorMessage);
-      setStatusDialogOrder(order);
-      setShowStatusDialog(true);
-    }
-  };
-
+const handleStatusClick = (order: Order) => {
+  if (order.status === 'Pending' || order.status === 'Failed') {
+    // Use the statusDetails from loadOrders for exact error information
+    setStatusError(order.statusDetails);
+    setStatusDialogOrder(order);
+    setShowStatusDialog(true);
+  }
+};
 
   const downloadCSV = (data: any[], filename: string) => {
     if (data.length === 0) {
