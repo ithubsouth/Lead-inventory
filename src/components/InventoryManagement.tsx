@@ -526,7 +526,7 @@ const InventoryManagement = () => {
   const [currentSummaryPage, setCurrentSummaryPage] = useState(1);
   const [ordersPerPage] = useState(20);
   const [devicesPerPage] = useState(50);
-  const [summaryPerPage] = useState(50);
+  const [summaryPerPage] = useState(20);
   
   const { toast } = useToast();
 
