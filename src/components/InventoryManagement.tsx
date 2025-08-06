@@ -424,7 +424,7 @@ const EditOrderForm = ({ order, onSave, onCancel }) => {
                     <Input
                       value={serial || ''}
                       onChange={(e) => updateSerialNumber(index, e.target.value)}
-                      className="font-mono text-sm w-40"
+                      className="font-mono text-sm w-64"
                       placeholder={`Serial ${index + 1}`}
                     />
                     <Button
