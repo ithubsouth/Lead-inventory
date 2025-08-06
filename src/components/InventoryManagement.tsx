@@ -406,8 +406,10 @@ const InventoryManagement = () => {
   // Pagination states
   const [currentOrdersPage, setCurrentOrdersPage] = useState(1);
   const [currentDevicesPage, setCurrentDevicesPage] = useState(1);
+  const [currentSummaryPage, setCurrentSummaryPage] = useState(1);
   const [ordersPerPage] = useState(100);
   const [devicesPerPage] = useState(100);
+  const [summaryPerPage] = useState(100);
   
   const { toast } = useToast();
 
@@ -478,25 +480,45 @@ const InventoryManagement = () => {
         }
       });
 
+      // Group orders by sales_order + product + model + warehouse to validate status
+      const orderGroups = new Map<string, any[]>();
+      (ordersData || []).forEach((order: any) => {
+        const groupKey = `${order.sales_order || 'No Sales Order'}-${order.product}-${order.model}-${order.warehouse}`;
+        if (!orderGroups.has(groupKey)) {
+          orderGroups.set(groupKey, []);
+        }
+        orderGroups.get(groupKey)!.push(order);
+      });
+
       const ordersWithStatus = (ordersData || []).map((order: any) => {
-        const orderDevices = devicesByOrderId.get(order.id) || [];
-        const validSerials = order.serial_numbers.filter((sn: string) => sn.trim());
+        const groupKey = `${order.sales_order || 'No Sales Order'}-${order.product}-${order.model}-${order.warehouse}`;
+        const groupOrders = orderGroups.get(groupKey) || [];
+        
+        // Get all serial numbers for this product group within the sales order
+        const allGroupSerials = groupOrders.flatMap((o: any) => o.serial_numbers.filter((sn: string) => sn.trim()));
+        const totalGroupQuantity = groupOrders.reduce((sum: number, o: any) => sum + o.quantity, 0);
+        
+        // Get devices for all orders in this group
+        const groupDeviceCount = groupOrders.reduce((count: number, o: any) => {
+          const orderDevices = devicesByOrderId.get(o.id) || [];
+          return count + orderDevices.length;
+        }, 0);
 
         let status: 'Success' | 'Failed' | 'Pending' = 'Pending';
         
-        // Check for duplicates within the same sales order
-        const duplicateSerials = validSerials.filter((serial, index) => 
-          validSerials.indexOf(serial) !== index
+        // Check for duplicates within the same product group in sales order
+        const duplicateSerials = allGroupSerials.filter((serial, index) => 
+          allGroupSerials.indexOf(serial) !== index
         );
         
-        if (validSerials.length === 0) {
+        if (allGroupSerials.length === 0) {
           status = 'Pending'; // No serial numbers provided
         } else if (duplicateSerials.length > 0) {
-          status = 'Failed'; // Duplicate serial numbers found
-        } else if (orderDevices.length === validSerials.length) {
-          status = 'Success'; // All serial numbers available, no duplicates
+          status = 'Failed'; // Duplicate serial numbers found within this product group
+        } else if (allGroupSerials.length === totalGroupQuantity && groupDeviceCount === allGroupSerials.length) {
+          status = 'Success'; // All serial numbers provided and match quantity
         } else {
-          status = 'Failed'; // Missing serial numbers
+          status = 'Failed'; // Missing serial numbers or quantity mismatch
         }
 
         return {
@@ -1659,9 +1681,14 @@ const InventoryManagement = () => {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filteredOrders.map((order) => (
+              {paginatedOrders.map((order) => (
                 <TableRow key={order.id}>
-                  <TableCell className="font-mono">{order.sales_order}</TableCell>
+                  <TableCell className="font-mono">
+                    {order.sales_order}
+                    {order.orderCount && (
+                      <span className="ml-2 text-xs text-muted-foreground">({order.orderCount})</span>
+                    )}
+                  </TableCell>
                   <TableCell>
                     <Badge variant={order.order_type === 'Inward' ? 'default' : 'secondary'}>
                       {order.order_type}
@@ -1711,11 +1738,41 @@ const InventoryManagement = () => {
                 </TableRow>
               ))}
             </TableBody>
-          </Table>
-        </div>
-      </CardContent>
-    </Card>
-  );
+            </Table>
+          </div>
+          
+          {/* Pagination for Orders */}
+          {totalOrdersPages > 1 && (
+            <div className="flex items-center justify-between px-2 py-4">
+              <div className="text-sm text-muted-foreground">
+                Showing {((currentOrdersPage - 1) * ordersPerPage) + 1} to {Math.min(currentOrdersPage * ordersPerPage, ordersWithCounts.length)} of {ordersWithCounts.length} orders
+              </div>
+              <div className="flex items-center space-x-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setCurrentOrdersPage(prev => Math.max(1, prev - 1))}
+                  disabled={currentOrdersPage === 1}
+                >
+                  Previous
+                </Button>
+                <span className="text-sm">
+                  Page {currentOrdersPage} of {totalOrdersPages}
+                </span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setCurrentOrdersPage(prev => Math.min(totalOrdersPages, prev + 1))}
+                  disabled={currentOrdersPage === totalOrdersPages}
+                >
+                  Next
+                </Button>
+              </div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    );
 
   const renderDevicesTable = () => (
     <Card>
@@ -1878,6 +1935,13 @@ const InventoryManagement = () => {
       return true;
     });
 
+    // Pagination for Order Summary
+    const currentSummary = filteredSummary.slice(
+      (currentSummaryPage - 1) * summaryPerPage,
+      currentSummaryPage * summaryPerPage
+    );
+    const totalSummaryPages = Math.ceil(filteredSummary.length / summaryPerPage);
+
     const totalInward = filteredSummary.reduce((sum, item) => sum + (item.inward || 0), 0);
     const totalOutward = filteredSummary.reduce((sum, item) => sum + (item.outward || 0), 0);
     const totalAvailable = filteredSummary.reduce((sum, item) => sum + (item.available || 0), 0);
@@ -2004,7 +2068,7 @@ const InventoryManagement = () => {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filteredSummary.map((summary, index) => (
+                  {currentSummary.map((summary, index) => (
                     <TableRow key={index}>
                       <TableCell>{summary.warehouse}</TableCell>
                       <TableCell>{summary.product}</TableCell>
@@ -2017,6 +2081,36 @@ const InventoryManagement = () => {
                 </TableBody>
               </Table>
             </div>
+            
+            {/* Pagination for Order Summary */}
+            {totalSummaryPages > 1 && (
+              <div className="flex items-center justify-between px-2 py-4">
+                <div className="text-sm text-muted-foreground">
+                  Showing {((currentSummaryPage - 1) * summaryPerPage) + 1} to {Math.min(currentSummaryPage * summaryPerPage, filteredSummary.length)} of {filteredSummary.length} summaries
+                </div>
+                <div className="flex items-center space-x-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setCurrentSummaryPage(prev => Math.max(1, prev - 1))}
+                    disabled={currentSummaryPage === 1}
+                  >
+                    Previous
+                  </Button>
+                  <span className="text-sm">
+                    Page {currentSummaryPage} of {totalSummaryPages}
+                  </span>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setCurrentSummaryPage(prev => Math.min(totalSummaryPages, prev + 1))}
+                    disabled={currentSummaryPage === totalSummaryPages}
+                  >
+                    Next
+                  </Button>
+                </div>
+              </div>
+            )}
           </CardContent>
         </Card>
       </div>
