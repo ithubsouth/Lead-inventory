@@ -552,6 +552,7 @@ const InventoryManagement = () => {
   const orderTypes = [
     'Hardware',
     'Additional hardware',
+    'Replacement hardware',
     'Exp Hub',
     'Stock movement',
     'Employee',
