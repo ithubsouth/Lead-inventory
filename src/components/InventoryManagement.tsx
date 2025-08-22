@@ -551,15 +551,17 @@ const InventoryManagement = () => {
 
   const orderTypes = [
     'Hardware',
-    'Additional hardware',
+    'Additional Hardware',
+    'Replacement Hardware (FOC)',
+    'Replacement Hardware (CB)',
     'Exp Hub',
-    'Stock movement',
+    'Stock Movement',
     'Employee',
     'Stock',
     'Return',
     'Other'
   ];
-  const tabletModels = ['TB301FU', 'TB301XU', 'TB-8505F', 'TB-7306F', 'TB-7306X', 'TB-7305X'];
+  const tabletModels = ['TB301FU', 'TB301XU', 'TB-8505F', 'TB-7306F', 'TB-7306X', 'TB-7305X', 'IRA T811'];
   const tvModels = ['Hyundai TV - 39"', 'Hyundai TV - 43"', 'Hyundai TV - 50"', 'Hyundai TV - 55"', 'Hyundai TV - 65"', 'Xentec TV - 39"', 'Xentec TV - 43"'];
   const sdCardSizes = ['64 GB', '128 GB'];
   const locations = ['Trichy', 'Bangalore', 'Hyderabad', 'Kolkata', 'Bhiwandi', 'Ghaziabad', 'Zirakpur', 'Indore', 'Jaipur'];
