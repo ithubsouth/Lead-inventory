@@ -641,14 +641,15 @@ const loadOrders = async () => {
       }
     });
 
-    // Group orders by Sales Order for duplicate checking within sales orders
-    const ordersBySalesOrder = new Map<string, Order[]>();
+    // Group orders by Sales Order, Product, Model, and Warehouse
+    const orderGroups = new Map<string, Order[]>();
     allOrders.forEach((order: any) => {
       const salesOrder = order.sales_order || 'No Sales Order';
-      if (!ordersBySalesOrder.has(salesOrder)) {
-        ordersBySalesOrder.set(salesOrder, []);
+      const groupKey = `${salesOrder}-${order.product}-${order.model}-${order.warehouse}`;
+      if (!orderGroups.has(groupKey)) {
+        orderGroups.set(groupKey, []);
       }
-      ordersBySalesOrder.get(salesOrder)!.push({
+      orderGroups.get(groupKey)!.push({
         ...order,
         order_type: order.order_type as 'Inward' | 'Outward',
         product: order.product as 'Tablet' | 'TV',
@@ -656,30 +657,26 @@ const loadOrders = async () => {
       });
     });
 
-    // Identify duplicate serial numbers within each sales order
-    const duplicateSerials = new Set<string>();
-    ordersBySalesOrder.forEach((orders, salesOrder) => {
-      const allSerialsInSalesOrder = orders.flatMap(order => order.serial_numbers).filter(sn => sn);
-      const uniqueSerials = new Set(allSerialsInSalesOrder);
-      if (uniqueSerials.size < allSerialsInSalesOrder.length) {
-        // Find duplicates by checking which serials appear more than once
-        const serialCounts = new Map<string, number>();
-        allSerialsInSalesOrder.forEach(sn => {
-          serialCounts.set(sn, (serialCounts.get(sn) || 0) + 1);
-        });
-        serialCounts.forEach((count, serial) => {
-          if (count > 1) {
-            duplicateSerials.add(serial);
-          }
-        });
-      }
-    });
-
     // Process each order to determine its status
     const ordersWithStatus = allOrders.map((order: any) => {
       const salesOrder = order.sales_order || 'No Sales Order';
+      const groupKey = `${salesOrder}-${order.product}-${order.model}-${order.warehouse}`;
+      const groupOrders = orderGroups.get(groupKey) || [];
+
+      // Get serial numbers for this specific order (normalized)
       const orderSerials = (order.serial_numbers || []).map((sn: string) => sn.trim().toUpperCase()).filter((sn: string) => sn);
       const orderDeviceCount = devicesByOrderId.get(order.id)?.length || 0;
+
+      // Check for duplicate serial numbers within the same order
+      const orderSerialSet = new Set<string>();
+      const duplicateSerialsInOrder = new Set<string>();
+      orderSerials.forEach((serial: string) => {
+        if (orderSerialSet.has(serial)) {
+          duplicateSerialsInOrder.add(serial);
+        } else {
+          orderSerialSet.add(serial);
+        }
+      });
 
       // Initialize status and status details
       let status: 'Success' | 'Failed' | 'Pending' = 'Pending';
@@ -689,10 +686,9 @@ const loadOrders = async () => {
       if (orderSerials.length === 0) {
         status = 'Pending';
         statusDetails = 'No serial numbers provided';
-      } else if (orderSerials.some((sn: string) => duplicateSerials.has(sn))) {
-        const duplicates = orderSerials.filter((sn: string) => duplicateSerials.has(sn));
+      } else if (duplicateSerialsInOrder.size > 0) {
         status = 'Failed';
-        statusDetails = `Duplicate serial numbers found within sales order: ${duplicates.join(', ')}`;
+        statusDetails = `Duplicate serial numbers found within this order: ${[...duplicateSerialsInOrder].join(', ')}`;
       } else if (orderSerials.length !== order.quantity) {
         const missingCount = order.quantity - orderSerials.length;
         const missingPositions = Array.from({ length: order.quantity }, (_, i) => i)
@@ -734,7 +730,8 @@ const loadOrders = async () => {
     setLoading(false);
   }
 };
-const loadDevices = async () => {
+
+  const loadDevices = async () => {
   try {
     setLoading(true);
 
