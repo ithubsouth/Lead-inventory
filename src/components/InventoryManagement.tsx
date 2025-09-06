@@ -51,7 +51,15 @@ interface Order {
   created_by?: string;
   updated_by?: string;
   status?: 'Success' | 'Failed' | 'Pending';
+  statusDetails?: string;
   orderCount?: string;
+  editHistory?: EditHistoryEntry[];
+}
+
+interface EditHistoryEntry {
+  timestamp: string;
+  changes: string;
+  changedFields: string[];
 }
 
 interface Device {
@@ -83,6 +91,11 @@ interface OrderSummary {
   available: number;
 }
 
+// Generate dummy ID for missing values
+const generateDummyId = (prefix: string): string => {
+  return `${prefix}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+};
+
 const formatDate = (dateString: string): string => {
   const date = new Date(dateString);
   const day = String(date.getDate()).padStart(2, '0');
@@ -96,6 +109,7 @@ const formatDate = (dateString: string): string => {
 
 const EditOrderForm = ({ order, onSave, onCancel }) => {
   const [formData, setFormData] = useState<Order>({ ...order });
+  const [originalOrder] = useState<Order>({ ...order }); // Store original for comparison
   const [newSerialNumber, setNewSerialNumber] = useState('');
   const [showScanner, setShowScanner] = useState(false);
   const [currentSerialIndex, setCurrentSerialIndex] = useState<number | null>(null);
@@ -103,12 +117,56 @@ const EditOrderForm = ({ order, onSave, onCancel }) => {
   const { toast } = useToast();
 
   useEffect(() => {
-    // Ensure formData serial_numbers is initialized as an array
+    // Ensure formData serial_numbers is initialized as an array and initialize edit history
     setFormData(prev => ({
       ...prev,
       serial_numbers: prev.serial_numbers || [],
+      editHistory: prev.editHistory || [],
     }));
   }, [order]);
+
+  // Function to generate edit history entry
+  const generateEditHistoryEntry = (originalOrder: Order, updatedOrder: Order): EditHistoryEntry | null => {
+    const changedFields: string[] = [];
+    const changes: string[] = [];
+
+    if (originalOrder.sales_order !== updatedOrder.sales_order) {
+      changedFields.push('sales_order');
+      changes.push(`Sales Order: "${originalOrder.sales_order || 'Empty'}" → "${updatedOrder.sales_order || 'Empty'}"`);
+    }
+    if (originalOrder.deal_id !== updatedOrder.deal_id) {
+      changedFields.push('deal_id');
+      changes.push(`Deal ID: "${originalOrder.deal_id || 'Empty'}" → "${updatedOrder.deal_id || 'Empty'}"`);
+    }
+    if (originalOrder.school_name !== updatedOrder.school_name) {
+      changedFields.push('school_name');
+      changes.push(`School Name: "${originalOrder.school_name || 'Empty'}" → "${updatedOrder.school_name || 'Empty'}"`);
+    }
+    if (originalOrder.nucleus_id !== updatedOrder.nucleus_id) {
+      changedFields.push('nucleus_id');
+      changes.push(`Nucleus ID: "${originalOrder.nucleus_id || 'Empty'}" → "${updatedOrder.nucleus_id || 'Empty'}"`);
+    }
+    if (originalOrder.quantity !== updatedOrder.quantity) {
+      changedFields.push('quantity');
+      changes.push(`Quantity: ${originalOrder.quantity} → ${updatedOrder.quantity}`);
+    }
+    if (originalOrder.warehouse !== updatedOrder.warehouse) {
+      changedFields.push('warehouse');
+      changes.push(`Warehouse: "${originalOrder.warehouse}" → "${updatedOrder.warehouse}"`);
+    }
+    if (JSON.stringify(originalOrder.serial_numbers) !== JSON.stringify(updatedOrder.serial_numbers)) {
+      changedFields.push('serial_numbers');
+      changes.push(`Serial Numbers: Updated (${originalOrder.serial_numbers?.length || 0} → ${updatedOrder.serial_numbers?.length || 0} entries)`);
+    }
+
+    if (changes.length === 0) return null;
+
+    return {
+      timestamp: new Date().toISOString(),
+      changes: changes.join(', '),
+      changedFields,
+    };
+  };
 
   const addSerialNumber = (serial: string) => {
     if (serial.trim()) {
@@ -211,6 +269,13 @@ const EditOrderForm = ({ order, onSave, onCancel }) => {
       setLoading(true);
       const validSerials = (formData.serial_numbers || []).filter(sn => sn.trim());
 
+      // Generate edit history entry
+      const historyEntry = generateEditHistoryEntry(originalOrder, formData);
+      const updatedEditHistory = [...(formData.editHistory || [])];
+      if (historyEntry) {
+        updatedEditHistory.push(historyEntry);
+      }
+
       // Delete existing devices for this order
       const { error: deleteError } = await supabase
         .from('devices')
@@ -258,8 +323,9 @@ const EditOrderForm = ({ order, onSave, onCancel }) => {
         if (deviceError) throw deviceError;
       }
 
-      // Call the onSave callback with the updated order
-      onSave(formData);
+      // Call the onSave callback with the updated order including edit history
+      const updatedFormData = { ...formData, editHistory: updatedEditHistory };
+      onSave(updatedFormData);
       toast({ title: 'Success', description: 'Order updated successfully' });
     } catch (error) {
       console.error('Error updating order:', error);
@@ -721,6 +787,9 @@ const loadOrders = async () => {
         statusDetails,
       } as Order & { statusDetails: string };
     });
+
+    // Sort orders by order_date in descending order (latest first)
+    ordersWithStatus.sort((a, b) => new Date(b.order_date).getTime() - new Date(a.order_date).getTime());
 
     setOrders(ordersWithStatus);
   } catch (error) {
@@ -2385,6 +2454,45 @@ const renderOrdersTable = () => (
                     )}
                   </CardContent>
                 </Card>
+                
+                {/* Edit History Section */}
+                {viewingOrder.editHistory && viewingOrder.editHistory.length > 0 && (
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="text-lg">Edit History ({viewingOrder.editHistory.length})</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="space-y-3">
+                        {viewingOrder.editHistory
+                          .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+                          .map((entry, index) => (
+                            <div key={index} className="p-3 bg-muted rounded-lg">
+                              <div className="flex justify-between items-start mb-2">
+                                <Badge variant="outline" className="text-xs">
+                                  Edit #{viewingOrder.editHistory!.length - index}
+                                </Badge>
+                                <span className="text-xs text-muted-foreground">
+                                  {formatDate(entry.timestamp)}
+                                </span>
+                              </div>
+                              <p className="text-sm">{entry.changes}</p>
+                              <div className="mt-2">
+                                <div className="flex flex-wrap gap-1">
+                                  {entry.changedFields.map((field, fieldIndex) => (
+                                    <Badge key={fieldIndex} variant="secondary" className="text-xs">
+                                      {field.replace('_', ' ')}
+                                    </Badge>
+                                  ))}
+                                </div>
+                              </div>
+                            </div>
+                          ))
+                        }
+                      </div>
+                    </CardContent>
+                  </Card>
+                )}
+                
                 <div className="flex gap-2 mt-6">
                   {!viewingOrder.is_deleted && (
                     <Button
