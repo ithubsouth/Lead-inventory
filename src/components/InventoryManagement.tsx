@@ -12,6 +12,7 @@ import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import EnhancedBarcodeScanner from './EnhancedBarcodeScanner';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { UserProfile } from '@/components/UserProfile';
 
 interface TabletItem {
   id: string;
@@ -1377,7 +1378,7 @@ const loadOrders = async () => {
       );
     }
     return true;
-  });
+  }).sort((a, b) => new Date(b.order_date).getTime() - new Date(a.order_date).getTime());
 
   const filteredDevices = devices.filter((device) => {
     if (!showDeleted && device.is_deleted) return false;
@@ -2312,9 +2313,12 @@ const renderOrdersTable = () => (
   return (
     <div className="min-h-screen bg-background">
       <div className="container mx-auto p-6">
-        <div className="mb-8">
-          <h1 className="text-4xl font-bold mb-2">Inventory Management</h1>
-          <p className="text-muted-foreground">Manage your inventory orders and track devices across warehouses</p>
+        <div className="mb-8 flex justify-between items-center">
+          <div>
+            <h1 className="text-4xl font-bold mb-2">Asset Vault Quest</h1>
+            <p className="text-muted-foreground">Manage your inventory orders and track devices across warehouses</p>
+          </div>
+          <UserProfile />
         </div>
 
         <Tabs defaultValue="create">
