@@ -7,12 +7,14 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
-import { Download, Package, BarChart3, Archive, RotateCcw, Plus, Trash2, Search, Camera, Eye, Edit, X, Minus, Upload } from 'lucide-react';
+import { Download, Package, BarChart3, Archive, RotateCcw, Plus, Trash2, Search, Camera, Eye, Edit, X, Minus, Upload, Users, Tv, Tablet, HardDrive, Usb } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import EnhancedBarcodeScanner from './EnhancedBarcodeScanner';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { UserProfile } from '@/components/UserProfile';
+import UserManagement from './UserManagement';
+import { TabletOrderForm, TVOrderForm, SDCardOrderForm, PendriveOrderForm } from './ProductOrderForms';
 
 interface TabletItem {
   id: string;
@@ -35,7 +37,7 @@ interface TVItem {
 interface Order {
   id: string;
   order_type: 'Inward' | 'Outward';
-  product: 'Tablet' | 'TV';
+  product: 'Tablet' | 'TV' | 'SD Card' | 'Pendrive';
   model: string;
   quantity: number;
   warehouse: string;
@@ -65,7 +67,7 @@ interface EditHistoryEntry {
 
 interface Device {
   id: string;
-  product: 'Tablet' | 'TV';
+  product: 'Tablet' | 'TV' | 'SD Card' | 'Pendrive';
   model: string;
   serial_number: string;
   warehouse: string;
