@@ -104,7 +104,12 @@ export const TabletOrderForm: React.FC<BaseOrderFormProps> = ({ onSave, onCancel
                 <X className="h-4 w-4" />
               </Button>
             </div>
-            <EnhancedBarcodeScanner onResult={handleScanSuccess} onError={() => setShowScanner(false)} />
+            <EnhancedBarcodeScanner
+              isOpen={true}
+              onClose={() => setShowScanner(false)}
+              onScan={handleScanSuccess}
+              existingSerials={formData.serial_numbers}
+            />
           </div>
         </div>
       )}
@@ -368,7 +373,12 @@ export const TVOrderForm: React.FC<BaseOrderFormProps> = ({ onSave, onCancel }) 
                 <X className="h-4 w-4" />
               </Button>
             </div>
-            <EnhancedBarcodeScanner onResult={handleScanSuccess} onError={() => setShowScanner(false)} />
+            <EnhancedBarcodeScanner
+              isOpen={true}
+              onClose={() => setShowScanner(false)}
+              onScan={handleScanSuccess}
+              existingSerials={formData.serial_numbers}
+            />
           </div>
         </div>
       )}
@@ -625,7 +635,12 @@ export const SDCardOrderForm: React.FC<BaseOrderFormProps> = ({ onSave, onCancel
                 <X className="h-4 w-4" />
               </Button>
             </div>
-            <EnhancedBarcodeScanner onResult={handleScanSuccess} onError={() => setShowScanner(false)} />
+            <EnhancedBarcodeScanner
+              isOpen={true}
+              onClose={() => setShowScanner(false)}
+              onScan={handleScanSuccess}
+              existingSerials={formData.serial_numbers}
+            />
           </div>
         </div>
       )}
@@ -806,7 +821,7 @@ export const SDCardOrderForm: React.FC<BaseOrderFormProps> = ({ onSave, onCancel
 };
 
 // Pendrive Order Form
-export const PendriveOrderForm: React.FC<BaseOrderFormProps> = ({ onSave, onCancel }) => {
+const ProductOrderForms: React.FC<ProductOrderFormsProps> = ({ productType, onClose }) => {
   const [formData, setFormData] = useState({
     product: 'Pendrive',
     model: '',
@@ -896,7 +911,12 @@ export const PendriveOrderForm: React.FC<BaseOrderFormProps> = ({ onSave, onCanc
                 <X className="h-4 w-4" />
               </Button>
             </div>
-            <EnhancedBarcodeScanner onResult={handleScanSuccess} onError={() => setShowScanner(false)} />
+            <EnhancedBarcodeScanner
+              isOpen={true}
+              onClose={() => setShowScanner(false)}
+              onScan={handleScanSuccess}
+              existingSerials={formData.serial_numbers}
+            />
           </div>
         </div>
       )}
@@ -1075,3 +1095,5 @@ export const PendriveOrderForm: React.FC<BaseOrderFormProps> = ({ onSave, onCanc
     </div>
   );
 };
+
+export default ProductOrderForms;
