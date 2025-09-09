@@ -3,7 +3,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tablet, Tv, HardDrive, UsbIcon } from 'lucide-react';
-import ProductOrderForms from '../ProductOrderForms';
+import { TabletOrderForm, TVOrderForm, SDCardOrderForm, PendriveOrderForm } from '../ProductOrderForms';
 
 interface CreateOrderDialogProps {
   open: boolean;
@@ -46,6 +46,27 @@ export const CreateOrderDialog: React.FC<CreateOrderDialogProps> = ({
   const handleClose = () => {
     setSelectedProduct(null);
     onOpenChange(false);
+  };
+
+  const handleOrderSave = (orderData: any) => {
+    console.log('Order created:', orderData);
+    // TODO: Implement order saving logic
+    handleClose();
+  };
+
+  const renderOrderForm = () => {
+    switch (selectedProduct) {
+      case 'tablet':
+        return <TabletOrderForm onSave={handleOrderSave} onCancel={handleClose} />;
+      case 'tv':
+        return <TVOrderForm onSave={handleOrderSave} onCancel={handleClose} />;
+      case 'sd-card':
+        return <SDCardOrderForm onSave={handleOrderSave} onCancel={handleClose} />;
+      case 'pendrive':
+        return <PendriveOrderForm onSave={handleOrderSave} onCancel={handleClose} />;
+      default:
+        return null;
+    }
   };
 
   return (
@@ -93,10 +114,7 @@ export const CreateOrderDialog: React.FC<CreateOrderDialogProps> = ({
               </h3>
             </div>
             
-            <ProductOrderForms 
-              productType={selectedProduct}
-              onClose={handleClose}
-            />
+            {renderOrderForm()}
           </div>
         )}
       </DialogContent>

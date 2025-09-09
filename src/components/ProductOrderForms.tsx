@@ -821,7 +821,7 @@ export const SDCardOrderForm: React.FC<BaseOrderFormProps> = ({ onSave, onCancel
 };
 
 // Pendrive Order Form
-const ProductOrderForms: React.FC<ProductOrderFormsProps> = ({ productType, onClose }) => {
+export const PendriveOrderForm: React.FC<BaseOrderFormProps> = ({ onSave, onCancel }) => {
   const [formData, setFormData] = useState({
     product: 'Pendrive',
     model: '',
@@ -1095,5 +1095,3 @@ const ProductOrderForms: React.FC<ProductOrderFormsProps> = ({ productType, onCl
     </div>
   );
 };
-
-export default ProductOrderForms;
