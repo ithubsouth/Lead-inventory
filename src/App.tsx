@@ -25,6 +25,8 @@ const App = () => (
                 <Index />
               </ProtectedRoute>
             } />
+            {/* Temporary development route - bypasses authentication */}
+            <Route path="/dev" element={<Index />} />
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="*" element={<NotFound />} />
           </Routes>
