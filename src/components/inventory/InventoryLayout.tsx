@@ -43,20 +43,22 @@ export const InventoryLayout: React.FC = () => {
         </div>
         
         {/* Fixed Tabs */}
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="px-4">
-          <TabsList className="w-full justify-start">
-            <TabsTrigger value="devices">Devices</TabsTrigger>
-            <TabsTrigger value="orders">View Orders</TabsTrigger>
-            <TabsTrigger value="summary">Order Summary</TabsTrigger>
-            <TabsTrigger value="users">User Management</TabsTrigger>
-            <TabsTrigger 
-              value="create-order"
-              onClick={() => setShowCreateOrder(true)}
-            >
-              Create Order
-            </TabsTrigger>
-          </TabsList>
-        </Tabs>
+        <div className="overflow-hidden">
+          <Tabs value={activeTab} onValueChange={setActiveTab} className="px-4">
+            <TabsList className="w-full justify-start">
+              <TabsTrigger value="devices">Devices</TabsTrigger>
+              <TabsTrigger value="orders">View Orders</TabsTrigger>
+              <TabsTrigger value="summary">Order Summary</TabsTrigger>
+              <TabsTrigger value="users">User Management</TabsTrigger>
+              <TabsTrigger 
+                value="create-order"
+                onClick={() => setShowCreateOrder(true)}
+              >
+                Create Order
+              </TabsTrigger>
+            </TabsList>
+          </Tabs>
+        </div>
       </div>
 
       {/* Main Content */}

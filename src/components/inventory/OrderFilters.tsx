@@ -38,7 +38,7 @@ export const OrderFilters: React.FC<OrderFiltersProps> = ({
   onFiltersChange,
 }) => {
   const [datePickerOpen, setDatePickerOpen] = useState(false);
-  const [tempDateRange, setTempDateRange] = useState<{ from: Date; to: Date } | null>(filters.date_range);
+  const [tempDate, setTempDate] = useState<Date | undefined>(filters.date_range?.from);
 
   const getUniqueValues = (key: keyof Order) => {
     const values = orders
@@ -72,6 +72,7 @@ export const OrderFilters: React.FC<OrderFiltersProps> = ({
     const newFilters = { ...filters };
     if (filterType === 'date_range') {
       newFilters.date_range = null;
+      setTempDate(undefined);
     } else {
       (newFilters[filterType as keyof typeof filters] as string[]) = [];
     }
@@ -88,12 +89,7 @@ export const OrderFilters: React.FC<OrderFiltersProps> = ({
       sales_orders: [],
       date_range: null
     });
-    setTempDateRange(null);
-  };
-
-  const applyDateRange = () => {
-    onFiltersChange({ ...filters, date_range: tempDateRange });
-    setDatePickerOpen(false);
+    setTempDate(undefined);
   };
 
   const FilterPopover = ({ 
@@ -119,7 +115,7 @@ export const OrderFilters: React.FC<OrderFiltersProps> = ({
           <ChevronDown className="ml-1 h-3 w-3" />
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="w-[200px] p-0" align="start">
+      <PopoverContent className="w-[200px] p-0 z-50 bg-background" align="start">
         <div className="max-h-60 overflow-auto">
           {selectedValues.length > 0 && (
             <div className="flex items-center justify-between p-2 border-b">
@@ -204,12 +200,12 @@ export const OrderFilters: React.FC<OrderFiltersProps> = ({
         selectedValues={filters.sales_orders}
       />
       
-      {/* Date Range Picker */}
+      {/* Date Picker */}
       <Popover open={datePickerOpen} onOpenChange={setDatePickerOpen}>
         <PopoverTrigger asChild>
           <Button variant="outline" className="h-8 border-dashed">
             <CalendarIcon className="mr-2 h-3 w-3" />
-            Date Range
+            Pick a date
             {filters.date_range && (
               <Badge variant="secondary" className="ml-1 h-4 w-4 p-0 text-xs">
                 1
@@ -217,26 +213,30 @@ export const OrderFilters: React.FC<OrderFiltersProps> = ({
             )}
           </Button>
         </PopoverTrigger>
-        <PopoverContent className="w-auto p-0" align="start">
+        <PopoverContent className="w-auto p-0 z-50 bg-background" align="start">
           <div className="p-3">
             <Calendar
               initialFocus
-              mode="range"
-              defaultMonth={tempDateRange?.from}
-              selected={tempDateRange}
-              onSelect={(range) => setTempDateRange(range as { from: Date; to: Date })}
-              numberOfMonths={2}
+              mode="single"
+              selected={tempDate}
+              onSelect={(date) => {
+                if (date) {
+                  setTempDate(date);
+                  const newRange = { from: date, to: date };
+                  onFiltersChange({ ...filters, date_range: newRange });
+                  setDatePickerOpen(false);
+                }
+              }}
+              className="pointer-events-auto"
             />
             <div className="flex gap-2 mt-3">
-              <Button size="sm" onClick={applyDateRange} disabled={!tempDateRange}>
-                Apply
-              </Button>
               <Button 
                 size="sm" 
                 variant="outline" 
                 onClick={() => {
-                  setTempDateRange(null);
+                  setTempDate(undefined);
                   clearFilter('date_range');
+                  setDatePickerOpen(false);
                 }}
               >
                 Clear

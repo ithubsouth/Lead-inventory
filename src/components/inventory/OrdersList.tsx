@@ -160,7 +160,7 @@ export const OrdersList: React.FC = () => {
               <CardTitle>View Orders ({filteredOrders.length})</CardTitle>
             </div>
             <div className="flex items-center gap-2">
-              <Button variant="outline" size="sm" onClick={exportToCSV}>
+              <Button variant="outline" size="sm" onClick={exportToCSV} title="Export CSV">
                 <Download className="h-4 w-4" />
               </Button>
               <div className="relative">

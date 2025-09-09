@@ -97,7 +97,7 @@ export const DeviceFilters: React.FC<DeviceFiltersProps> = ({
           <ChevronDown className="ml-1 h-3 w-3" />
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="w-[200px] p-0" align="start">
+      <PopoverContent className="w-[200px] p-0 z-50 bg-background" align="start">
         <div className="max-h-60 overflow-auto">
           {selectedValues.length > 0 && (
             <div className="flex items-center justify-between p-2 border-b">
