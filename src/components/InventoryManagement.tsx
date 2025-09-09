@@ -20,9 +20,10 @@ const InventoryManagement = () => {
   const [selectedWarehouse, setSelectedWarehouse] = useState<string>('All');
   const [selectedAssetType, setSelectedAssetType] = useState<string>('All');
   const [selectedModel, setSelectedModel] = useState<string>('All');
-  const [selectedAssetStatus, setSelectedAssetStatus] = useState<string>('All'); // Added
-  const [selectedConfiguration, setSelectedConfiguration] = useState<string>('All'); // Added
-  const [selectedProduct, setSelectedProduct] = useState<string>('All'); // Added
+  const [selectedAssetStatus, setSelectedAssetStatus] = useState<string>('All');
+  const [selectedConfiguration, setSelectedConfiguration] = useState<string>('All');
+  const [selectedProduct, setSelectedProduct] = useState<string>('All');
+  const [selectedStatus, setSelectedStatus] = useState<string>('All');
   const [fromDate, setFromDate] = useState<string>('');
   const [toDate, setToDate] = useState<string>('');
   const [showDeleted, setShowDeleted] = useState<boolean>(false);
@@ -201,7 +202,7 @@ const InventoryManagement = () => {
       const orderTypeMap = new Map(ordersData.map((order: { id: string; order_type: 'Inward' | 'Outward' }) => [order.id, order.order_type]));
       const updatedDevices = allDevices.map((device: any) => ({
         ...device,
-        status: device.order_id && orderTypeMap.get(device.order_id) === 'Outward' ? 'Assigned' : 'Available',
+        status: device.order_id && orderTypeMap.get(device.order_id) === 'Outward' ? 'Assigned' : 'Stock',
       }));
 
       setDevices(updatedDevices || []);
@@ -398,12 +399,14 @@ const InventoryManagement = () => {
               setSelectedAssetType={setSelectedAssetType}
               selectedModel={selectedModel}
               setSelectedModel={setSelectedModel}
-              selectedAssetStatus={selectedAssetStatus} // Added
-              setSelectedAssetStatus={setSelectedAssetStatus} // Added
-              selectedConfiguration={selectedConfiguration} // Added
-              setSelectedConfiguration={setSelectedConfiguration} // Added
-              selectedProduct={selectedProduct} // Added
-              setSelectedProduct={setSelectedProduct} // Added
+              selectedAssetStatus={selectedAssetStatus}
+              setSelectedAssetStatus={setSelectedAssetStatus}
+              selectedConfiguration={selectedConfiguration}
+              setSelectedConfiguration={setSelectedConfiguration}
+              selectedProduct={selectedProduct}
+              setSelectedProduct={setSelectedProduct}
+              selectedStatus={selectedStatus}
+              setSelectedStatus={setSelectedStatus}
               fromDate={fromDate}
               setFromDate={setFromDate}
               toDate={toDate}

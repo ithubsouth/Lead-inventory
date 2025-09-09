@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { Search, Download, Eye } from 'lucide-react';
+import { Search, Download, Eye, Calendar } from 'lucide-react';
 import { Device } from './types';
 import { formatDate } from './utils';
 
 interface DevicesTableProps {
-  devices: Device[];
+  devices: Device[] | null;
   selectedWarehouse: string;
   setSelectedWarehouse: (value: string) => void;
   selectedAssetType: string;
@@ -17,6 +17,8 @@ interface DevicesTableProps {
   setSelectedConfiguration: (value: string) => void;
   selectedProduct: string;
   setSelectedProduct: (value: string) => void;
+  selectedStatus: string;
+  setSelectedStatus: (value: string) => void;
   fromDate: string;
   setFromDate: (value: string) => void;
   toDate: string;
@@ -41,6 +43,8 @@ const DevicesTable: React.FC<DevicesTableProps> = ({
   setSelectedConfiguration,
   selectedProduct,
   setSelectedProduct,
+  selectedStatus,
+  setSelectedStatus,
   fromDate,
   setFromDate,
   toDate,
@@ -54,13 +58,17 @@ const DevicesTable: React.FC<DevicesTableProps> = ({
   const [devicesPerPage] = useState(20);
   const [viewingDevice, setViewingDevice] = useState<Device | null>(null);
   const [showViewDialog, setShowViewDialog] = useState(false);
+  const [showDatePickerDialog, setShowDatePickerDialog] = useState(false);
 
   const toast = ({ title, description, variant }: { title: string; description: string; variant?: 'destructive' }) => {
     console.log(`Toast: ${title} - ${description}${variant ? ` (Variant: ${variant})` : ''}`);
     alert(`${title}: ${description}`);
   };
 
-  // Log props for debugging
+  if (!devices) {
+    return <div style={{ fontSize: '12px' }}>Loading devices... Please wait.</div>;
+  }
+
   useEffect(() => {
     console.log('DevicesTable props:', {
       devicesLength: devices.length,
@@ -72,6 +80,9 @@ const DevicesTable: React.FC<DevicesTableProps> = ({
       selectedAssetStatus,
       selectedConfiguration,
       selectedProduct,
+      selectedStatus,
+      fromDate,
+      toDate,
       showDeleted,
       searchQuery,
     });
@@ -83,9 +94,10 @@ const DevicesTable: React.FC<DevicesTableProps> = ({
       configuration: d.configuration || 'N/A',
       asset_status: d.asset_status || 'N/A',
       product: d.product || 'N/A',
+      status: d.status || 'N/A',
       created_at: d.created_at || 'N/A',
     })));
-  }, [devices, selectedWarehouse, selectedAssetType, selectedModel, selectedAssetStatus, selectedConfiguration, selectedProduct, showDeleted, searchQuery]);
+  }, [devices, selectedWarehouse, selectedAssetType, selectedModel, selectedAssetStatus, selectedConfiguration, selectedProduct, selectedStatus, fromDate, toDate, showDeleted, searchQuery]);
 
   const warehouseOptions = ['All', 'Trichy', 'Bangalore', 'Hyderabad', 'Kolkata', 'Bhiwandi', 'Ghaziabad', 'Zirakpur', 'Indore', 'Jaipur'];
   const assetTypeOptions = ['All', 'Tablet', 'TV'];
@@ -109,19 +121,21 @@ const DevicesTable: React.FC<DevicesTableProps> = ({
     '4G+64 GB (Android-13)',
   ];
   const productOptions = ['All', 'Lead', 'Propel', 'Pinnacle', 'Techbook', 'BoardAce'];
+  const statusOptions = ['All', 'Stock', 'Assigned'];
 
-  // Filter devices with null checks
   const filteredDevices = devices.filter((device) => {
-    const matchesDeleted = showDeleted ? true : !device.is_deleted;
+    const matchesDeleted = showDeleted ? device.is_deleted : !device.is_deleted;
     const matchesWarehouse = selectedWarehouse === 'All' || (device.warehouse || '') === selectedWarehouse;
     const matchesAssetType = selectedAssetType === 'All' || (device.asset_type || '') === selectedAssetType;
     const matchesModel = selectedModel === 'All' || (device.model || '') === selectedModel;
     const matchesAssetStatus = selectedAssetStatus === 'All' || (device.asset_status || '') === selectedAssetStatus;
     const matchesConfiguration = selectedConfiguration === 'All' || (device.configuration || '') === selectedConfiguration;
     const matchesProduct = selectedProduct === 'All' || (device.product || '') === selectedProduct;
-    const matchesDateRange =
-      (!fromDate || !device.created_at || new Date(device.created_at) >= new Date(fromDate)) &&
-      (!toDate || !device.created_at || new Date(device.created_at) <= new Date(toDate));
+    const matchesStatus = selectedStatus === 'All' || (device.status || '') === selectedStatus;
+    const matchesDate =
+      (!fromDate || !toDate) ||
+      !device.created_at ||
+      (new Date(device.created_at) >= new Date(fromDate) && new Date(device.created_at) <= new Date(toDate));
     const matchesSearch = searchQuery
       ? [
           device.serial_number || '',
@@ -134,63 +148,54 @@ const DevicesTable: React.FC<DevicesTableProps> = ({
           device.configuration || '',
           device.asset_status || '',
           device.product || '',
+          device.status || '',
         ].some((field) => field.toLowerCase().includes(searchQuery.toLowerCase()))
       : true;
 
-    return matchesDeleted && matchesWarehouse && matchesAssetType && matchesModel && matchesAssetStatus && matchesConfiguration && matchesProduct && matchesDateRange && matchesSearch;
+    return matchesDeleted && matchesWarehouse && matchesAssetType && matchesModel && matchesAssetStatus && matchesConfiguration && matchesProduct && matchesStatus && matchesDate && matchesSearch;
   });
 
-  // Sort devices by created_at (descending), then warehouse, sales_order, asset_type, model, product, asset_status (ascending)
   const sortedDevices = [...filteredDevices].sort((a, b) => {
-    // Primary: created_at (descending)
     const dateA = a.created_at ? new Date(a.created_at).getTime() : 0;
     const dateB = b.created_at ? new Date(b.created_at).getTime() : 0;
     if (dateA !== dateB) {
-      return dateB - dateA; // Descending order
+      return dateB - dateA;
     }
-
-    // Secondary: warehouse (ascending)
     const warehouseA = a.warehouse || '';
     const warehouseB = b.warehouse || '';
     if (warehouseA !== warehouseB) {
       return warehouseA.localeCompare(warehouseB);
     }
-
-    // Tertiary: sales_order (ascending)
     const salesOrderA = a.sales_order || '';
     const salesOrderB = b.sales_order || '';
     if (salesOrderA !== salesOrderB) {
       return salesOrderA.localeCompare(salesOrderB);
     }
-
-    // Quaternary: asset_type (ascending)
     const assetTypeA = a.asset_type || '';
     const assetTypeB = b.asset_type || '';
     if (assetTypeA !== assetTypeB) {
       return assetTypeA.localeCompare(assetTypeB);
     }
-
-    // Quinary: model (ascending)
     const modelA = a.model || '';
     const modelB = b.model || '';
     if (modelA !== modelB) {
       return modelA.localeCompare(modelB);
     }
-
-    // Senary: product (ascending)
     const productA = a.product || '';
     const productB = b.product || '';
     if (productA !== productB) {
       return productA.localeCompare(productB);
     }
-
-    // Septenary: asset_status (ascending)
     const assetStatusA = a.asset_status || '';
     const assetStatusB = b.asset_status || '';
-    return assetStatusA.localeCompare(assetStatusB);
+    if (assetStatusA !== assetStatusB) {
+      return assetStatusA.localeCompare(assetStatusB);
+    }
+    const statusA = a.status || '';
+    const statusB = b.status || '';
+    return statusA.localeCompare(statusB);
   });
 
-  // Log filtering and sorting for debugging
   useEffect(() => {
     const invalidDates = filteredDevices.filter(d => d.created_at && isNaN(new Date(d.created_at).getTime())).map(d => ({
       id: d.id,
@@ -199,6 +204,7 @@ const DevicesTable: React.FC<DevicesTableProps> = ({
       model: d.model || 'N/A',
       configuration: d.configuration || 'N/A',
       asset_status: d.asset_status || 'N/A',
+      status: d.status || 'N/A',
     }));
     if (invalidDates.length > 0) {
       console.warn('Invalid created_at values detected:', invalidDates);
@@ -210,6 +216,7 @@ const DevicesTable: React.FC<DevicesTableProps> = ({
       model: d.model || 'N/A',
       configuration: d.configuration || 'N/A',
       asset_status: d.asset_status || 'N/A',
+      status: d.status || 'N/A',
       created_at: d.created_at || 'N/A',
     })));
     console.log('Sorted devices (first 5):', sortedDevices.slice(0, 5).map(d => ({
@@ -221,26 +228,27 @@ const DevicesTable: React.FC<DevicesTableProps> = ({
       model: d.model || 'N/A',
       product: d.product || 'N/A',
       asset_status: d.asset_status || 'N/A',
+      status: d.status || 'N/A',
     })));
     console.log('Filtered and sorted devices summary:', {
       filteredLength: filteredDevices.length,
       sortedLength: sortedDevices.length,
       deletedDevices: sortedDevices.filter(d => d.is_deleted).length,
       activeDevices: sortedDevices.filter(d => !d.is_deleted).length,
+      stockDevices: sortedDevices.filter(d => d.status === 'Stock').length,
+      assignedDevices: sortedDevices.filter(d => d.status === 'Assigned').length,
     });
   }, [filteredDevices, sortedDevices]);
 
-  // Reset page when filters change
   useEffect(() => {
     setCurrentDevicesPage(1);
-  }, [selectedWarehouse, selectedAssetType, selectedModel, selectedAssetStatus, selectedConfiguration, selectedProduct, fromDate, toDate, showDeleted, searchQuery]);
+  }, [selectedWarehouse, selectedAssetType, selectedModel, selectedAssetStatus, selectedConfiguration, selectedProduct, selectedStatus, fromDate, toDate, showDeleted, searchQuery]);
 
   const paginatedDevices = sortedDevices.slice(
     (currentDevicesPage - 1) * devicesPerPage,
     currentDevicesPage * devicesPerPage
   );
 
-  // Log pagination for debugging
   useEffect(() => {
     console.log('Paginated devices (first 5):', paginatedDevices.slice(0, 5).map(d => ({
       id: d.id,
@@ -251,6 +259,7 @@ const DevicesTable: React.FC<DevicesTableProps> = ({
       model: d.model || 'N/A',
       product: d.product || 'N/A',
       asset_status: d.asset_status || 'N/A',
+      status: d.status || 'N/A',
     })));
     console.log('Pagination info:', {
       currentDevicesPage,
@@ -306,8 +315,12 @@ const DevicesTable: React.FC<DevicesTableProps> = ({
     window.URL.revokeObjectURL(url);
   };
 
+  const handleDateRangeSubmit = () => {
+    setShowDatePickerDialog(false);
+  };
+
   return (
-    <div style={{ border: '1px solid #e2e8f0', borderRadius: '8px', background: '#fff', padding: '16px' }}>
+    <div style={{ border: '1px solid #e2e8f0', borderRadius: '8px', background: '#fff', padding: '16px', minHeight: '200px' }}>
       <div style={{ padding: '8px 0' }}></div>
       <div style={{ padding: '16px' }}>
         <div style={{ marginBottom: '16px' }}>
@@ -319,7 +332,7 @@ const DevicesTable: React.FC<DevicesTableProps> = ({
                   id="search"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="Search by Serial, Sales Order, Deal ID, School, Nucleus ID, Asset Type, Model, Configuration, Asset Status, or Product"
+                  placeholder="Search by Serial, Sales Order, Deal ID, School, Nucleus ID, Asset Type, Model, Configuration, Asset Status, Product, or Status"
                   style={{ paddingLeft: '28px', fontSize: '12px', width: '100%', border: '1px solid #d1d5db', borderRadius: '4px', padding: '8px' }}
                 />
               </div>
@@ -329,6 +342,12 @@ const DevicesTable: React.FC<DevicesTableProps> = ({
               style={{ border: '1px solid #d1d5db', borderRadius: '4px', padding: '4px 8px', fontSize: '12px', display: 'flex', alignItems: 'center' }}
             >
               <Download style={{ width: '12px', height: '12px' }} />
+            </button>
+            <button
+              onClick={() => setShowDatePickerDialog(true)}
+              style={{ border: '1px solid #d1d5db', borderRadius: '4px', padding: '4px 8px', fontSize: '12px', display: 'flex', alignItems: 'center' }}
+            >
+              <Calendar style={{ width: '12px', height: '12px' }} />
             </button>
             <button
               onClick={() => setShowDeleted(!showDeleted)}
@@ -360,7 +379,7 @@ const DevicesTable: React.FC<DevicesTableProps> = ({
                 value={selectedAssetType}
                 onChange={(e) => {
                   setSelectedAssetType(e.target.value);
-                  setSelectedModel('All'); // Reset model when asset type changes
+                  setSelectedModel('All');
                 }}
                 style={{ fontSize: '12px', width: '100%', border: '1px solid #d1d5db', borderRadius: '4px', padding: '8px' }}
               >
@@ -432,24 +451,19 @@ const DevicesTable: React.FC<DevicesTableProps> = ({
               </select>
             </div>
             <div style={{ flex: 1, minWidth: '150px' }}>
-              <label htmlFor="fromDate" style={{ fontSize: '12px', color: '#6b7280', display: 'block', marginBottom: '4px' }}>From Date</label>
-              <input
-                type="date"
-                id="fromDate"
-                value={fromDate}
-                onChange={(e) => setFromDate(e.target.value)}
+              <label htmlFor="statusFilter" style={{ fontSize: '12px', color: '#6b7280', display: 'block', marginBottom: '4px' }}>Status</label>
+              <select
+                id="statusFilter"
+                value={selectedStatus}
+                onChange={(e) => setSelectedStatus(e.target.value)}
                 style={{ fontSize: '12px', width: '100%', border: '1px solid #d1d5db', borderRadius: '4px', padding: '8px' }}
-              />
-            </div>
-            <div style={{ flex: 1, minWidth: '150px' }}>
-              <label htmlFor="toDate" style={{ fontSize: '12px', color: '#6b7280', display: 'block', marginBottom: '4px' }}>To Date</label>
-              <input
-                type="date"
-                id="toDate"
-                value={toDate}
-                onChange={(e) => setToDate(e.target.value)}
-                style={{ fontSize: '12px', width: '100%', border: '1px solid #d1d5db', borderRadius: '4px', padding: '8px' }}
-              />
+              >
+                {statusOptions.map(status => (
+                  <option key={status} value={status} style={{ fontSize: '12px' }}>
+                    {status}
+                  </option>
+                ))}
+              </select>
             </div>
           </div>
         </div>
@@ -503,7 +517,7 @@ const DevicesTable: React.FC<DevicesTableProps> = ({
                           style={{
                             padding: '2px 8px',
                             borderRadius: '4px',
-                            background: device.status === 'Available' ? '#3b82f6' : '#6b7280',
+                            background: device.status === 'Stock' ? '#3b82f6' : '#6b7280',
                             color: '#fff',
                             fontSize: '12px',
                           }}
@@ -580,6 +594,50 @@ const DevicesTable: React.FC<DevicesTableProps> = ({
                   >
                     Close
                   </button>
+                </div>
+              </div>
+            )}
+
+            {showDatePickerDialog && (
+              <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
+                <div style={{ background: '#fff', borderRadius: '8px', padding: '16px', maxWidth: '400px', width: '100%' }}>
+                  <h2 style={{ fontSize: '16px', marginBottom: '16px' }}>Select Date Range</h2>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    <div>
+                      <label htmlFor="fromDate" style={{ fontSize: '12px', color: '#6b7280', display: 'block', marginBottom: '4px' }}>From Date</label>
+                      <input
+                        type="date"
+                        id="fromDate"
+                        value={fromDate}
+                        onChange={(e) => setFromDate(e.target.value)}
+                        style={{ fontSize: '12px', width: '100%', border: '1px solid #d1d5db', borderRadius: '4px', padding: '8px' }}
+                      />
+                    </div>
+                    <div>
+                      <label htmlFor="toDate" style={{ fontSize: '12px', color: '#6b7280', display: 'block', marginBottom: '4px' }}>To Date</label>
+                      <input
+                        type="date"
+                        id="toDate"
+                        value={toDate}
+                        onChange={(e) => setToDate(e.target.value)}
+                        style={{ fontSize: '12px', width: '100%', border: '1px solid #d1d5db', borderRadius: '4px', padding: '8px' }}
+                      />
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', gap: '8px', marginTop: '16px' }}>
+                    <button
+                      onClick={handleDateRangeSubmit}
+                      style={{ border: '1px solid #d1d5db', borderRadius: '4px', padding: '4px 8px', fontSize: '12px', background: '#3b82f6', color: '#fff' }}
+                    >
+                      Apply
+                    </button>
+                    <button
+                      onClick={() => setShowDatePickerDialog(false)}
+                      style={{ border: '1px solid #d1d5db', borderRadius: '4px', padding: '4px 8px', fontSize: '12px' }}
+                    >
+                      Cancel
+                    </button>
+                  </div>
                 </div>
               </div>
             )}
