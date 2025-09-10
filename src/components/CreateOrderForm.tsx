@@ -83,6 +83,7 @@ const CreateOrderForm: React.FC<CreateOrderFormProps> = ({
     '3G+32 GB (Android-13)',
     '4G+64 GB (Android-13)',
   ];
+  const tvConfigurations = ['Non Smart TV', 'Smart TV', 'Android TV', 'Web OS'];
   const products = ['Lead', 'Propel', 'Pinnacle', 'Techbook', 'BoardAce'];
   const sdCardSizes = ['64 GB', '128 GB'];
   const locations = ['Trichy', 'Bangalore', 'Hyderabad', 'Kolkata', 'Bhiwandi', 'Ghaziabad', 'Zirakpur', 'Indore', 'Jaipur'];
@@ -100,7 +101,7 @@ const CreateOrderForm: React.FC<CreateOrderFormProps> = ({
       profileId: '',
       quantity: 1,
       location: '',
-      serialNumbers: [''],
+      serialNumbers: [],
       assetStatuses: ['Fresh'],
     };
     setTablets([...tablets, newTablet]);
@@ -114,7 +115,7 @@ const CreateOrderForm: React.FC<CreateOrderFormProps> = ({
       product: '',
       quantity: 1,
       location: '',
-      serialNumbers: [''],
+      serialNumbers: [],
       assetStatuses: ['Fresh'],
     };
     setTvs([...tvs, newTV]);
@@ -191,15 +192,6 @@ const CreateOrderForm: React.FC<CreateOrderFormProps> = ({
     }
 
     for (const tablet of validTablets) {
-      const validSerials = tablet.serialNumbers.filter(sn => sn.trim());
-      if (validSerials.length !== tablet.quantity) {
-        toast({
-          title: 'Validation Error',
-          description: `Number of serial numbers (${validSerials.length}) does not match quantity (${tablet.quantity}) for tablet order`,
-          variant: 'destructive',
-        });
-        return false;
-      }
       const validStatuses = tablet.assetStatuses.filter(status => assetStatuses.includes(status));
       if (validStatuses.length !== tablet.quantity) {
         toast({
@@ -212,15 +204,6 @@ const CreateOrderForm: React.FC<CreateOrderFormProps> = ({
     }
 
     for (const tv of validTVs) {
-      const validSerials = tv.serialNumbers.filter(sn => sn.trim());
-      if (validSerials.length !== tv.quantity) {
-        toast({
-          title: 'Validation Error',
-          description: `Number of serial numbers (${validSerials.length}) does not match quantity (${tv.quantity}) for TV order`,
-          variant: 'destructive',
-        });
-        return false;
-      }
       const validStatuses = tv.assetStatuses.filter(status => assetStatuses.includes(status));
       if (validStatuses.length !== tv.quantity) {
         toast({
@@ -246,6 +229,7 @@ const CreateOrderForm: React.FC<CreateOrderFormProps> = ({
 
       for (const tablet of validTablets) {
         const salesOrderId = salesOrder || generateDummyId('SO');
+        const tabletSerials = tablet.serialNumbers.filter(sn => sn.trim());
         const { data: orderData, error: orderError } = await supabase
           .from('orders')
           .insert({
@@ -259,7 +243,7 @@ const CreateOrderForm: React.FC<CreateOrderFormProps> = ({
             deal_id: dealId || null,
             school_name: schoolName,
             nucleus_id: nucleusId || null,
-            serial_numbers: tablet.serialNumbers.filter(sn => sn.trim()),
+            serial_numbers: tabletSerials.length > 0 ? tabletSerials : [],
             order_date: new Date().toISOString(),
             created_at: new Date().toISOString(),
             updated_at: new Date().toISOString(),
@@ -272,14 +256,14 @@ const CreateOrderForm: React.FC<CreateOrderFormProps> = ({
         if (orderError) throw new Error(`Order insertion failed: ${orderError.message}`);
 
         for (let i = 0; i < tablet.quantity; i++) {
-          const serialNumber = tablet.serialNumbers[i] || generateDummyId('SN');
+          const serialNumber = tablet.serialNumbers[i]?.trim() || generateDummyId('SN');
           const assetStatus = tablet.assetStatuses[i] || 'Fresh';
           const { error: deviceError } = await supabase
             .from('devices')
             .insert({
               asset_type: 'Tablet',
               model: tablet.model,
-              serial_number: serialNumber.trim(),
+              serial_number: serialNumber,
               warehouse: tablet.location,
               sales_order: salesOrderId,
               deal_id: dealId || null,
@@ -301,6 +285,7 @@ const CreateOrderForm: React.FC<CreateOrderFormProps> = ({
 
       for (const tv of validTVs) {
         const salesOrderId = salesOrder || generateDummyId('SO');
+        const tvSerials = tv.serialNumbers.filter(sn => sn.trim());
         const { data: orderData, error: orderError } = await supabase
           .from('orders')
           .insert({
@@ -314,7 +299,7 @@ const CreateOrderForm: React.FC<CreateOrderFormProps> = ({
             deal_id: dealId || null,
             school_name: schoolName,
             nucleus_id: nucleusId || null,
-            serial_numbers: tv.serialNumbers.filter(sn => sn.trim()),
+            serial_numbers: tvSerials.length > 0 ? tvSerials : [],
             order_date: new Date().toISOString(),
             created_at: new Date().toISOString(),
             updated_at: new Date().toISOString(),
@@ -327,14 +312,14 @@ const CreateOrderForm: React.FC<CreateOrderFormProps> = ({
         if (orderError) throw new Error(`Order insertion failed: ${orderError.message}`);
 
         for (let i = 0; i < tv.quantity; i++) {
-          const serialNumber = tv.serialNumbers[i] || generateDummyId('SN');
+          const serialNumber = tv.serialNumbers[i]?.trim() || generateDummyId('SN');
           const assetStatus = tv.assetStatuses[i] || 'Fresh';
           const { error: deviceError } = await supabase
             .from('devices')
             .insert({
               asset_type: 'TV',
               model: tv.model,
-              serial_number: serialNumber.trim(),
+              serial_number: serialNumber,
               warehouse: tv.location,
               sales_order: salesOrderId,
               deal_id: dealId || null,
@@ -385,7 +370,6 @@ const CreateOrderForm: React.FC<CreateOrderFormProps> = ({
       const lines = text.split('\n').filter(line => line.trim());
       const headers = lines[0].split(',').map(h => h.trim());
 
-      console.log('CSV headers:', headers);
       if (headers.length < 9) {
         toast({
           title: 'Invalid CSV Format',
@@ -398,7 +382,24 @@ const CreateOrderForm: React.FC<CreateOrderFormProps> = ({
       const importedData = lines.slice(1).map((line, index) => {
         const values = line.split(',').map(v => v.trim());
         const serialNumbers = values[9] ? values[9].split(';').map(s => s.trim()).filter(s => s) : [];
-        const assetStatuses = values[12] ? values[12].split(';').map(s => s.trim()).filter(s => s) : Array(serialNumbers.length).fill('Fresh');
+        const assetStatuses = values[12] ? values[12].split(';').map(s => s.trim()).filter(s => s) : Array(parseInt(values[3]) || 1).fill('Fresh');
+        const configuration = values[10] || '';
+
+        if (values[1] === 'TV' && configuration && !tvConfigurations.includes(configuration)) {
+          toast({
+            title: 'Invalid TV Configuration',
+            description: `Configuration "${configuration}" is not valid for TVs. Valid options are: ${tvConfigurations.join(', ')}`,
+            variant: 'destructive',
+          });
+          return null;
+        } else if (values[1] === 'Tablet' && configuration && !configurations.includes(configuration)) {
+          toast({
+            title: 'Invalid Tablet Configuration',
+            description: `Configuration "${configuration}" is not valid for Tablets. Valid options are: ${configurations.join(', ')}`,
+            variant: 'destructive',
+          });
+          return null;
+        }
 
         return {
           order_type: values[0],
@@ -411,11 +412,11 @@ const CreateOrderForm: React.FC<CreateOrderFormProps> = ({
           school_name: values[7],
           nucleus_id: values[8],
           serial_numbers: serialNumbers,
-          configuration: values[10] || '',
+          configuration: configuration,
           product: values[11] || '',
           asset_statuses: assetStatuses,
         };
-      });
+      }).filter((data): data is NonNullable<typeof importedData[0]> => data !== null);
 
       console.log('Imported CSV data:', importedData);
       importedData.forEach(data => {
@@ -469,7 +470,9 @@ const CreateOrderForm: React.FC<CreateOrderFormProps> = ({
   };
 
   const downloadCSVTemplate = () => {
-    const template = 'order_type,asset_type,model,quantity,warehouse,sales_order,deal_id,school_name,nucleus_id,serial_numbers,configuration,product,asset_statuses\nHardware,Tablet,Lenovo TB301FU,2,Trichy,SO001,DEAL001,Example School,NUC001,"SN001;SN002","2G+32 GB (Android-10)",Lead,"Fresh;Refurb"\nStock,TV,Hyundai TV - 43",1,Bangalore,SO002,DEAL002,Another School,NUC002,SN003,"2G+32 GB (Android-10)",BoardAce,Fresh';
+    const template = `order_type,asset_type,model,quantity,warehouse,sales_order,deal_id,school_name,nucleus_id,serial_numbers,configuration,product,asset_statuses
+Hardware,Tablet,Lenovo TB301FU,2,Trichy,SO001,DEAL001,Example School,NUC001,"","2G+32 GB (Android-10)",Lead,"Fresh;Fresh"
+Stock,TV,Hyundai TV - 43",1,Bangalore,SO002,DEAL002,Another School,NUC002,,Android TV,BoardAce,Fresh`;
     const blob = new Blob([template], { type: 'text/csv' });
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -705,7 +708,7 @@ const CreateOrderForm: React.FC<CreateOrderFormProps> = ({
                         {Array.from({ length: tablet.quantity }, (_, index) => (
                           <div key={index} style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
                             <input
-                              placeholder={`Serial number ${index + 1}`}
+                              placeholder={`Serial number ${index + 1} (optional)`}
                               value={tablet.serialNumbers[index] || ''}
                               onChange={(e) => {
                                 const newSerialNumbers = [...tablet.serialNumbers];
@@ -796,7 +799,7 @@ const CreateOrderForm: React.FC<CreateOrderFormProps> = ({
                           style={{ fontSize: '12px', width: '100%', border: '1px solid #d1d5db', borderRadius: '4px', padding: '8px' }}
                         >
                           <option value="">Select configuration</option>
-                          {configurations.map(config => (
+                          {tvConfigurations.map(config => (
                             <option key={config} value={config}>{config}</option>
                           ))}
                         </select>
@@ -861,7 +864,7 @@ const CreateOrderForm: React.FC<CreateOrderFormProps> = ({
                         {Array.from({ length: tv.quantity }, (_, index) => (
                           <div key={index} style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
                             <input
-                              placeholder={`Serial number ${index + 1}`}
+                              placeholder={`Serial number ${index + 1} (optional)`}
                               value={tv.serialNumbers[index] || ''}
                               onChange={(e) => {
                                 const newSerialNumbers = [...tv.serialNumbers];
