@@ -65,7 +65,7 @@ const OrderSummaryTable: React.FC<OrderSummaryTableProps> = ({
   }, [orderSummary, selectedWarehouse, selectedAssetType, selectedModel, showDeleted, searchQuery]);
 
   const warehouseOptions = ['All', 'Trichy', 'Bangalore', 'Hyderabad', 'Kolkata', 'Bhiwandi', 'Ghaziabad', 'Zirakpur', 'Indore', 'Jaipur'];
-  const assetTypeOptions = ['All', 'Tablet', 'TV', 'SD Card', 'Pendrive'];
+  const assetTypeOptions = ['All', 'Tablet', 'TV'];
   const modelOptions = [
     'All',
     'Lenovo TB301XU',
@@ -89,7 +89,9 @@ const OrderSummaryTable: React.FC<OrderSummaryTableProps> = ({
     const matchesWarehouse = selectedWarehouse === 'All' || summary.warehouse === selectedWarehouse;
     const matchesAssetType = selectedAssetType === 'All' || summary.asset_type === selectedAssetType;
     const matchesModel = selectedModel === 'All' || summary.model === selectedModel;
-    const matchesDateRange = true; // OrderSummary doesn't have order_date field
+    const matchesDateRange =
+      (!fromDate || !summary.order_date || new Date(summary.order_date) >= new Date(fromDate)) &&
+      (!toDate || !summary.order_date || new Date(summary.order_date) <= new Date(toDate));
     const matchesSearch = searchQuery
       ? [summary.warehouse, summary.asset_type, summary.model].some((field) =>
           field?.toLowerCase().includes(searchQuery.toLowerCase())
@@ -118,7 +120,15 @@ const OrderSummaryTable: React.FC<OrderSummaryTableProps> = ({
   });
 
   useEffect(() => {
-    // OrderSummary doesn't have order_date field
+    const invalidDates = filteredSummary.filter(s => s.order_date && isNaN(new Date(s.order_date).getTime())).map(s => ({
+      warehouse: s.warehouse,
+      asset_type: s.asset_type,
+      model: s.model,
+    }));
+    if (invalidDates.length > 0) {
+      console.warn('Invalid order_date values detected:', invalidDates);
+    }
+
     console.log('Filtered summaries (first 5):', filteredSummary.slice(0, 5).map(s => ({
       warehouse: s.warehouse,
       asset_type: s.asset_type,
@@ -160,19 +170,20 @@ const OrderSummaryTable: React.FC<OrderSummaryTableProps> = ({
       toast({ title: 'No Data', description: 'No data available to download', variant: 'destructive' });
       return;
     }
-    const headers = ['Warehouse', 'Asset Type', 'Model', 'Inward', 'Outward', 'Stock'];
+    const headers = ['Warehouse', 'Asset Type', 'Model', 'Inward', 'Outward', 'Stock', 'Order Date'];
     const csvContent = [
       headers.join(','),
       ...data.map((row) =>
-          [
-            row.warehouse,
-            row.asset_type,
-            row.model,
-            row.inward,
-            row.outward,
-            row.stock,
-          ].map((value) => (typeof value === 'string' && value.includes(',') ? `"${value}"` : value ?? '')).join(',')
-        ),
+        [
+          row.warehouse,
+          row.asset_type,
+          row.model,
+          row.inward,
+          row.outward,
+          row.stock,
+          row.order_date || '',
+        ].map((value) => (typeof value === 'string' && value.includes(',') ? `"${value}"` : value ?? '')).join(',')
+      ),
     ].join('\n');
     const blob = new Blob([csvContent], { type: 'text/csv' });
     const url = window.URL.createObjectURL(blob);

@@ -4,9 +4,10 @@ import { Button } from '@/components/ui/button';
 import { Upload, User, Menu } from 'lucide-react';
 import { DevicesList } from './DevicesList';
 import { OrdersList } from './OrdersList';
+import { OrderSummary } from './OrderSummary';
 import { CreateOrderDialog } from './CreateOrderDialog';
+import UserManagement from '../UserManagement';
 import { UserProfile } from '../UserProfile';
-import OrderSummaryTable from '../OrderSummaryTable';
 
 export const InventoryLayout: React.FC = () => {
   const [activeTab, setActiveTab] = useState('devices');
@@ -72,29 +73,11 @@ export const InventoryLayout: React.FC = () => {
           </TabsContent>
           
           <TabsContent value="summary">
-            <OrderSummaryTable
-              orderSummary={[]}
-              selectedWarehouse=""
-              setSelectedWarehouse={() => {}}
-              selectedAssetType=""
-              setSelectedAssetType={() => {}}
-              selectedModel=""
-              setSelectedModel={() => {}}
-              fromDate=""
-              setFromDate={() => {}}
-              toDate=""
-              setToDate={() => {}}
-              showDeleted={false}
-              setShowDeleted={() => {}}
-              searchQuery=""
-              setSearchQuery={() => {}}
-            />
+            <OrderSummary />
           </TabsContent>
           
           <TabsContent value="users">
-            <div className="p-4 text-center text-muted-foreground">
-              User Management functionality is being set up...
-            </div>
+            <UserManagement />
           </TabsContent>
         </Tabs>
       </div>

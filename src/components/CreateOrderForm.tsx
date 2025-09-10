@@ -16,9 +16,9 @@ interface CreateOrderFormProps {
   schoolName: string;
   setSchoolName: (value: string) => void;
   tablets: TabletItem[];
-  setTablets: (value: TabletItem[] | ((prev: TabletItem[]) => TabletItem[])) => void;
+  setTablets: (value: TabletItem[]) => void;
   tvs: TVItem[];
-  setTvs: (value: TVItem[] | ((prev: TVItem[]) => TVItem[])) => void;
+  setTvs: (value: TVItem[]) => void;
   loading: boolean;
   setLoading: (value: boolean) => void;
   loadOrders: () => Promise<void>;
@@ -429,7 +429,7 @@ const CreateOrderForm: React.FC<CreateOrderFormProps> = ({
             sdCardSize: '',
             profileId: '',
           };
-          setTablets((prev: TabletItem[]) => [...prev, newTablet]);
+          setTablets(prev => [...prev, newTablet]);
           setTabletsToggle(true);
         } else if (data.asset_type === 'TV') {
           const newTV: TVItem = {
@@ -442,7 +442,7 @@ const CreateOrderForm: React.FC<CreateOrderFormProps> = ({
             serialNumbers: data.serial_numbers,
             assetStatuses: data.asset_statuses,
           };
-          setTvs((prev: TVItem[]) => [...prev, newTV]);
+          setTvs(prev => [...prev, newTV]);
           setTVsToggle(true);
         }
 
