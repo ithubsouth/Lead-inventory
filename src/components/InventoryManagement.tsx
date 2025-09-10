@@ -99,7 +99,7 @@ const InventoryManagement = () => {
         orderGroups.get(groupKey)!.push({
           ...order,
           order_type: order.order_type as 'Inward' | 'Outward',
-          asset_type: order.asset_type as 'Tablet' | 'TV',
+          asset_type: order.asset_type as 'Tablet' | 'TV' | 'SD Card' | 'Pendrive',
           serial_numbers: (order.serial_numbers || []).map((sn: string) => sn.trim().toUpperCase()),
         });
       });
@@ -155,7 +155,7 @@ const InventoryManagement = () => {
         return {
           ...order,
           order_type: order.order_type as 'Inward' | 'Outward',
-          asset_type: order.asset_type as 'Tablet' | 'TV',
+          asset_type: order.asset_type as 'Tablet' | 'TV' | 'SD Card' | 'Pendrive',
           serial_numbers: order.serial_numbers || [],
           status,
           statusDetails,
@@ -224,7 +224,7 @@ const InventoryManagement = () => {
       if (ordersError) throw ordersError;
 
       const locations = ['Trichy', 'Bangalore', 'Hyderabad', 'Kolkata', 'Bhiwandi', 'Ghaziabad', 'Zirakpur', 'Indore', 'Jaipur'];
-      const assetTypeOptions = ['Tablet', 'TV'];
+      const assetTypeOptions = ['Tablet', 'TV', 'SD Card', 'Pendrive'];
       const tabletModels = ['Lenovo TB301XU', 'Lenovo TB301FU', 'Lenovo TB-8505F', 'Lenovo TB-7306F', 'Lenovo TB-7306X', 'Lenovo TB-7305X', 'IRA T811'];
       const tvModels = ['Hyundai TV - 39"', 'Hyundai TV - 43"', 'Hyundai TV - 50"', 'Hyundai TV - 55"', 'Hyundai TV - 65"', 'Xentec TV - 39"', 'Xentec TV - 43"'];
 
@@ -235,16 +235,30 @@ const InventoryManagement = () => {
           models.forEach(model => {
             const key = `${warehouse}-${asset_type}-${model}`;
             if (!summaryMap.has(key)) {
-              summaryMap.set(key, { warehouse, asset_type, model, inward: 0, outward: 0, stock: 0 });
+            summaryMap.set(key, { 
+              warehouse, 
+              asset_type: asset_type as 'Tablet' | 'TV' | 'SD Card' | 'Pendrive', 
+              model, 
+              inward: 0, 
+              outward: 0, 
+              stock: 0 
+            });
             }
           });
         });
       });
 
-      ordersData?.forEach((order) => {
+      ordersData?.forEach((order: any) => {
         const key = `${order.warehouse}-${order.asset_type}-${order.model}`;
         if (!summaryMap.has(key)) {
-          summaryMap.set(key, { warehouse: order.warehouse, asset_type: order.asset_type, model: order.model, inward: 0, outward: 0, stock: 0 });
+          summaryMap.set(key, { 
+            warehouse: order.warehouse, 
+            asset_type: order.asset_type as 'Tablet' | 'TV' | 'SD Card' | 'Pendrive', 
+            model: order.model, 
+            inward: 0, 
+            outward: 0, 
+            stock: 0 
+          });
         }
         const summary = summaryMap.get(key)!;
         if (order.order_type === 'Inward') summary.inward += order.quantity;

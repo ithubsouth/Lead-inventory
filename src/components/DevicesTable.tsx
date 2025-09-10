@@ -235,7 +235,7 @@ const DevicesTable: React.FC<DevicesTableProps> = ({
       sortedLength: sortedDevices.length,
       deletedDevices: sortedDevices.filter(d => d.is_deleted).length,
       activeDevices: sortedDevices.filter(d => !d.is_deleted).length,
-      stockDevices: sortedDevices.filter(d => d.status === 'Stock').length,
+      stockDevices: sortedDevices.filter(d => d.status === 'Available').length,
       assignedDevices: sortedDevices.filter(d => d.status === 'Assigned').length,
     });
   }, [filteredDevices, sortedDevices]);
@@ -517,7 +517,7 @@ const DevicesTable: React.FC<DevicesTableProps> = ({
                           style={{
                             padding: '2px 8px',
                             borderRadius: '4px',
-                            background: device.status === 'Stock' ? '#3b82f6' : '#6b7280',
+                            background: device.status === 'Available' ? '#3b82f6' : '#6b7280',
                             color: '#fff',
                             fontSize: '12px',
                           }}
