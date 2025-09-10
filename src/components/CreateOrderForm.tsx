@@ -242,14 +242,15 @@ const CreateOrderForm: React.FC<CreateOrderFormProps> = ({
       console.log('Creating order with:', { orderType, salesOrder, dealId, nucleusId, schoolName, tablets, tvs });
       const validTablets = Tablets ? tablets.filter(t => t.model && t.location && t.quantity > 0) : [];
       const validTVs = TVs ? tvs.filter(t => t.model && t.location && t.quantity > 0) : [];
+      const materialType = (orderType === 'Stock' || orderType === 'Return') ? 'Inward' : 'Outward';
 
       for (const tablet of validTablets) {
         const salesOrderId = salesOrder || generateDummyId('SO');
-        const effectiveOrderType = orderType === 'Stock' || orderType === 'Return' ? 'Inward' : 'Outward';
         const { data: orderData, error: orderError } = await supabase
           .from('orders')
           .insert({
-            order_type: effectiveOrderType,
+            order_type: orderType,
+            material_type: materialType,
             asset_type: 'Tablet',
             model: tablet.model,
             quantity: tablet.quantity,
@@ -284,7 +285,8 @@ const CreateOrderForm: React.FC<CreateOrderFormProps> = ({
               deal_id: dealId || null,
               school_name: schoolName,
               nucleus_id: nucleusId || null,
-              status: effectiveOrderType === 'Inward' ? 'Available' : 'Assigned',
+              status: materialType === 'Inward' ? 'Available' : 'Assigned',
+              material_type: materialType,
               order_id: orderData.id,
               created_at: new Date().toISOString(),
               updated_at: new Date().toISOString(),
@@ -299,11 +301,11 @@ const CreateOrderForm: React.FC<CreateOrderFormProps> = ({
 
       for (const tv of validTVs) {
         const salesOrderId = salesOrder || generateDummyId('SO');
-        const effectiveOrderType = orderType === 'Stock' || orderType === 'Return' ? 'Inward' : 'Outward';
         const { data: orderData, error: orderError } = await supabase
           .from('orders')
           .insert({
-            order_type: effectiveOrderType,
+            order_type: orderType,
+            material_type: materialType,
             asset_type: 'TV',
             model: tv.model,
             quantity: tv.quantity,
@@ -338,7 +340,8 @@ const CreateOrderForm: React.FC<CreateOrderFormProps> = ({
               deal_id: dealId || null,
               school_name: schoolName,
               nucleus_id: nucleusId || null,
-              status: effectiveOrderType === 'Inward' ? 'Available' : 'Assigned',
+              status: materialType === 'Inward' ? 'Available' : 'Assigned',
+              material_type: materialType,
               order_id: orderData.id,
               created_at: new Date().toISOString(),
               updated_at: new Date().toISOString(),
@@ -398,7 +401,7 @@ const CreateOrderForm: React.FC<CreateOrderFormProps> = ({
         const assetStatuses = values[12] ? values[12].split(';').map(s => s.trim()).filter(s => s) : Array(serialNumbers.length).fill('Fresh');
 
         return {
-          order_type: values[0] as 'Inward' | 'Outward',
+          order_type: values[0],
           asset_type: values[1] as 'Tablet' | 'TV',
           model: values[2],
           quantity: parseInt(values[3]) || 1,
@@ -466,7 +469,7 @@ const CreateOrderForm: React.FC<CreateOrderFormProps> = ({
   };
 
   const downloadCSVTemplate = () => {
-    const template = 'order_type,asset_type,model,quantity,warehouse,sales_order,deal_id,school_name,nucleus_id,serial_numbers,configuration,product,asset_statuses\nInward,Tablet,Lenovo TB301FU,2,Trichy,SO001,DEAL001,Example School,NUC001,"SN001;SN002","2G+32 GB (Android-10)",Lead,"Fresh;Refurb"\nInward,TV,Hyundai TV - 43",1,Bangalore,SO002,DEAL002,Another School,NUC002,SN003,"2G+32 GB (Android-10)",BoardAce,Fresh';
+    const template = 'order_type,asset_type,model,quantity,warehouse,sales_order,deal_id,school_name,nucleus_id,serial_numbers,configuration,product,asset_statuses\nHardware,Tablet,Lenovo TB301FU,2,Trichy,SO001,DEAL001,Example School,NUC001,"SN001;SN002","2G+32 GB (Android-10)",Lead,"Fresh;Refurb"\nStock,TV,Hyundai TV - 43",1,Bangalore,SO002,DEAL002,Another School,NUC002,SN003,"2G+32 GB (Android-10)",BoardAce,Fresh';
     const blob = new Blob([template], { type: 'text/csv' });
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement('a');

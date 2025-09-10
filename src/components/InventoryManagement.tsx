@@ -98,7 +98,7 @@ const InventoryManagement = () => {
         }
         orderGroups.get(groupKey)!.push({
           ...order,
-          order_type: order.order_type as 'Inward' | 'Outward',
+          material_type: order.material_type as 'Inward' | 'Outward',
           asset_type: order.asset_type as 'Tablet' | 'TV' | 'SD Card' | 'Pendrive',
           serial_numbers: (order.serial_numbers || []).map((sn: string) => sn.trim().toUpperCase()),
         });
@@ -154,7 +154,7 @@ const InventoryManagement = () => {
 
         return {
           ...order,
-          order_type: order.order_type as 'Inward' | 'Outward',
+          material_type: order.material_type as 'Inward' | 'Outward',
           asset_type: order.asset_type as 'Tablet' | 'TV' | 'SD Card' | 'Pendrive',
           serial_numbers: order.serial_numbers || [],
           status,
@@ -183,7 +183,7 @@ const InventoryManagement = () => {
       while (hasMore) {
         const { data, error } = await supabase
           .from('devices')
-          .select('*')
+          .select('*, orders!inner(material_type)')
           .order('created_at', { ascending: false })
           .range(page * batchSize, (page + 1) * batchSize - 1);
         if (error) throw error;
@@ -192,17 +192,9 @@ const InventoryManagement = () => {
         page += 1;
       }
 
-      const orderIds = [...new Set(allDevices.map((device: any) => device.order_id).filter(id => id))];
-      const { data: ordersData, error: ordersError } = await supabase
-        .from('orders')
-        .select('id, order_type')
-        .in('id', orderIds);
-      if (ordersError) throw ordersError;
-
-      const orderTypeMap = new Map(ordersData.map((order: { id: string; order_type: 'Inward' | 'Outward' }) => [order.id, order.order_type]));
       const updatedDevices = allDevices.map((device: any) => ({
         ...device,
-        status: device.order_id && orderTypeMap.get(device.order_id) === 'Outward' ? 'Assigned' : 'Stock',
+        status: device.order_id && device.orders?.material_type === 'Outward' ? 'Assigned' : 'Stock',
       }));
 
       setDevices(updatedDevices || []);
@@ -219,7 +211,7 @@ const InventoryManagement = () => {
       setLoading(true);
       const { data: ordersData, error: ordersError } = await supabase
         .from('orders')
-        .select('warehouse, asset_type, model, order_type, quantity')
+        .select('warehouse, asset_type, model, material_type, quantity')
         .eq('is_deleted', false);
       if (ordersError) throw ordersError;
 
@@ -235,14 +227,14 @@ const InventoryManagement = () => {
           models.forEach(model => {
             const key = `${warehouse}-${asset_type}-${model}`;
             if (!summaryMap.has(key)) {
-            summaryMap.set(key, { 
-              warehouse, 
-              asset_type: asset_type as 'Tablet' | 'TV' | 'SD Card' | 'Pendrive', 
-              model, 
-              inward: 0, 
-              outward: 0, 
-              stock: 0 
-            });
+              summaryMap.set(key, { 
+                warehouse, 
+                asset_type: asset_type as 'Tablet' | 'TV' | 'SD Card' | 'Pendrive', 
+                model, 
+                inward: 0, 
+                outward: 0, 
+                stock: 0 
+              });
             }
           });
         });
@@ -261,8 +253,8 @@ const InventoryManagement = () => {
           });
         }
         const summary = summaryMap.get(key)!;
-        if (order.order_type === 'Inward') summary.inward += order.quantity;
-        else summary.outward += order.quantity;
+        if (order.material_type === 'Inward') summary.inward += order.quantity;
+        else if (order.material_type === 'Outward') summary.outward += order.quantity;
         summary.stock = summary.inward - summary.outward;
       });
 

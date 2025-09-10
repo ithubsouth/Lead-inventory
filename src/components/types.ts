@@ -1,6 +1,7 @@
 export interface Order {
   id: string;
-  order_type: 'Inward' | 'Outward';
+  order_type: string;
+  material_type: 'Inward' | 'Outward';
   asset_type: 'Tablet' | 'TV' | 'SD Card' | 'Pendrive';
   model: string;
   product: string | null;
