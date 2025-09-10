@@ -399,7 +399,6 @@ const EditOrderForm: React.FC<EditOrderFormProps> = ({ order, onSave, onCancel }
               <Select
                 value={formData.warehouse}
                 onValueChange={(value) => setFormData(prev => ({ ...prev, warehouse: value }))}
-                position='popper'
               >
                 <SelectTrigger className='text-sm'>
                   <SelectValue placeholder='Select warehouse' />
@@ -437,15 +436,14 @@ const EditOrderForm: React.FC<EditOrderFormProps> = ({ order, onSave, onCancel }
               }}
               className='text-sm'
             />
-            <Select
-              key={`new-asset-status-${newAssetStatus}`}
-              value={newAssetStatus}
-              onValueChange={(value) => {
-                console.log('New asset status selected:', value);
-                setNewAssetStatus(value);
-              }}
-              position='popper'
-            >
+              <Select
+                key={`new-asset-status-${newAssetStatus}`}
+                value={newAssetStatus}
+                onValueChange={(value) => {
+                  console.log('New asset status selected:', value);
+                  setNewAssetStatus(value);
+                }}
+              >
               <SelectTrigger
                 className='text-sm w-32'
                 onClick={() => console.log('New asset status dropdown clicked')}
@@ -501,7 +499,6 @@ const EditOrderForm: React.FC<EditOrderFormProps> = ({ order, onSave, onCancel }
                       key={`asset-status-${index}-${formData.asset_statuses?.[index] || 'Fresh'}`}
                       value={formData.asset_statuses?.[index] || 'Fresh'}
                       onValueChange={(value) => updateAssetStatus(index, value)}
-                      position='popper'
                     >
                       <SelectTrigger
                         className='text-sm w-24'
@@ -554,7 +551,6 @@ const EditOrderForm: React.FC<EditOrderFormProps> = ({ order, onSave, onCancel }
                       key={`empty-asset-status-${i}-${formData.asset_statuses?.[(formData.serial_numbers?.length || 0) + i] || 'Fresh'}`}
                       value={formData.asset_statuses?.[(formData.serial_numbers?.length || 0) + i] || 'Fresh'}
                       onValueChange={(value) => updateAssetStatus((formData.serial_numbers?.length || 0) + i, value)}
-                      position='popper'
                     >
                       <SelectTrigger
                         className='text-sm w-24'
