@@ -9,6 +9,7 @@ import DevicesTable from './DevicesTable';
 import OrderSummaryTable from './OrderSummaryTable';
 import EnhancedBarcodeScanner from './EnhancedBarcodeScanner';
 import { Order, Device, OrderSummary, TabletItem, TVItem } from './types';
+import { UserProfile } from '@/components/UserProfile';
 
 const InventoryManagement = () => {
   const [orders, setOrders] = useState<Order[]>([]);
@@ -301,8 +302,11 @@ const InventoryManagement = () => {
   return (
     <div className='min-h-screen bg-background flex flex-col'>
       <div className='sticky top-0 z-20 bg-background border-b border-gray-200'>
-        <div className='container mx-auto p-4'>
-          <h1 className='text-2xl font-bold mb-1'>Inventory Management</h1>
+        <div className='container mx-auto p-4 flex justify-between items-center'>
+          <h1 className='text-2xl font-bold'>Inventory Management</h1>
+          <div className='flex items-center space-x-4'>
+            <UserProfile />
+          </div>
         </div>
       </div>
       <div className='flex-1 container mx-auto p-4 pt-16'>
