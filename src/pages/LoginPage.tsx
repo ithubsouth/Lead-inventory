@@ -7,6 +7,7 @@ import { Package, Shield, Users, BarChart3 } from 'lucide-react';
 export const LoginPage = () => {
   const { user, loading, signInWithGoogle } = useAuth();
 
+  // Redirect if already authenticated
   if (!loading && user) {
     return <Navigate to="/" replace />;
   }
@@ -22,11 +23,12 @@ export const LoginPage = () => {
   return (
     <div className="min-h-screen bg-background flex items-center justify-center p-4">
       <div className="w-full max-w-md space-y-6">
+        {/* Logo and Header */}
         <div className="text-center space-y-2">
           <div className="flex items-center justify-center gap-2 mb-4">
             <Package className="h-8 w-8 text-primary" />
             <h1 className="text-2xl font-bold text-primary">
-              Lead Inventory Management
+              Asset Vault Quest
             </h1>
           </div>
           <p className="text-muted-foreground">
@@ -34,6 +36,7 @@ export const LoginPage = () => {
           </p>
         </div>
 
+        {/* Login Card */}
         <Card className="shadow-card">
           <CardHeader className="text-center">
             <CardTitle>Welcome Back</CardTitle>
@@ -68,6 +71,7 @@ export const LoginPage = () => {
               Continue with Google
             </Button>
 
+            {/* Features */}
             <div className="mt-8 space-y-3">
               <div className="flex items-center gap-3 text-sm text-muted-foreground">
                 <Shield className="h-4 w-4 text-primary" />
@@ -89,6 +93,7 @@ export const LoginPage = () => {
           </CardContent>
         </Card>
 
+        {/* Footer */}
         <div className="text-center">
           <p className="text-xs text-muted-foreground">
             Crafted by 🤓 IT Infra minds, for IT Infra needs
