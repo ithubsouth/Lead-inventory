@@ -556,7 +556,7 @@ Stock,TV,Hyundai TV - 43",1,Bangalore,SO002,DEAL002,Another School,NUC002,,Andro
                 onChange={(e) => setTabletsToggle(e.target.checked)}
                 style={{ width: '16px', height: '16px' }}
               />
-              <span style={{ fontSize: '12px', color: '#6b7280' }}>Include Tablets</span>
+              <span style={{ fontSize: '12px', color: '#6b7280' }}>Tablets</span>
             </label>
             <label style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
               <input
@@ -565,7 +565,7 @@ Stock,TV,Hyundai TV - 43",1,Bangalore,SO002,DEAL002,Another School,NUC002,,Andro
                 onChange={(e) => setTVsToggle(e.target.checked)}
                 style={{ width: '16px', height: '16px' }}
               />
-              <span style={{ fontSize: '12px', color: '#6b7280' }}>Include TVs</span>
+              <span style={{ fontSize: '12px', color: '#6b7280' }}>TVs</span>
             </label>
           </div>
         </div>
