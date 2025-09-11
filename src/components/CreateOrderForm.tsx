@@ -708,7 +708,7 @@ Stock,TV,Hyundai TV - 43",1,Bangalore,SO002,DEAL002,Another School,NUC002,,Andro
                         {Array.from({ length: tablet.quantity }, (_, index) => (
                           <div key={index} style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
                             <input
-                              placeholder={`Serial number ${index + 1}`}
+                              placeholder={`Serial number ${index + 1} (optional)`}
                               value={tablet.serialNumbers[index] || ''}
                               onChange={(e) => {
                                 const newSerialNumbers = [...tablet.serialNumbers];
@@ -864,7 +864,7 @@ Stock,TV,Hyundai TV - 43",1,Bangalore,SO002,DEAL002,Another School,NUC002,,Andro
                         {Array.from({ length: tv.quantity }, (_, index) => (
                           <div key={index} style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
                             <input
-                              placeholder={`Serial number ${index + 1}`}
+                              placeholder={`Serial number ${index + 1} (optional)`}
                               value={tv.serialNumbers[index] || ''}
                               onChange={(e) => {
                                 const newSerialNumbers = [...tv.serialNumbers];
