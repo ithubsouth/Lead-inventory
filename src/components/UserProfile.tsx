@@ -1,3 +1,4 @@
+// UserProfile.tsx (updated)
 import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import {
@@ -55,7 +56,12 @@ export const UserProfile = () => {
   }, [user]);
 
   const checkAuthorization = async () => {
-    if (user?.email) {
+    if (!user?.email) {
+      setIsAuthorized(false);
+      setUserRole(null);
+      return;
+    }
+    try {
       const { data, error } = await supabase
         .from('users')
         .select('email, role, account_type')
@@ -66,14 +72,24 @@ export const UserProfile = () => {
         setUserRole(data.role);
         setAccountType(data.account_type || '0');
       } else {
+        console.warn('Authorization failed:', error?.message);
         setIsAuthorized(false);
         setUserRole(null);
         setAccountType('0');
       }
+    } catch (err) {
+      console.error('Authorization check error:', err);
+      setIsAuthorized(false);
+      setUserRole(null);
+      setAccountType('0');
     }
   };
 
   const fetchUsers = async () => {
+    if (!isAuthorized || !['Super Admin', 'Admin', 'Operator'].includes(userRole || '')) {
+      setUsers([]);
+      return;
+    }
     try {
       const { data, error } = await supabase.from('users').select('*');
       if (error) {
@@ -163,7 +179,7 @@ export const UserProfile = () => {
           full_name: fullName,
           department,
           role: updateRole,
-          account_type: account_type,
+          account_type: accountType,
         })
         .eq('id', selectedUser.id);
       if (error) throw error;
@@ -234,15 +250,15 @@ export const UserProfile = () => {
     try {
       const response = await fetch('https://your-project.supabase.co/functions/v1/create-user', {
         method: 'POST',
-        headers: { 
+        headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${user?.access_token}` 
+          'Authorization': `Bearer ${user?.access_token}`,
         },
         body: JSON.stringify({ email, full_name: fullName, department, role, account_type: accountType }),
       });
 
       if (!response.ok) {
-        const result = await response.text(); // Fallback to text if JSON fails
+        const result = await response.text();
         throw new Error(result || 'Server error. No response body.');
       }
 
@@ -250,6 +266,16 @@ export const UserProfile = () => {
       if (!result.message) {
         throw new Error('Invalid response from server.');
       }
+
+      // Ensure the user is added to the 'users' table after creation
+      const { error: insertError } = await supabase.from('users').insert({
+        email,
+        full_name: fullName,
+        department,
+        role,
+        account_type: accountType,
+      });
+      if (insertError) throw insertError;
 
       toast({ title: 'Success', description: 'User created successfully! An invitation email has been sent to the user.' });
       await fetchUsers();
@@ -288,7 +314,7 @@ export const UserProfile = () => {
     : user?.email?.[0]?.toUpperCase() || 'U';
 
   if (!user) return <div className="text-sm">Please log in to access this page.</div>;
-  if (!isAuthorized) return <div className="text-sm">Access denied. You are not an authorized user.</div>;
+  if (!isAuthorized) return null; // Handled by ProtectedRoute
 
   const departments = [
     'Administrators',

@@ -1,4 +1,4 @@
-// In AuthProvider component
+// AuthContext.tsx (updated)
 import { createContext, useContext, useEffect, useState } from 'react';
 import { User, Session } from '@supabase/supabase-js';
 import { supabase } from '@/integrations/supabase/client';
@@ -7,7 +7,7 @@ interface AuthContextType {
   user: User | null;
   session: Session | null;
   loading: boolean;
-  isAccessDenied: boolean; // New state to track access denial
+  isAccessDenied: boolean;
   signInWithGoogle: () => Promise<void>;
   signOut: () => Promise<void>;
   updateUser: (attributes: any) => Promise<void>;
@@ -19,13 +19,13 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
-  const [isAccessDenied, setIsAccessDenied] = useState(false); // New state
+  const [isAccessDenied, setIsAccessDenied] = useState(false);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session }, error }) => {
       if (error) {
         console.error('Session get error:', error);
-        setIsAccessDenied(true); // Set access denied if session retrieval fails
+        setIsAccessDenied(true);
       }
       setSession(session);
       setUser(session?.user ?? null);
@@ -38,8 +38,11 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         setSession(session);
         setUser(session?.user ?? null);
         setLoading(false);
-        if (session?.user) checkAuthorization(session.user);
-        else setIsAccessDenied(true); // Access denied if no user after event
+        if (session?.user) {
+          checkAuthorization(session.user);
+        } else {
+          setIsAccessDenied(false); // Reset to false when no user (allows login)
+        }
       }
     );
 
@@ -47,15 +50,21 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   }, []);
 
   const checkAuthorization = async (user: User) => {
-    const { data, error } = await supabase
-      .from('users')
-      .select('email, role, account_type')
-      .eq('email', user.email)
-      .single();
-    if (error || !data) {
-      setIsAccessDenied(true); // Set access denied if no valid user data
-    } else {
-      setIsAccessDenied(false); // Authorized if data exists
+    try {
+      const { data, error } = await supabase
+        .from('users')
+        .select('email, role, account_type')
+        .eq('email', user.email)
+        .single();
+      if (error || !data) {
+        console.warn('User not found in users table:', error?.message);
+        setIsAccessDenied(true);
+      } else {
+        setIsAccessDenied(false);
+      }
+    } catch (err) {
+      console.error('Authorization check error:', err);
+      setIsAccessDenied(true);
     }
   };
 
@@ -70,7 +79,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       });
       if (error) {
         console.error('Google sign-in error:', error);
-        setIsAccessDenied(true); // Set access denied on sign-in error
+        setIsAccessDenied(true);
         throw error;
       }
     } catch (error) {
