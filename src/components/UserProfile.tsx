@@ -13,13 +13,12 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useAuth } from '@/contexts/AuthContext';
-import { LogOut, User, Settings } from 'lucide-react';
+import { LogOut, User } from 'lucide-react';
 
 export const UserProfile = () => {
   const { user, signOut, updateUser } = useAuth();
   const [isLoading, setIsLoading] = useState(false);
   const [openProfile, setOpenProfile] = useState(false);
-  const [openSettings, setOpenSettings] = useState(false);
   const [fullName, setFullName] = useState(user?.user_metadata?.full_name || '');
 
   const handleSignOut = async () => {
@@ -44,12 +43,12 @@ export const UserProfile = () => {
   const userInitials = user?.user_metadata?.full_name
     ? user.user_metadata.full_name
         .split(' ')
-        .map((n) => n[0])
+        .map((n: string) => n[0])
         .join('')
         .toUpperCase()
     : user?.email?.[0]?.toUpperCase() || 'U';
 
-  if (!user) return <div className="text-sm">Please log in to access this page.</div>;
+  if (!user) return null;
 
   return (
     <>
@@ -82,10 +81,6 @@ export const UserProfile = () => {
           <DropdownMenuItem onClick={() => setOpenProfile(true)}>
             <User className="mr-2 h-4 w-4" />
             <span>Profile</span>
-          </DropdownMenuItem>
-          <DropdownMenuItem onClick={() => setOpenSettings(true)}>
-            <Settings className="mr-2 h-4 w-4" />
-            <span>User Management</span>
           </DropdownMenuItem>
           <DropdownMenuSeparator />
           <DropdownMenuItem
@@ -123,26 +118,6 @@ export const UserProfile = () => {
               </Button>
             </DialogFooter>
           </form>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={openSettings} onOpenChange={setOpenSettings}>
-        <DialogContent className="max-w-[90vw] w-[900px] text-sm">
-          <DialogHeader>
-            <DialogTitle>User Management</DialogTitle>
-            <DialogDescription>User management features will be available once the database is properly configured.</DialogDescription>
-          </DialogHeader>
-          <div className="py-4">
-            <p className="text-muted-foreground text-sm">
-              User management functionality is currently being set up. This feature will allow administrators to:
-            </p>
-            <ul className="mt-2 text-sm text-muted-foreground list-disc list-inside space-y-1">
-              <li>Add new users to the system</li>
-              <li>Edit user roles and permissions</li>
-              <li>Manage user departments and account types</li>
-              <li>View and search through user records</li>
-            </ul>
-          </div>
         </DialogContent>
       </Dialog>
     </>

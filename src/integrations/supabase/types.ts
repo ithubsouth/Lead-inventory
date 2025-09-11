@@ -7,7 +7,7 @@ export type Json =
   | Json[]
 
 export type Database = {
-  // Allows to automatically instanciate createClient with right options
+  // Allows to automatically instantiate createClient with right options
   // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
   __InternalSupabase: {
     PostgrestVersion: "12.2.12 (cd3cf9e)"
@@ -16,6 +16,8 @@ export type Database = {
     Tables: {
       devices: {
         Row: {
+          asset_status: string | null
+          configuration: string | null
           created_at: string
           created_by: string | null
           deal_id: string | null
@@ -27,6 +29,7 @@ export type Database = {
           nucleus_id: string | null
           order_id: string | null
           product: string
+          product_type: string | null
           profile_id: string | null
           sales_order: string | null
           school_name: string | null
@@ -37,6 +40,8 @@ export type Database = {
           warehouse: string
         }
         Insert: {
+          asset_status?: string | null
+          configuration?: string | null
           created_at?: string
           created_by?: string | null
           deal_id?: string | null
@@ -48,6 +53,7 @@ export type Database = {
           nucleus_id?: string | null
           order_id?: string | null
           product: string
+          product_type?: string | null
           profile_id?: string | null
           sales_order?: string | null
           school_name?: string | null
@@ -58,6 +64,8 @@ export type Database = {
           warehouse: string
         }
         Update: {
+          asset_status?: string | null
+          configuration?: string | null
           created_at?: string
           created_by?: string | null
           deal_id?: string | null
@@ -69,6 +77,7 @@ export type Database = {
           nucleus_id?: string | null
           order_id?: string | null
           product?: string
+          product_type?: string | null
           profile_id?: string | null
           sales_order?: string | null
           school_name?: string | null
@@ -88,8 +97,43 @@ export type Database = {
           },
         ]
       }
+      history: {
+        Row: {
+          changed_by: string | null
+          created_at: string
+          id: string
+          new_data: Json | null
+          old_data: Json | null
+          operation: string
+          record_id: string
+          table_name: string
+        }
+        Insert: {
+          changed_by?: string | null
+          created_at?: string
+          id?: string
+          new_data?: Json | null
+          old_data?: Json | null
+          operation: string
+          record_id: string
+          table_name: string
+        }
+        Update: {
+          changed_by?: string | null
+          created_at?: string
+          id?: string
+          new_data?: Json | null
+          old_data?: Json | null
+          operation?: string
+          record_id?: string
+          table_name?: string
+        }
+        Relationships: []
+      }
       orders: {
         Row: {
+          asset_status: string | null
+          configuration: string | null
           created_at: string
           created_by: string | null
           deal_id: string | null
@@ -102,6 +146,7 @@ export type Database = {
           order_date: string
           order_type: string
           product: string
+          product_type: string | null
           quantity: number
           sales_order: string
           school_name: string | null
@@ -110,6 +155,8 @@ export type Database = {
           warehouse: string
         }
         Insert: {
+          asset_status?: string | null
+          configuration?: string | null
           created_at?: string
           created_by?: string | null
           deal_id?: string | null
@@ -122,6 +169,7 @@ export type Database = {
           order_date?: string
           order_type: string
           product: string
+          product_type?: string | null
           quantity?: number
           sales_order: string
           school_name?: string | null
@@ -130,6 +178,8 @@ export type Database = {
           warehouse: string
         }
         Update: {
+          asset_status?: string | null
+          configuration?: string | null
           created_at?: string
           created_by?: string | null
           deal_id?: string | null
@@ -142,12 +192,43 @@ export type Database = {
           order_date?: string
           order_type?: string
           product?: string
+          product_type?: string | null
           quantity?: number
           sales_order?: string
           school_name?: string | null
           serial_numbers?: string[]
           updated_at?: string
           warehouse?: string
+        }
+        Relationships: []
+      }
+      users: {
+        Row: {
+          account_type: string | null
+          created_at: string
+          department: string | null
+          email: string
+          id: string
+          role: string | null
+          updated_at: string
+        }
+        Insert: {
+          account_type?: string | null
+          created_at?: string
+          department?: string | null
+          email: string
+          id?: string
+          role?: string | null
+          updated_at?: string
+        }
+        Update: {
+          account_type?: string | null
+          created_at?: string
+          department?: string | null
+          email?: string
+          id?: string
+          role?: string | null
+          updated_at?: string
         }
         Relationships: []
       }
