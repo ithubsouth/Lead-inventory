@@ -1,4 +1,4 @@
-// UserProfile.tsx (updated)
+// UserProfile.tsx (corrected - include id from auth.users)
 import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import {
@@ -246,44 +246,82 @@ export const UserProfile = () => {
       setErrorMessage('Please enter a valid email address.');
       return;
     }
+    if (!fullName) {
+      setErrorMessage('Please enter a full name.');
+      return;
+    }
+    if (!department) {
+      setErrorMessage('Please select a department.');
+      return;
+    }
+    if (!role) {
+      setErrorMessage('Please select a role.');
+      return;
+    }
+    if (!accountType) {
+      setErrorMessage('Please select an account type.');
+      return;
+    }
     setIsLoading(true);
     try {
-      const response = await fetch('https://your-project.supabase.co/functions/v1/create-user', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${user?.access_token}`,
-        },
-        body: JSON.stringify({ email, full_name: fullName, department, role, account_type: accountType }),
-      });
-
-      if (!response.ok) {
-        const result = await response.text();
-        throw new Error(result || 'Server error. No response body.');
+      // Check if user already exists in public.users
+      const { data: existingUser, error: checkError } = await supabase
+        .from('users')
+        .select('id')
+        .eq('email', email)
+        .single();
+      if (checkError && checkError.code !== 'PGRST116') { // PGRST116 is "no rows returned"
+        throw checkError;
+      }
+      if (existingUser) {
+        throw new Error('User with this email already exists.');
       }
 
-      const result = await response.json();
-      if (!result.message) {
-        throw new Error('Invalid response from server.');
+      // Check if user exists in auth.users
+      const { data: authUser, error: authCheckError } = await supabase.rpc('get_user_by_email', { email_param: email });
+      if (authCheckError) throw authCheckError;
+
+      let userId: string;
+      if (authUser && authUser.length > 0) {
+        // User exists in auth.users, use that id
+        userId = authUser[0].id;
+        toast({ title: 'Info', description: `User with email "${email}" already exists in auth. Linking profile.` });
+      } else {
+        // User does not exist in auth.users yet - they will create it on first login
+        // Generate a placeholder UUID for now (will be updated on first login via trigger if set up)
+        // But to avoid null constraint, use a generated UUID
+        userId = crypto.randomUUID();
+        toast({ title: 'Info', description: `Profile created for "${email}". User needs to log in first to link auth ID.` });
       }
 
-      // Ensure the user is added to the 'users' table after creation
-      const { error: insertError } = await supabase.from('users').insert({
-        email,
-        full_name: fullName,
-        department,
-        role,
-        account_type: accountType,
-      });
+      // Insert into public.users with the id
+      const { error: insertError } = await supabase
+        .from('users')
+        .insert({
+          id: userId,
+          email,
+          full_name: fullName,
+          department,
+          role,
+          account_type: accountType,
+        });
       if (insertError) throw insertError;
 
-      toast({ title: 'Success', description: 'User created successfully! An invitation email has been sent to the user.' });
+      toast({ 
+        title: 'Success', 
+        description: `User "${fullName}" added successfully. They need to log in with Google to activate their account.` 
+      });
       await fetchUsers();
       setOpenEditUser(false);
       resetForm();
     } catch (error) {
       console.error('Error creating user:', error);
       setErrorMessage(`Failed to create user: ${error.message || 'Unknown error. Check console for details.'}`);
+      toast({ 
+        title: 'Error', 
+        description: `Failed to create user: ${error.message || 'Please try again.'}`, 
+        variant: 'destructive' 
+      });
     } finally {
       setIsLoading(false);
     }
@@ -548,7 +586,7 @@ export const UserProfile = () => {
               />
             </div>
             <div>
-              <Label htmlFor="editFullName" className="text-sm">Full Name</Label>
+              <Label htmlFor="editFullName" className="text-sm">Full Name *</Label>
               <Input
                 id="editFullName"
                 value={fullName}
