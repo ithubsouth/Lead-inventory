@@ -1,4 +1,3 @@
-// UserProfile.tsx (corrected - include id from auth.users)
 import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import {
@@ -141,8 +140,9 @@ export const UserProfile = () => {
       return;
     }
     if (userRole === 'Admin' && ['Super Admin', 'Admin'].includes(user.role || '')) {
-      setErrorMessage('Admins cannot edit Super Admin or Admin users.');
-      toast({ title: 'Access Denied', description: setErrorMessage, variant: 'destructive' });
+      const errorMsg = 'Admins cannot edit Super Admin or Admin users.';
+      setErrorMessage(errorMsg);
+      toast({ title: 'Access Denied', description: errorMsg, variant: 'destructive' });
       return;
     }
     setSelectedUser(user);
@@ -162,11 +162,15 @@ export const UserProfile = () => {
       return;
     }
     if (userRole === 'Admin' && !['Operator', 'Reporter'].includes(selectedUser.role || '')) {
-      setErrorMessage('Admins can only edit Operator or Reporter users.');
+      const errorMsg = 'Admins can only edit Operator or Reporter users.';
+      setErrorMessage(errorMsg);
+      toast({ title: 'Access Denied', description: errorMsg, variant: 'destructive' });
       return;
     }
     if (userRole === 'Admin' && selectedUser.id === user?.id && role !== selectedUser.role) {
-      setErrorMessage('Admins cannot change their own role.');
+      const errorMsg = 'Admins cannot change their own role.';
+      setErrorMessage(errorMsg);
+      toast({ title: 'Access Denied', description: errorMsg, variant: 'destructive' });
       return;
     }
     setIsLoading(true);
@@ -188,6 +192,7 @@ export const UserProfile = () => {
     } catch (error) {
       console.error('Error updating user:', error);
       setErrorMessage('Failed to update user. Please try again.');
+      toast({ title: 'Error', description: 'Failed to update user. Please try again.', variant: 'destructive' });
     } finally {
       setIsLoading(false);
       setOpenEditUser(false);
@@ -209,13 +214,15 @@ export const UserProfile = () => {
         .single();
       if (fetchError) throw fetchError;
       if (userRole === 'Admin' && ['Super Admin', 'Admin'].includes(targetUser.role)) {
-        setErrorMessage('Admins cannot delete Super Admin or Admin users.');
-        toast({ title: 'Access Denied', description: setErrorMessage, variant: 'destructive' });
+        const errorMsg = 'Admins cannot delete Super Admin or Admin users.';
+        setErrorMessage(errorMsg);
+        toast({ title: 'Access Denied', description: errorMsg, variant: 'destructive' });
         return;
       }
       if (userRole === 'Operator' && targetUser.role !== 'Reporter') {
-        setErrorMessage('Operators can only delete Reporters.');
-        toast({ title: 'Access Denied', description: setErrorMessage, variant: 'destructive' });
+        const errorMsg = 'Operators can only delete Reporters.';
+        setErrorMessage(errorMsg);
+        toast({ title: 'Access Denied', description: errorMsg, variant: 'destructive' });
         return;
       }
       const { error } = await supabase.from('users').delete().eq('id', id);
@@ -225,6 +232,7 @@ export const UserProfile = () => {
     } catch (error) {
       console.error('Error deleting user:', error);
       setErrorMessage('Failed to delete user. Please try again.');
+      toast({ title: 'Error', description: 'Failed to delete user. Please try again.', variant: 'destructive' });
     }
   };
 
@@ -235,31 +243,45 @@ export const UserProfile = () => {
       return;
     }
     if (userRole === 'Admin' && !['Operator', 'Reporter'].includes(role)) {
-      setErrorMessage('Admins can only create Operator or Reporter users.');
+      const errorMsg = 'Admins can only create Operator or Reporter users.';
+      setErrorMessage(errorMsg);
+      toast({ title: 'Access Denied', description: errorMsg, variant: 'destructive' });
       return;
     }
     if (userRole === 'Operator' && role !== 'Reporter') {
-      setErrorMessage('Operators can only create Reporters.');
+      const errorMsg = 'Operators can only create Reporters.';
+      setErrorMessage(errorMsg);
+      toast({ title: 'Access Denied', description: errorMsg, variant: 'destructive' });
       return;
     }
     if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      setErrorMessage('Please enter a valid email address.');
+      const errorMsg = 'Please enter a valid email address.';
+      setErrorMessage(errorMsg);
+      toast({ title: 'Error', description: errorMsg, variant: 'destructive' });
       return;
     }
     if (!fullName) {
-      setErrorMessage('Please enter a full name.');
+      const errorMsg = 'Please enter a full name.';
+      setErrorMessage(errorMsg);
+      toast({ title: 'Error', description: errorMsg, variant: 'destructive' });
       return;
     }
     if (!department) {
-      setErrorMessage('Please select a department.');
+      const errorMsg = 'Please select a department.';
+      setErrorMessage(errorMsg);
+      toast({ title: 'Error', description: errorMsg, variant: 'destructive' });
       return;
     }
     if (!role) {
-      setErrorMessage('Please select a role.');
+      const errorMsg = 'Please select a role.';
+      setErrorMessage(errorMsg);
+      toast({ title: 'Error', description: errorMsg, variant: 'destructive' });
       return;
     }
     if (!accountType) {
-      setErrorMessage('Please select an account type.');
+      const errorMsg = 'Please select an account type.';
+      setErrorMessage(errorMsg);
+      toast({ title: 'Error', description: errorMsg, variant: 'destructive' });
       return;
     }
     setIsLoading(true);
@@ -274,24 +296,25 @@ export const UserProfile = () => {
         throw checkError;
       }
       if (existingUser) {
-        throw new Error('User with this email already exists.');
+        throw new Error('User with this email already exists in profiles.');
       }
 
-      // Check if user exists in auth.users
-      const { data: authUser, error: authCheckError } = await supabase.rpc('get_user_by_email', { email_param: email });
-      if (authCheckError) throw authCheckError;
+      // Check if user exists in auth.users via RPC
+      const { data: authUsers, error: authCheckError } = await supabase.rpc('get_user_by_email', { email_param: email });
+      if (authCheckError) {
+        console.error('RPC error (may need to create function):', authCheckError);
+        throw new Error('Failed to check auth user. Ensure RPC function exists.');
+      }
 
       let userId: string;
-      if (authUser && authUser.length > 0) {
+      if (authUsers && authUsers.length > 0) {
         // User exists in auth.users, use that id
-        userId = authUser[0].id;
+        userId = authUsers[0].id as string;
         toast({ title: 'Info', description: `User with email "${email}" already exists in auth. Linking profile.` });
       } else {
-        // User does not exist in auth.users yet - they will create it on first login
-        // Generate a placeholder UUID for now (will be updated on first login via trigger if set up)
-        // But to avoid null constraint, use a generated UUID
+        // User does not exist in auth.users yet - placeholder ID (trigger will update on first login)
         userId = crypto.randomUUID();
-        toast({ title: 'Info', description: `Profile created for "${email}". User needs to log in first to link auth ID.` });
+        toast({ title: 'Info', description: `Profile created for "${email}". User needs to log in first to activate.` });
       }
 
       // Insert into public.users with the id
@@ -316,10 +339,11 @@ export const UserProfile = () => {
       resetForm();
     } catch (error) {
       console.error('Error creating user:', error);
-      setErrorMessage(`Failed to create user: ${error.message || 'Unknown error. Check console for details.'}`);
+      const errMsg = error instanceof Error ? error.message : 'Unknown error. Check console for details.';
+      setErrorMessage(`Failed to create user: ${errMsg}`);
       toast({ 
         title: 'Error', 
-        description: `Failed to create user: ${error.message || 'Please try again.'}`, 
+        description: `Failed to create user: ${errMsg}`, 
         variant: 'destructive' 
       });
     } finally {
@@ -330,7 +354,7 @@ export const UserProfile = () => {
   const resetForm = () => {
     setEmail('');
     setFullName('');
-    setDepartment('Administrators');
+    setDepartment(user?.user_metadata?.department || 'Administrators');  // Use current user's dept as default
     setRole(userRole === 'Operator' ? 'Reporter' : 'Operator');
     setAccountType('0');
     setErrorMessage('');
@@ -529,13 +553,22 @@ export const UserProfile = () => {
                                 <Edit className="h-4 w-4" />
                               </Button>
                             ) : userRole === 'Operator' && user.role === 'Reporter' ? (
-                              <Button 
-                                variant="ghost" 
-                                size="icon" 
-                                onClick={() => handleDeleteUser(user.id)}
-                              >
-                                <Trash className="h-4 w-4 text-red-500" />
-                              </Button>
+                              <>
+                                <Button 
+                                  variant="ghost" 
+                                  size="icon" 
+                                  onClick={() => handleEditUser(user)}
+                                >
+                                  <Edit className="h-4 w-4" />
+                                </Button>
+                                <Button 
+                                  variant="ghost" 
+                                  size="icon" 
+                                  onClick={() => handleDeleteUser(user.id)}
+                                >
+                                  <Trash className="h-4 w-4 text-red-500" />
+                                </Button>
+                              </>
                             ) : (
                               <span className="text-muted-foreground text-xs">Read-only</span>
                             )}
