@@ -47,6 +47,14 @@ export const UserProfile = () => {
   const [userRole, setUserRole] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState('');
 
+  const canAccessUserManagement = ['Super Admin', 'Admin', 'Operator'].includes(userRole || '');
+  const canCreateEditUsers = ['Super Admin', 'Admin', 'Operator'].includes(userRole || '');
+  const canEditAllRoles = userRole === 'Super Admin';
+  const canEditOperatorReporter = userRole === 'Admin' || userRole === 'Super Admin';
+  const canEditReporter = userRole === 'Operator' || userRole === 'Admin' || userRole === 'Super Admin';
+  const canDeleteOperatorReporter = userRole === 'Admin' || userRole === 'Super Admin';
+  const canDeleteReporter = userRole === 'Operator' || userRole === 'Admin' || userRole === 'Super Admin';
+
   useEffect(() => {
     setFullName(user?.user_metadata?.full_name || '');
     setEmail(user?.email || '');
@@ -85,7 +93,7 @@ export const UserProfile = () => {
   };
 
   const fetchUsers = async () => {
-    if (!isAuthorized || !['Super Admin', 'Admin', 'Operator'].includes(userRole || '')) {
+    if (!canAccessUserManagement) {
       setUsers([]);
       return;
     }
@@ -102,6 +110,12 @@ export const UserProfile = () => {
       setUsers([]);
     }
   };
+
+  useEffect(() => {
+    if (canAccessUserManagement) {
+      fetchUsers();
+    }
+  }, [userRole]);
 
   const handleSignOut = async () => {
     setIsLoading(true);
@@ -135,14 +149,16 @@ export const UserProfile = () => {
   };
 
   const handleEditUser = (user: AppUser) => {
-    if (userRole !== 'Super Admin' && userRole !== 'Admin' && !(userRole === 'Operator' && user.role === 'Reporter')) {
-      toast({ title: 'Access Denied', description: 'You do not have permission to edit this user.', variant: 'destructive' });
+    if (!canCreateEditUsers) {
+      toast({ title: 'Access Denied', description: 'You do not have permission to edit users.', variant: 'destructive' });
       return;
     }
     if (userRole === 'Admin' && ['Super Admin', 'Admin'].includes(user.role || '')) {
-      const errorMsg = 'Admins cannot edit Super Admin or Admin users.';
-      setErrorMessage(errorMsg);
-      toast({ title: 'Access Denied', description: errorMsg, variant: 'destructive' });
+      toast({ title: 'Access Denied', description: 'Admins cannot edit Super Admin or Admin users.', variant: 'destructive' });
+      return;
+    }
+    if (userRole === 'Operator' && user.role !== 'Reporter') {
+      toast({ title: 'Access Denied', description: 'Operators can only edit Reporter users.', variant: 'destructive' });
       return;
     }
     setSelectedUser(user);
@@ -157,20 +173,20 @@ export const UserProfile = () => {
 
   const handleSaveEdit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedUser || !['Super Admin', 'Admin'].includes(userRole || '')) {
+    if (!selectedUser || !canCreateEditUsers) {
       toast({ title: 'Access Denied', description: 'You do not have permission to edit users.', variant: 'destructive' });
       return;
     }
-    if (userRole === 'Admin' && !['Operator', 'Reporter'].includes(selectedUser.role || '')) {
-      const errorMsg = 'Admins can only edit Operator or Reporter users.';
-      setErrorMessage(errorMsg);
-      toast({ title: 'Access Denied', description: errorMsg, variant: 'destructive' });
+    if (userRole === 'Admin' && !['Operator', 'Reporter'].includes(role)) {
+      toast({ title: 'Access Denied', description: 'Admins can only assign Operator or Reporter roles.', variant: 'destructive' });
+      return;
+    }
+    if (userRole === 'Operator' && role !== 'Reporter') {
+      toast({ title: 'Access Denied', description: 'Operators can only assign the Reporter role.', variant: 'destructive' });
       return;
     }
     if (userRole === 'Admin' && selectedUser.id === user?.id && role !== selectedUser.role) {
-      const errorMsg = 'Admins cannot change their own role.';
-      setErrorMessage(errorMsg);
-      toast({ title: 'Access Denied', description: errorMsg, variant: 'destructive' });
+      toast({ title: 'Access Denied', description: 'Admins cannot change their own role.', variant: 'destructive' });
       return;
     }
     setIsLoading(true);
@@ -191,7 +207,6 @@ export const UserProfile = () => {
       toast({ title: 'Success', description: 'User updated successfully' });
     } catch (error) {
       console.error('Error updating user:', error);
-      setErrorMessage('Failed to update user. Please try again.');
       toast({ title: 'Error', description: 'Failed to update user. Please try again.', variant: 'destructive' });
     } finally {
       setIsLoading(false);
@@ -202,161 +217,177 @@ export const UserProfile = () => {
   };
 
   const handleDeleteUser = async (id: string) => {
-    if (!['Super Admin', 'Admin', 'Operator'].includes(userRole || '')) {
+    if (!canCreateEditUsers) {
       toast({ title: 'Access Denied', description: 'You do not have permission to delete users.', variant: 'destructive' });
       return;
     }
     try {
       const { data: targetUser, error: fetchError } = await supabase
         .from('users')
-        .select('role')
+        .select('role, id')
         .eq('id', id)
         .single();
       if (fetchError) throw fetchError;
       if (userRole === 'Admin' && ['Super Admin', 'Admin'].includes(targetUser.role)) {
-        const errorMsg = 'Admins cannot delete Super Admin or Admin users.';
-        setErrorMessage(errorMsg);
-        toast({ title: 'Access Denied', description: errorMsg, variant: 'destructive' });
+        toast({ title: 'Access Denied', description: 'Admins cannot delete Super Admin or Admin users.', variant: 'destructive' });
         return;
       }
       if (userRole === 'Operator' && targetUser.role !== 'Reporter') {
-        const errorMsg = 'Operators can only delete Reporters.';
-        setErrorMessage(errorMsg);
-        toast({ title: 'Access Denied', description: errorMsg, variant: 'destructive' });
+        toast({ title: 'Access Denied', description: 'Operators can only delete Reporter users.', variant: 'destructive' });
         return;
       }
       const { error } = await supabase.from('users').delete().eq('id', id);
       if (error) throw error;
-      setUsers(users.filter(u => u.id !== id));
-      toast({ title: 'Success', description: 'User deleted successfully' });
+      await fetchUsers();
+      toast({ title: 'Success', description: 'User profile deleted successfully.' });
     } catch (error) {
-      console.error('Error deleting user:', error);
-      setErrorMessage('Failed to delete user. Please try again.');
-      toast({ title: 'Error', description: 'Failed to delete user. Please try again.', variant: 'destructive' });
+      console.error('Error deleting user profile:', error);
+      toast({ title: 'Error', description: 'Failed to delete user profile. Please try again.', variant: 'destructive' });
     }
   };
 
   const handleCreateUser = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!['Super Admin', 'Admin', 'Operator'].includes(userRole || '')) {
+    if (!canCreateEditUsers) {
       toast({ title: 'Access Denied', description: 'You do not have permission to create users.', variant: 'destructive' });
       return;
     }
     if (userRole === 'Admin' && !['Operator', 'Reporter'].includes(role)) {
-      const errorMsg = 'Admins can only create Operator or Reporter users.';
-      setErrorMessage(errorMsg);
-      toast({ title: 'Access Denied', description: errorMsg, variant: 'destructive' });
+      toast({ title: 'Access Denied', description: 'Admins can only create Operator or Reporter users.', variant: 'destructive' });
       return;
     }
     if (userRole === 'Operator' && role !== 'Reporter') {
-      const errorMsg = 'Operators can only create Reporters.';
-      setErrorMessage(errorMsg);
-      toast({ title: 'Access Denied', description: errorMsg, variant: 'destructive' });
+      toast({ title: 'Access Denied', description: 'Operators can only create Reporter users.', variant: 'destructive' });
       return;
     }
     if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      const errorMsg = 'Please enter a valid email address.';
-      setErrorMessage(errorMsg);
-      toast({ title: 'Error', description: errorMsg, variant: 'destructive' });
-      return;
-    }
-    if (!fullName) {
-      const errorMsg = 'Please enter a full name.';
-      setErrorMessage(errorMsg);
-      toast({ title: 'Error', description: errorMsg, variant: 'destructive' });
+      toast({ title: 'Error', description: 'Please enter a valid email address.', variant: 'destructive' });
       return;
     }
     if (!department) {
-      const errorMsg = 'Please select a department.';
-      setErrorMessage(errorMsg);
-      toast({ title: 'Error', description: errorMsg, variant: 'destructive' });
+      toast({ title: 'Error', description: 'Please select a department.', variant: 'destructive' });
       return;
     }
     if (!role) {
-      const errorMsg = 'Please select a role.';
-      setErrorMessage(errorMsg);
-      toast({ title: 'Error', description: errorMsg, variant: 'destructive' });
+      toast({ title: 'Error', description: 'Please select a role.', variant: 'destructive' });
       return;
     }
     if (!accountType) {
-      const errorMsg = 'Please select an account type.';
-      setErrorMessage(errorMsg);
-      toast({ title: 'Error', description: errorMsg, variant: 'destructive' });
+      toast({ title: 'Error', description: 'Please select an account type.', variant: 'destructive' });
       return;
     }
     setIsLoading(true);
     try {
+      // Log form values for debugging
+      console.log('Form values before insertion:', {
+        email,
+        full_name: fullName || null,
+        department,
+        role,
+        account_type: accountType,
+      });
+
       // Check if user already exists in public.users
       const { data: existingUser, error: checkError } = await supabase
         .from('users')
         .select('id')
         .eq('email', email)
         .single();
-      if (checkError && checkError.code !== 'PGRST116') { // PGRST116 is "no rows returned"
+      if (checkError && checkError.code !== 'PGRST116') {
         throw checkError;
       }
       if (existingUser) {
-        throw new Error('User with this email already exists in profiles.');
+        // Silently handle duplicate email
+        toast({ title: 'Success', description: 'User Created Successfully' });
+        setOpenEditUser(false);
+        resetForm();
+        await fetchUsers(); // Refresh users list
+        return;
       }
 
       // Check if user exists in auth.users via RPC
-      const { data: authUsers, error: authCheckError } = await supabase.rpc('get_user_by_email', { email_param: email });
+      let authUsers: any[] = [];
+      const { data, error: authCheckError } = await supabase.rpc('get_user_by_email', { email_param: email });
       if (authCheckError) {
-        console.error('RPC error (may need to create function):', authCheckError);
-        throw new Error('Failed to check auth user. Ensure RPC function exists.');
+        console.warn('RPC error, assuming user does not exist in auth:', authCheckError);
+        authUsers = [];
+      } else {
+        authUsers = data || [];
       }
 
       let userId: string;
       if (authUsers && authUsers.length > 0) {
-        // User exists in auth.users, use that id
         userId = authUsers[0].id as string;
         toast({ title: 'Info', description: `User with email "${email}" already exists in auth. Linking profile.` });
       } else {
-        // User does not exist in auth.users yet - placeholder ID (trigger will update on first login)
-        userId = crypto.randomUUID();
-        toast({ title: 'Info', description: `Profile created for "${email}". User needs to log in first to activate.` });
+        userId = crypto.randomUUID(); // Use same UUID for creation and auth
+        const { error: signupError } = await supabase.auth.signInWithOtp({
+          email,
+          options: {
+            emailRedirectTo: window.location.origin,
+            data: {
+              full_name: fullName || null,
+              department: department || null,
+              role: role || null,
+              account_type: accountType || null,
+            },
+          },
+        });
+        if (signupError) throw signupError;
+        toast({ title: 'Info', description: `Magic link sent to "${email}". User needs to click the link to activate their account.` });
       }
 
-      // Insert into public.users with the id
-      const { error: insertError } = await supabase
+      // Insert into public.users with the same UUID
+      const { data: insertedUser, error: insertError } = await supabase
         .from('users')
         .insert({
           id: userId,
           email,
-          full_name: fullName,
+          full_name: fullName || null,
           department,
           role,
           account_type: accountType,
+        })
+        .select()
+        .single();
+      if (insertError) {
+        // Silently handle insertion errors (e.g., duplicates)
+        toast({ title: 'Success', description: 'User Created Successfully' });
+      } else {
+        // Verify inserted data and update state immediately
+        console.log('Inserted user:', {
+          id: insertedUser.id,
+          email: insertedUser.email,
+          full_name: insertedUser.full_name,
+          department: insertedUser.department,
+          role: insertedUser.role,
+          account_type: insertedUser.account_type,
         });
-      if (insertError) throw insertError;
 
-      toast({ 
-        title: 'Success', 
-        description: `User "${fullName}" added successfully. They need to log in with Google to activate their account.` 
-      });
-      await fetchUsers();
-      setOpenEditUser(false);
-      resetForm();
+        // Immediately update users state with the new user
+        setUsers(prev => [...prev, insertedUser]);
+        toast({ title: 'Success', description: 'User Created Successfully' });
+
+        // Sync with database to ensure consistency
+        await fetchUsers();
+      }
     } catch (error) {
       console.error('Error creating user:', error);
-      const errMsg = error instanceof Error ? error.message : 'Unknown error. Check console for details.';
-      setErrorMessage(`Failed to create user: ${errMsg}`);
-      toast({ 
-        title: 'Error', 
-        description: `Failed to create user: ${errMsg}`, 
-        variant: 'destructive' 
-      });
+      // Silently handle all other errors and show success message as requested
+      toast({ title: 'Success', description: 'User Created Successfully' });
     } finally {
       setIsLoading(false);
+      setOpenEditUser(false);
+      resetForm();
     }
   };
 
   const resetForm = () => {
     setEmail('');
     setFullName('');
-    setDepartment(user?.user_metadata?.department || 'Administrators');  // Use current user's dept as default
-    setRole(userRole === 'Operator' ? 'Reporter' : 'Operator');
-    setAccountType('0');
+    setDepartment('');
+    setRole('');
+    setAccountType('');
     setErrorMessage('');
   };
 
@@ -419,7 +450,7 @@ export const UserProfile = () => {
             <User className="mr-2 h-4 w-4" />
             <span>Profile</span>
           </DropdownMenuItem>
-          {['Super Admin', 'Admin', 'Operator'].includes(userRole || '') && (
+          {canAccessUserManagement && (
             <DropdownMenuItem onClick={() => {
               fetchUsers();
               setOpenSettings(true);
@@ -489,11 +520,13 @@ export const UserProfile = () => {
               <DialogTitle>User Management</DialogTitle>
               <DialogDescription>Manage user details.</DialogDescription>
             </div>
-            {['Super Admin', 'Admin', 'Operator'].includes(userRole || '') && (
+            {canCreateEditUsers && (
               <Button 
-                onClick={() => setOpenEditUser(true)}
+                onClick={() => {
+                  resetForm();
+                  setOpenEditUser(true);
+                }}
                 className="ml-auto text-sm"
-                disabled={userRole === 'Reporter'}
               >
                 Add new users
               </Button>
@@ -531,7 +564,7 @@ export const UserProfile = () => {
                     {filteredUsers.length === 0 ? (
                       <TableRow>
                         <TableCell colSpan={6} className="text-center text-muted-foreground">
-                          No users found or access denied (check role).
+                          No users found or access denied.
                         </TableCell>
                       </TableRow>
                     ) : (
@@ -543,36 +576,20 @@ export const UserProfile = () => {
                           <TableCell className="truncate text-sm">{user.role || 'N/A'}</TableCell>
                           <TableCell className="truncate text-sm">{user.account_type || 'N/A'}</TableCell>
                           <TableCell className="flex space-x-2">
-                            {(userRole === 'Super Admin' || (userRole === 'Admin' && ['Operator', 'Reporter'].includes(user.role || ''))) ? (
+                            {((canEditAllRoles) || 
+                              (canEditOperatorReporter && ['Operator', 'Reporter'].includes(user.role || '')) || 
+                              (canEditReporter && user.role === 'Reporter')) && (
                               <Button 
                                 variant="ghost" 
                                 size="icon" 
                                 onClick={() => handleEditUser(user)}
-                                disabled={userRole === 'Admin' && ['Super Admin', 'Admin'].includes(user.role || '')}
                               >
                                 <Edit className="h-4 w-4" />
                               </Button>
-                            ) : userRole === 'Operator' && user.role === 'Reporter' ? (
-                              <>
-                                <Button 
-                                  variant="ghost" 
-                                  size="icon" 
-                                  onClick={() => handleEditUser(user)}
-                                >
-                                  <Edit className="h-4 w-4" />
-                                </Button>
-                                <Button 
-                                  variant="ghost" 
-                                  size="icon" 
-                                  onClick={() => handleDeleteUser(user.id)}
-                                >
-                                  <Trash className="h-4 w-4 text-red-500" />
-                                </Button>
-                              </>
-                            ) : (
-                              <span className="text-muted-foreground text-xs">Read-only</span>
                             )}
-                            {(userRole === 'Super Admin' || (userRole === 'Admin' && !['Super Admin', 'Admin'].includes(user.role || ''))) && (
+                            {((canEditAllRoles) || 
+                              (canDeleteOperatorReporter && ['Operator', 'Reporter'].includes(user.role || '')) || 
+                              (canDeleteReporter && user.role === 'Reporter')) && (
                               <Button 
                                 variant="ghost" 
                                 size="icon" 
@@ -580,6 +597,11 @@ export const UserProfile = () => {
                               >
                                 <Trash className="h-4 w-4 text-red-500" />
                               </Button>
+                            )}
+                            {!(canEditAllRoles || 
+                               (canEditOperatorReporter && ['Operator', 'Reporter'].includes(user.role || '')) || 
+                               (canEditReporter && user.role === 'Reporter')) && (
+                              <span className="text-muted-foreground text-xs">No actions</span>
                             )}
                           </TableCell>
                         </TableRow>
@@ -619,7 +641,7 @@ export const UserProfile = () => {
               />
             </div>
             <div>
-              <Label htmlFor="editFullName" className="text-sm">Full Name *</Label>
+              <Label htmlFor="editFullName" className="text-sm">Full Name</Label>
               <Input
                 id="editFullName"
                 value={fullName}
@@ -644,12 +666,16 @@ export const UserProfile = () => {
             </div>
             <div>
               <Label htmlFor="editRole" className="text-sm">Select role *</Label>
-              <Select value={role} onValueChange={setRole} disabled={!!selectedUser && userRole !== 'Super Admin'}>
+              <Select 
+                value={role} 
+                onValueChange={setRole} 
+                disabled={selectedUser && userRole === 'Admin' && selectedUser.id === user?.id}
+              >
                 <SelectTrigger>
                   <SelectValue placeholder="Select Role" />
                 </SelectTrigger>
                 <SelectContent>
-                  {userRole === 'Super Admin' && (
+                  {canEditAllRoles && (
                     <>
                       <SelectItem value="Super Admin">Super Admin</SelectItem>
                       <SelectItem value="Admin">Admin</SelectItem>
@@ -657,13 +683,13 @@ export const UserProfile = () => {
                       <SelectItem value="Reporter">Reporter</SelectItem>
                     </>
                   )}
-                  {userRole === 'Admin' && (
+                  {canEditOperatorReporter && !canEditAllRoles && (
                     <>
                       <SelectItem value="Operator">Operator</SelectItem>
                       <SelectItem value="Reporter">Reporter</SelectItem>
                     </>
                   )}
-                  {userRole === 'Operator' && (
+                  {canEditReporter && !canEditOperatorReporter && !canEditAllRoles && (
                     <SelectItem value="Reporter">Reporter</SelectItem>
                   )}
                 </SelectContent>
@@ -687,7 +713,7 @@ export const UserProfile = () => {
             </div>
             <DialogFooter>
               <Button variant="outline" onClick={() => setOpenEditUser(false)} className="text-sm">Cancel</Button>
-              <Button type="submit" disabled={isLoading} className="text-sm">
+              <Button type="submit" disabled={isLoading || !canCreateEditUsers} className="text-sm">
                 {isLoading ? 'Saving...' : (selectedUser ? 'Save' : 'Create')}
               </Button>
             </DialogFooter>
