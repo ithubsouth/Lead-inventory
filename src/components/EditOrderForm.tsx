@@ -167,6 +167,13 @@ const EditOrderForm: React.FC<EditOrderFormProps> = ({ order, onSave, onCancel }
     try {
       setLoading(true);
 
+      // Get the authenticated user's email
+      const { data: userData, error: userError } = await supabase.auth.getUser();
+      if (userError || !userData?.user?.email) {
+        throw new Error('Failed to retrieve authenticated user email');
+      }
+      const userEmail = userData.user.email;
+
       // Fetch original devices for potential rollback
       const { data: fetchedOriginalDevices, error: fetchError } = await supabase
         .from('devices')
@@ -196,6 +203,7 @@ const EditOrderForm: React.FC<EditOrderFormProps> = ({ order, onSave, onCancel }
           asset_statuses: validAssetStatuses,
           updated_at: new Date().toISOString(),
           editHistory: updatedEditHistory,
+          updated_by: userEmail, // Use email for updated_by
         })
         .eq('id', formData.id);
       if (orderError) throw orderError;
@@ -222,6 +230,8 @@ const EditOrderForm: React.FC<EditOrderFormProps> = ({ order, onSave, onCancel }
           is_deleted: false,
           configuration: formData.configuration || null,
           asset_status: validAssetStatuses[i] || 'Fresh',
+          created_by: existingDevice?.created_by || userEmail, // Preserve existing created_by or use email
+          updated_by: userEmail, // Use email for updated_by
         };
       });
 
@@ -245,7 +255,7 @@ const EditOrderForm: React.FC<EditOrderFormProps> = ({ order, onSave, onCancel }
       if (removedSerials.length > 0) {
         const { error: deleteError } = await supabase
           .from('devices')
-          .update({ is_deleted: true, updated_at: new Date().toISOString() })
+          .update({ is_deleted: true, updated_at: new Date().toISOString(), updated_by: userEmail })
           .in('serial_number', removedSerials)
           .eq('order_id', formData.id);
         if (deleteError) throw deleteError;
@@ -270,6 +280,7 @@ const EditOrderForm: React.FC<EditOrderFormProps> = ({ order, onSave, onCancel }
           asset_statuses: originalOrder.asset_statuses || [],
           updated_at: new Date().toISOString(),
           editHistory: originalOrder.editHistory || [],
+          updated_by: userEmail, // Use email for rollback
         };
         const { error: rollbackError } = await supabase
           .from('orders')
@@ -288,7 +299,7 @@ const EditOrderForm: React.FC<EditOrderFormProps> = ({ order, onSave, onCancel }
           if (device.id) {
             const { error: restoreError } = await supabase
               .from('devices')
-              .update({ ...device, updated_at: new Date().toISOString() })
+              .update({ ...device, updated_at: new Date().toISOString(), updated_by: userEmail })
               .eq('id', device.id);
             if (restoreError) {
               console.error('Failed to restore device:', restoreError);
