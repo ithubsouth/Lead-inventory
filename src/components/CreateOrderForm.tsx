@@ -91,6 +91,13 @@ const CreateOrderForm: React.FC<CreateOrderFormProps> = ({
 
   const generateId = () => Math.random().toString(36).substr(2, 9);
 
+  // Generate sales order with format "SO-<digit>-<random-string>"
+  const generateSalesOrder = () => {
+    const digit = Math.floor(Math.random() * 10); // Random single digit 0-9
+    const randomString = Math.random().toString(36).substr(2, 5); // 5-character random string
+    return `SO-${digit}-${randomString}`;
+  };
+
   const addTablet = () => {
     const newTablet: TabletItem = {
       id: generateId(),
@@ -228,7 +235,7 @@ const CreateOrderForm: React.FC<CreateOrderFormProps> = ({
       const materialType = (orderType === 'Stock' || orderType === 'Return') ? 'Inward' : 'Outward';
 
       for (const tablet of validTablets) {
-        const salesOrderId = salesOrder || generateDummyId('SO');
+        const salesOrderId = salesOrder || generateSalesOrder();
         const tabletSerials = tablet.serialNumbers.filter(sn => sn.trim());
         const { data: orderData, error: orderError } = await supabase
           .from('orders')
@@ -255,8 +262,9 @@ const CreateOrderForm: React.FC<CreateOrderFormProps> = ({
           .single();
         if (orderError) throw new Error(`Order insertion failed: ${orderError.message}`);
 
+        // Create device records for each quantity, using empty string if no serial is provided
         for (let i = 0; i < tablet.quantity; i++) {
-          const serialNumber = tablet.serialNumbers[i]?.trim() || generateDummyId('SN');
+          const serialNumber = tabletSerials[i] || ""; // Use empty string if no serial is provided
           const assetStatus = tablet.assetStatuses[i] || 'Fresh';
           const { error: deviceError } = await supabase
             .from('devices')
@@ -284,7 +292,7 @@ const CreateOrderForm: React.FC<CreateOrderFormProps> = ({
       }
 
       for (const tv of validTVs) {
-        const salesOrderId = salesOrder || generateDummyId('SO');
+        const salesOrderId = salesOrder || generateSalesOrder();
         const tvSerials = tv.serialNumbers.filter(sn => sn.trim());
         const { data: orderData, error: orderError } = await supabase
           .from('orders')
@@ -311,8 +319,9 @@ const CreateOrderForm: React.FC<CreateOrderFormProps> = ({
           .single();
         if (orderError) throw new Error(`Order insertion failed: ${orderError.message}`);
 
+        // Create device records for each quantity, using empty string if no serial is provided
         for (let i = 0; i < tv.quantity; i++) {
-          const serialNumber = tv.serialNumbers[i]?.trim() || generateDummyId('SN');
+          const serialNumber = tvSerials[i] || ""; // Use empty string if no serial is provided
           const assetStatus = tv.assetStatuses[i] || 'Fresh';
           const { error: deviceError } = await supabase
             .from('devices')
@@ -512,7 +521,7 @@ Stock,TV,Hyundai TV - 43",1,Bangalore,SO002,DEAL002,Another School,NUC002,,Andro
                 id="salesOrder"
                 value={salesOrder}
                 onChange={(e) => setSalesOrder(e.target.value)}
-                placeholder="Auto-generated if empty"
+                placeholder="Auto-generated if empty (e.g., SO-0-abcde)"
                 style={{ fontSize: '12px', width: '100%', border: '1px solid #d1d5db', borderRadius: '4px', padding: '8px' }}
               />
             </div>

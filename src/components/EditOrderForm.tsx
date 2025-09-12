@@ -38,54 +38,20 @@ const EditOrderForm: React.FC<EditOrderFormProps> = ({ order, onSave, onCancel }
       asset_statuses: prev.asset_statuses || Array(prev.quantity).fill('Fresh'),
       editHistory: prev.editHistory || [],
     }));
-    console.log('assetStatuses:', assetStatuses);
   }, [order]);
 
   const generateEditHistoryEntry = (originalOrder: Order, updatedOrder: Order): EditHistoryEntry | null => {
     const changedFields: string[] = [];
     const changes: string[] = [];
 
-    if (originalOrder.sales_order !== updatedOrder.sales_order) {
-      changedFields.push('sales_order');
-      changes.push(`Sales Order: "${originalOrder.sales_order || 'Empty'}" → "${updatedOrder.sales_order || 'Empty'}"`);
-    }
-    if (originalOrder.deal_id !== updatedOrder.deal_id) {
-      changedFields.push('deal_id');
-      changes.push(`Deal ID: "${originalOrder.deal_id || 'Empty'}" → "${updatedOrder.deal_id || 'Empty'}"`);
-    }
-    if (originalOrder.school_name !== updatedOrder.school_name) {
-      changedFields.push('school_name');
-      changes.push(`School Name: "${originalOrder.school_name || 'Empty'}" → "${updatedOrder.school_name || 'Empty'}"`);
-    }
-    if (originalOrder.nucleus_id !== updatedOrder.nucleus_id) {
-      changedFields.push('nucleus_id');
-      changes.push(`Nucleus ID: "${originalOrder.nucleus_id || 'Empty'}" → "${updatedOrder.nucleus_id || 'Empty'}"`);
-    }
-    if (originalOrder.quantity !== updatedOrder.quantity) {
-      changedFields.push('quantity');
-      changes.push(`Quantity: ${originalOrder.quantity} → ${updatedOrder.quantity}`);
-    }
-    if (originalOrder.warehouse !== updatedOrder.warehouse) {
-      changedFields.push('warehouse');
-      changes.push(`Warehouse: "${originalOrder.warehouse}" → "${updatedOrder.warehouse}"`);
-    }
-    if (JSON.stringify(originalOrder.serial_numbers) !== JSON.stringify(updatedOrder.serial_numbers)) {
+    if (originalOrder.serial_numbers?.length !== updatedOrder.serial_numbers?.length) {
       changedFields.push('serial_numbers');
-      changes.push(`Serial Numbers: Updated (${originalOrder.serial_numbers?.length || 0} → ${updatedOrder.serial_numbers?.length || 0} entries)`);
-    }
-    if (originalOrder.product !== updatedOrder.product) {
-      changedFields.push('product');
-      changes.push(`Product: "${originalOrder.product || 'Empty'}" → "${updatedOrder.product || 'Empty'}"`);
-    }
-    if (originalOrder.configuration !== updatedOrder.configuration) {
-      changedFields.push('configuration');
-      changes.push(`Configuration: "${originalOrder.configuration || 'Empty'}" → "${updatedOrder.configuration || 'Empty'}"`);
+      changes.push(`Serial Numbers: ${originalOrder.serial_numbers?.length || 0} → ${updatedOrder.serial_numbers?.length || 0}`);
     }
     if (JSON.stringify(originalOrder.asset_statuses) !== JSON.stringify(updatedOrder.asset_statuses)) {
       changedFields.push('asset_statuses');
-      changes.push(`Asset Statuses: Updated (${originalOrder.asset_statuses?.length || 0} → ${updatedOrder.asset_statuses?.length || 0} entries)`);
+      changes.push('Asset Statuses updated');
     }
-
     if (changes.length === 0) return null;
 
     return {
@@ -97,46 +63,54 @@ const EditOrderForm: React.FC<EditOrderFormProps> = ({ order, onSave, onCancel }
 
   const addSerialNumber = (serial: string, assetStatus: string = 'Fresh') => {
     if (serial.trim()) {
-      setFormData(prev => ({
-        ...prev,
-        serial_numbers: [...(prev.serial_numbers || []), serial.trim()],
-        asset_statuses: [...(prev.asset_statuses || []), assetStatus],
-        quantity: (prev.serial_numbers?.length || 0) + 1,
-      }));
+      setFormData(prev => {
+        const newSerials = [...(prev.serial_numbers || []), serial.trim()];
+        const newStatuses = [...(prev.asset_statuses || []), assetStatus];
+        return {
+          ...prev,
+          serial_numbers: newSerials,
+          asset_statuses: newStatuses,
+          quantity: Math.max(prev.quantity || 1, newSerials.length),
+        };
+      });
       setNewSerialNumber('');
       setNewAssetStatus('Fresh');
     }
   };
 
   const removeSerialNumber = (index: number) => {
-    setFormData(prev => ({
-      ...prev,
-      serial_numbers: (prev.serial_numbers || []).filter((_, i) => i !== index),
-      asset_statuses: (prev.asset_statuses || []).filter((_, i) => i !== index),
-      quantity: Math.max(1, (prev.quantity || 1) - 1),
-    }));
+    setFormData(prev => {
+      if ((prev.serial_numbers?.length || 0) <= index) return prev;
+      const newSerials = (prev.serial_numbers || []).filter((_, i) => i !== index);
+      const newStatuses = (prev.asset_statuses || []).filter((_, i) => i !== index);
+      return {
+        ...prev,
+        serial_numbers: newSerials,
+        asset_statuses: newStatuses,
+        quantity: Math.max(1, newSerials.length),
+      };
+    });
   };
 
   const updateSerialNumber = (index: number, value: string) => {
     const trimmedValue = value.trim();
     setFormData(prev => {
-      const newSerialNumbers = [...(prev.serial_numbers || [])];
-      newSerialNumbers[index] = trimmedValue;
-      return { ...prev, serial_numbers: newSerialNumbers };
+      const newSerials = [...(prev.serial_numbers || [])];
+      newSerials[index] = trimmedValue;
+      return { ...prev, serial_numbers: newSerials };
     });
   };
 
   const updateAssetStatus = (index: number, value: string) => {
-    console.log(`Updating asset status for index ${index} to ${value}`);
     setFormData(prev => {
-      const newAssetStatuses = [...(prev.asset_statuses || [])];
-      newAssetStatuses[index] = value;
-      return { ...prev, asset_statuses: newAssetStatuses };
+      const newStatuses = [...(prev.asset_statuses || [])];
+      newStatuses[index] = value;
+      return { ...prev, asset_statuses: newStatuses };
     });
   };
 
   const handleScanSuccess = (result: string) => {
-    if (currentSerialIndex !== null) {
+    if (currentSerialIndex !== null && (formData.serial_numbers?.length || 0) > currentSerialIndex) {
       updateSerialNumber(currentSerialIndex, result);
       setCurrentSerialIndex(null);
     } else {
@@ -161,50 +135,22 @@ const EditOrderForm: React.FC<EditOrderFormProps> = ({ order, onSave, onCancel }
 
   const validateForm = () => {
     if (!formData.order_type) {
-      toast({
-        title: 'Error',
-        description: 'Order type is required',
-        variant: 'destructive',
-      });
+      toast({ title: 'Error', description: 'Order type is required', variant: 'destructive' });
       return false;
     }
     if (!formData.school_name?.trim()) {
-      toast({
-        title: 'Error',
-        description: 'School Name is required',
-        variant: 'destructive',
-      });
+      toast({ title: 'Error', description: 'School Name is required', variant: 'destructive' });
       return false;
     }
     if (!formData.warehouse) {
-      toast({
-        title: 'Error',
-        description: 'Warehouse is required',
-        variant: 'destructive',
-      });
-      return false;
-    }
-    if (formData.quantity < 1) {
-      toast({
-        title: 'Error',
-        description: 'Quantity must be at least 1',
-        variant: 'destructive',
-      });
+      toast({ title: 'Error', description: 'Warehouse is required', variant: 'destructive' });
       return false;
     }
     const validSerials = (formData.serial_numbers || []).filter(sn => sn.trim());
-    if (validSerials.length !== formData.quantity) {
+    if (validSerials.length > formData.quantity) {
       toast({
         title: 'Error',
-        description: `Number of serial numbers (${validSerials.length}) must match quantity (${formData.quantity})`,
-        variant: 'destructive',
-      });
-      return false;
-    }
-    if ((formData.asset_statuses || []).length !== formData.quantity) {
-      toast({
-        title: 'Error',
-        description: `Number of asset statuses (${(formData.asset_statuses || []).length}) must match quantity (${formData.quantity})`,
+        description: `Number of serial numbers (${validSerials.length}) exceeds quantity (${formData.quantity})`,
         variant: 'destructive',
       });
       return false;
@@ -215,22 +161,28 @@ const EditOrderForm: React.FC<EditOrderFormProps> = ({ order, onSave, onCancel }
   const handleSave = async () => {
     if (!validateForm()) return;
 
+    let originalDevices: any[] = [];
+    let updateSucceeded = false;
+
     try {
       setLoading(true);
+
+      // Fetch original devices for potential rollback
+      const { data: fetchedOriginalDevices, error: fetchError } = await supabase
+        .from('devices')
+        .select('*')
+        .eq('order_id', formData.id);
+      if (fetchError) throw fetchError;
+      originalDevices = fetchedOriginalDevices || [];
+
+      // Prepare history and valid data
       const validSerials = (formData.serial_numbers || []).filter(sn => sn.trim());
-      const validAssetStatuses = formData.asset_statuses || Array(formData.quantity).fill('Fresh');
+      const validAssetStatuses = (formData.asset_statuses || []).slice(0, validSerials.length).concat(Array(Math.max(0, formData.quantity - validSerials.length)).fill('Fresh'));
       const historyEntry = generateEditHistoryEntry(originalOrder, formData);
       const updatedEditHistory = [...(formData.editHistory || [])];
-      if (historyEntry) {
-        updatedEditHistory.push(historyEntry);
-      }
+      if (historyEntry) updatedEditHistory.push(historyEntry);
 
-      const { error: deleteError } = await supabase
-        .from('devices')
-        .delete()
-        .eq('order_id', formData.id);
-      if (deleteError) throw deleteError;
-
+      // Update order
       const { error: orderError } = await supabase
         .from('orders')
         .update({
@@ -243,47 +195,117 @@ const EditOrderForm: React.FC<EditOrderFormProps> = ({ order, onSave, onCancel }
           serial_numbers: validSerials,
           asset_statuses: validAssetStatuses,
           updated_at: new Date().toISOString(),
-          order_type: formData.order_type,
-          asset_type: formData.asset_type,
-          product: formData.product || null,
-          configuration: formData.configuration || null,
+          editHistory: updatedEditHistory,
         })
         .eq('id', formData.id);
       if (orderError) throw orderError;
 
-      for (let i = 0; i < formData.quantity; i++) {
-        const serialNumber = validSerials[i] || generateDummyId('SN');
-        const { error: deviceError } = await supabase
-          .from('devices')
-          .insert({
-            asset_type: formData.asset_type,
-            model: formData.model,
-            product: formData.asset_type === 'Tablet' || formData.asset_type === 'TV' ? formData.product || null : null,
-            serial_number: serialNumber.trim(),
-            warehouse: formData.warehouse,
-            sales_order: formData.sales_order || generateDummyId('SO'),
-            deal_id: formData.deal_id || null,
-            school_name: formData.school_name,
-            nucleus_id: formData.nucleus_id || null,
-            status: formData.order_type === 'Inward' ? 'Available' : 'Assigned',
-            order_id: formData.id,
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString(),
-            is_deleted: false,
-            configuration: formData.configuration || null,
-            asset_status: validAssetStatuses[i] || 'Fresh',
-          });
-        if (deviceError) throw deviceError;
+      // Update or insert devices, creating new records for non-existing serials
+      const existingDeviceMap = new Map(originalDevices.map(d => [d.serial_number, d]));
+      const newDevices = validSerials.map((serial, i) => {
+        const existingDevice = existingDeviceMap.get(serial);
+        return {
+          id: existingDevice?.id || generateDummyId('DEV'),
+          asset_type: formData.asset_type,
+          model: formData.model,
+          product: (formData.asset_type === 'Tablet' || formData.asset_type === 'TV') ? formData.product || null : null,
+          serial_number: serial.trim(),
+          warehouse: formData.warehouse,
+          sales_order: formData.sales_order || generateDummyId('SO'),
+          deal_id: formData.deal_id || null,
+          school_name: formData.school_name,
+          nucleus_id: formData.nucleus_id || null,
+          status: formData.order_type === 'Inward' ? 'Available' : 'Assigned',
+          order_id: formData.id,
+          created_at: existingDevice?.created_at || new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+          is_deleted: false,
+          configuration: formData.configuration || null,
+          asset_status: validAssetStatuses[i] || 'Fresh',
+        };
+      });
+
+      for (const device of newDevices) {
+        if (device.id && existingDeviceMap.has(device.serial_number)) {
+          const { error: updateError } = await supabase
+            .from('devices')
+            .update(device)
+            .eq('id', device.id);
+          if (updateError) throw updateError;
+        } else {
+          const { error: insertError } = await supabase
+            .from('devices')
+            .insert(device);
+          if (insertError) throw insertError;
+        }
       }
 
+      // Mark removed devices as deleted
+      const removedSerials = (originalOrder.serial_numbers || []).filter(sn => !validSerials.includes(sn));
+      if (removedSerials.length > 0) {
+        const { error: deleteError } = await supabase
+          .from('devices')
+          .update({ is_deleted: true, updated_at: new Date().toISOString() })
+          .in('serial_number', removedSerials)
+          .eq('order_id', formData.id);
+        if (deleteError) throw deleteError;
+      }
+
+      updateSucceeded = true;
       const updatedFormData = { ...formData, editHistory: updatedEditHistory };
       onSave(updatedFormData);
-      toast({ title: 'Success', description: 'Order updated successfully' });
+      toast({ title: 'Success', description: 'Order and devices updated successfully' });
     } catch (error) {
       console.error('Error updating order:', error);
+
+      if (updateSucceeded) {
+        const rollbackFields = {
+          sales_order: originalOrder.sales_order || null,
+          deal_id: originalOrder.deal_id || null,
+          school_name: originalOrder.school_name,
+          nucleus_id: originalOrder.nucleus_id || null,
+          quantity: originalOrder.quantity,
+          warehouse: originalOrder.warehouse,
+          serial_numbers: originalOrder.serial_numbers || [],
+          asset_statuses: originalOrder.asset_statuses || [],
+          updated_at: new Date().toISOString(),
+          editHistory: originalOrder.editHistory || [],
+        };
+        const { error: rollbackError } = await supabase
+          .from('orders')
+          .update(rollbackFields)
+          .eq('id', formData.id);
+        if (rollbackError) {
+          console.error('Failed to rollback order:', rollbackError);
+          toast({
+            title: 'Warning',
+            description: 'Order rollback failed. Contact admin.',
+            variant: 'destructive',
+          });
+        }
+
+        for (const device of originalDevices) {
+          if (device.id) {
+            const { error: restoreError } = await supabase
+              .from('devices')
+              .update({ ...device, updated_at: new Date().toISOString() })
+              .eq('id', device.id);
+            if (restoreError) {
+              console.error('Failed to restore device:', restoreError);
+              toast({
+                title: 'Critical Error',
+                description: 'Device restore failed. Contact admin.',
+                variant: 'destructive',
+              });
+              break;
+            }
+          }
+        }
+      }
+
       toast({
         title: 'Error',
-        description: 'Failed to update order. Please try again.',
+        description: 'Failed to update order. Changes rolled back.',
         variant: 'destructive',
       });
     } finally {
@@ -293,6 +315,15 @@ const EditOrderForm: React.FC<EditOrderFormProps> = ({ order, onSave, onCancel }
 
   return (
     <div className='space-y-4 relative'>
+      <Button
+        variant="ghost"
+        size="sm"
+        className="absolute right-0 top-0 rounded-full p-1 hover:bg-muted z-10"
+        onClick={onCancel}
+        disabled={loading}
+      >
+        <X className="h-4 w-4" />
+      </Button>
       <div className='grid grid-cols-1 md:grid-cols-2 gap-3'>
         <Card>
           <CardHeader>
@@ -436,32 +467,18 @@ const EditOrderForm: React.FC<EditOrderFormProps> = ({ order, onSave, onCancel }
               }}
               className='text-sm'
             />
-              <Select
-                key={`new-asset-status-${newAssetStatus}`}
-                value={newAssetStatus}
-                onValueChange={(value) => {
-                  console.log('New asset status selected:', value);
-                  setNewAssetStatus(value);
-                }}
-              >
-              <SelectTrigger
-                className='text-sm w-32'
-                onClick={() => console.log('New asset status dropdown clicked')}
-              >
+            <Select
+              key={`new-asset-status-${newAssetStatus}`}
+              value={newAssetStatus}
+              onValueChange={setNewAssetStatus}
+            >
+              <SelectTrigger className='text-sm w-32'>
                 <SelectValue placeholder='Asset Status' />
               </SelectTrigger>
               <SelectContent className='z-[1000] bg-white shadow-lg border min-w-[120px]'>
-                {assetStatuses.length > 0 ? (
-                  assetStatuses.map(status => (
-                    <SelectItem key={status} value={status} className='text-sm'>{status}</SelectItem>
-                  ))
-                ) : (
-                  <>
-                    <SelectItem value='Fresh' className='text-sm'>Fresh</SelectItem>
-                    <SelectItem value='Refurb' className='text-sm'>Refurb</SelectItem>
-                    <SelectItem value='Scrap' className='text-sm'>Scrap</SelectItem>
-                  </>
-                )}
+                {assetStatuses.map(status => (
+                  <SelectItem key={status} value={status} className='text-sm'>{status}</SelectItem>
+                ))}
               </SelectContent>
             </Select>
             <Button
@@ -500,24 +517,13 @@ const EditOrderForm: React.FC<EditOrderFormProps> = ({ order, onSave, onCancel }
                       value={formData.asset_statuses?.[index] || 'Fresh'}
                       onValueChange={(value) => updateAssetStatus(index, value)}
                     >
-                      <SelectTrigger
-                        className='text-sm w-24'
-                        onClick={() => console.log(`Asset status dropdown clicked for index ${index}`)}
-                      >
+                      <SelectTrigger className='text-sm w-24'>
                         <SelectValue placeholder='Asset Status' />
                       </SelectTrigger>
                       <SelectContent className='z-[1000] bg-white shadow-lg border min-w-[120px]'>
-                        {assetStatuses.length > 0 ? (
-                          assetStatuses.map(status => (
-                            <SelectItem key={status} value={status} className='text-sm'>{status}</SelectItem>
-                          ))
-                        ) : (
-                          <>
-                            <SelectItem value='Fresh' className='text-sm'>Fresh</SelectItem>
-                            <SelectItem value='Refurb' className='text-sm'>Refurb</SelectItem>
-                            <SelectItem value='Scrap' className='text-sm'>Scrap</SelectItem>
-                          </>
-                        )}
+                        {assetStatuses.map(status => (
+                          <SelectItem key={status} value={status} className='text-sm'>{status}</SelectItem>
+                        ))}
                       </SelectContent>
                     </Select>
                     <Button
@@ -539,7 +545,7 @@ const EditOrderForm: React.FC<EditOrderFormProps> = ({ order, onSave, onCancel }
                     </Button>
                   </div>
                 ))}
-                {Array.from({ length: formData.quantity - (formData.serial_numbers?.length || 0) }, (_, i) => (
+                {Array.from({ length: Math.max(0, formData.quantity - (formData.serial_numbers?.length || 0)) }, (_, i) => (
                   <div key={`empty-${i}`} className='flex items-center gap-1 bg-muted p-1 rounded'>
                     <Input
                       value=''
@@ -552,24 +558,13 @@ const EditOrderForm: React.FC<EditOrderFormProps> = ({ order, onSave, onCancel }
                       value={formData.asset_statuses?.[(formData.serial_numbers?.length || 0) + i] || 'Fresh'}
                       onValueChange={(value) => updateAssetStatus((formData.serial_numbers?.length || 0) + i, value)}
                     >
-                      <SelectTrigger
-                        className='text-sm w-24'
-                        onClick={() => console.log(`Empty asset status dropdown clicked for index ${(formData.serial_numbers?.length || 0) + i}`)}
-                      >
+                      <SelectTrigger className='text-sm w-24'>
                         <SelectValue placeholder='Asset Status' />
                       </SelectTrigger>
                       <SelectContent className='z-[1000] bg-white shadow-lg border min-w-[120px]'>
-                        {assetStatuses.length > 0 ? (
-                          assetStatuses.map(status => (
-                            <SelectItem key={status} value={status} className='text-sm'>{status}</SelectItem>
-                          ))
-                        ) : (
-                          <>
-                            <SelectItem value='Fresh' className='text-sm'>Fresh</SelectItem>
-                            <SelectItem value='Refurb' className='text-sm'>Refurb</SelectItem>
-                            <SelectItem value='Scrap' className='text-sm'>Scrap</SelectItem>
-                          </>
-                        )}
+                        {assetStatuses.map(status => (
+                          <SelectItem key={status} value={status} className='text-sm'>{status}</SelectItem>
+                        ))}
                       </SelectContent>
                     </Select>
                     <Button
