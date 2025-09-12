@@ -229,6 +229,13 @@ const CreateOrderForm: React.FC<CreateOrderFormProps> = ({
 
     setLoading(true);
     try {
+      // Get the authenticated user's email
+      const { data: userData, error: userError } = await supabase.auth.getUser();
+      if (userError || !userData?.user?.email) {
+        throw new Error('Failed to retrieve authenticated user email');
+      }
+      const userEmail = userData.user.email; // Get the user's email
+
       console.log('Creating order with:', { orderType, salesOrder, dealId, nucleusId, schoolName, tablets, tvs });
       const validTablets = Tablets ? tablets.filter(t => t.model && t.location && t.quantity > 0) : [];
       const validTVs = TVs ? tvs.filter(t => t.model && t.location && t.quantity > 0) : [];
@@ -257,6 +264,8 @@ const CreateOrderForm: React.FC<CreateOrderFormProps> = ({
             is_deleted: false,
             configuration: tablet.configuration || null,
             product: tablet.product || null,
+            created_by: userEmail, // Use email for created_by
+            updated_by: userEmail, // Use email for updated_by
           })
           .select()
           .single();
@@ -286,6 +295,8 @@ const CreateOrderForm: React.FC<CreateOrderFormProps> = ({
               configuration: tablet.configuration || null,
               product: tablet.product || null,
               asset_status: assetStatus,
+              created_by: userEmail, // Use email for created_by
+              updated_by: userEmail, // Use email for updated_by
             });
           if (deviceError) throw new Error(`Device insertion failed: ${deviceError.message}`);
         }
@@ -314,6 +325,8 @@ const CreateOrderForm: React.FC<CreateOrderFormProps> = ({
             is_deleted: false,
             configuration: tv.configuration || null,
             product: tv.product || null,
+            created_by: userEmail, // Use email for created_by
+            updated_by: userEmail, // Use email for updated_by
           })
           .select()
           .single();
@@ -343,6 +356,8 @@ const CreateOrderForm: React.FC<CreateOrderFormProps> = ({
               configuration: tv.configuration || null,
               product: tv.product || null,
               asset_status: assetStatus,
+              created_by: userEmail, // Use email for created_by
+              updated_by: userEmail, // Use email for updated_by
             });
           if (deviceError) throw new Error(`Device insertion failed: ${deviceError.message}`);
         }
