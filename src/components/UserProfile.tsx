@@ -370,6 +370,7 @@ export const UserProfile = () => {
 
         // Sync with database to ensure consistency
         await fetchUsers();
+        return;
       }
     } catch (error) {
       console.error('Error creating user:', error);
