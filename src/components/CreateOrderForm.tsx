@@ -85,7 +85,7 @@ const CreateOrderForm: React.FC<CreateOrderFormProps> = ({
   ];
   const tvConfigurations = ['Non Smart TV', 'Smart TV', 'Android TV', 'Web OS'];
   const products = ['Lead', 'Propel', 'Pinnacle', 'Techbook', 'BoardAce'];
-  const sdCardSizes = ['64 GB', '128 GB'];
+  const sdCardSizes = ['64 GB', '128 GB', '256 GB', '512 GB'];
   const locations = ['Trichy', 'Bangalore', 'Hyderabad', 'Kolkata', 'Bhiwandi', 'Ghaziabad', 'Zirakpur', 'Indore', 'Jaipur'];
   const assetStatuses = ['Fresh', 'Refurb', 'Scrap'];
 
