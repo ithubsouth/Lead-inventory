@@ -636,23 +636,23 @@ const OrdersTable: React.FC<OrdersTableProps> = ({
           </div>
         )}
 
-        {showEditDialog && (
-          <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
-            <div style={{ background: '#fff', borderRadius: '8px', maxHeight: '80vh', overflowY: 'auto', padding: '16px', maxWidth: '600px', width: '100%' }}>
-              <h2 style={{ fontSize: '16px', marginBottom: '16px' }}>Edit Order</h2>
-              {editingOrder && (
-                <EditOrderForm
-                  order={editingOrder}
-                  onSave={handleEditSave}
-                  onCancel={() => {
-                    setShowEditDialog(false);
-                    setEditingOrder(null);
-                  }}
-                />
-              )}
-            </div>
-          </div>
-        )}
+{showEditDialog && (
+  <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
+    <div style={{ background: '#fff', borderRadius: '8px', height: '80vh', width: '80vw', overflowY: 'auto', padding: '16px' }}>
+      <h2 style={{ fontSize: '16px', marginBottom: '16px' }}>Edit Order</h2>
+      {editingOrder && (
+        <EditOrderForm
+          order={editingOrder}
+          onSave={handleEditSave}
+          onCancel={() => {
+            setShowEditDialog(false);
+            setEditingOrder(null);
+          }}
+        />
+      )}
+    </div>
+  </div>
+)}
 
         {showStatusDialog && (
           <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
