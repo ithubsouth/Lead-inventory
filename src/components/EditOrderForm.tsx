@@ -23,6 +23,7 @@ const EditOrderForm: React.FC<EditOrderFormProps> = ({ order, onSave, onCancel }
     const data = { ...order };
     data.serial_numbers = data.serial_numbers?.length > 0 ? data.serial_numbers : Array(data.quantity || 1).fill('');
     data.asset_statuses = data.asset_statuses || Array(data.quantity || 1).fill('Fresh');
+    data.asset_group = data.asset_group || 'NFA'; // Default to NFA if not set
     return data;
   });
   const [originalOrder] = useState<Order>({ ...order });
@@ -61,6 +62,7 @@ const EditOrderForm: React.FC<EditOrderFormProps> = ({ order, onSave, onCancel }
   const products = ['Lead', 'Propel', 'Pinnacle', 'Techbook', 'BoardAce'];
   const locations = ['Trichy', 'Bangalore', 'Hyderabad', 'Kolkata', 'Bhiwandi', 'Ghaziabad', 'Zirakpur', 'Indore', 'Jaipur'];
   const assetStatuses = ['Fresh', 'Refurb', 'Scrap'];
+  const assetGroups = ['NFA', 'FA'];
 
   const serialNumbers = formData.serial_numbers || [];
   const filledCount = serialNumbers.filter(sn => sn.trim()).length;
@@ -141,6 +143,18 @@ const EditOrderForm: React.FC<EditOrderFormProps> = ({ order, onSave, onCancel }
       toast({ title: 'Error', description: 'Warehouse is required', variant: 'destructive' });
       return false;
     }
+    if (!formData.asset_group) {
+      toast({ title: 'Error', description: 'Asset Group is required', variant: 'destructive' });
+      return false;
+    }
+    if (!assetGroups.includes(formData.asset_group)) {
+      toast({
+        title: 'Validation Error',
+        description: `Invalid asset group: ${formData.asset_group}. Must be FA or NFA.`,
+        variant: 'destructive',
+      });
+      return false;
+    }
     const validStatusesCount = (formData.asset_statuses || []).length;
     if (validStatusesCount !== formData.quantity) {
       toast({
@@ -204,6 +218,7 @@ const EditOrderForm: React.FC<EditOrderFormProps> = ({ order, onSave, onCancel }
         'nucleus_id',
         'quantity',
         'warehouse',
+        'asset_group',
       ];
 
       const historyEntries: { tableName: string; recordId: string; fieldName: string; oldData: string; newData: string; operation: string }[] = [];
@@ -284,6 +299,7 @@ const EditOrderForm: React.FC<EditOrderFormProps> = ({ order, onSave, onCancel }
           quantity: formData.quantity,
           warehouse: formData.warehouse,
           serial_numbers: allSerials,
+          asset_group: formData.asset_group,
           updated_at: new Date().toISOString(),
           updated_by: userEmail,
         })
@@ -316,6 +332,7 @@ const EditOrderForm: React.FC<EditOrderFormProps> = ({ order, onSave, onCancel }
         configuration: formData.configuration || null,
         product: formData.product || null,
         asset_status: allAssetStatuses[i] || 'Fresh',
+        asset_group: formData.asset_group,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
         is_deleted: false,
@@ -464,6 +481,22 @@ const EditOrderForm: React.FC<EditOrderFormProps> = ({ order, onSave, onCancel }
                 <SelectContent className='z-[1000] bg-white shadow-lg border min-w-[150px]'>
                   {products.map(product => (
                     <SelectItem key={product} value={product} className='text-base'>{product}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label className='text-sm text-gray-500'>Asset Group *</Label>
+              <Select
+                value={formData.asset_group || 'NFA'}
+                onValueChange={(value) => setFormData(prev => ({ ...prev, asset_group: value }))}
+              >
+                <SelectTrigger className='text-base'>
+                  <SelectValue placeholder='Select asset group' />
+                </SelectTrigger>
+                <SelectContent className='z-[1000] bg-white shadow-lg border min-w-[150px]'>
+                  {assetGroups.map(group => (
+                    <SelectItem key={group} value={group} className='text-base'>{group}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>

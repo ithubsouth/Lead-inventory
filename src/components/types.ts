@@ -1,3 +1,4 @@
+// types.ts
 export interface Order {
   id: string;
   order_type: string;
@@ -20,6 +21,7 @@ export interface Order {
   is_deleted: boolean;
   created_by: string | null;
   updated_by: string | null;
+  asset_group: 'FA' | 'NFA' | null; // Added asset_group
   editHistory?: EditHistoryEntry[];
   status?: 'Success' | 'Failed' | 'Pending';
   statusDetails?: string;
@@ -45,6 +47,7 @@ export interface Device {
   created_by: string | null;
   updated_by: string | null;
   is_deleted: boolean;
+  asset_group: 'FA' | 'NFA' | null; // Added asset_group
 }
 
 export interface OrderSummary {
@@ -67,6 +70,7 @@ export interface TabletItem {
   location: string;
   serialNumbers: string[];
   assetStatuses: string[];
+  assetGroup: 'FA' | 'NFA' | ''; // Added assetGroup with empty string for initial state
 }
 
 export interface TVItem {
@@ -78,6 +82,7 @@ export interface TVItem {
   location: string;
   serialNumbers: string[];
   assetStatuses: string[];
+  assetGroup: 'FA' | 'NFA' | ''; // Added assetGroup with empty string for initial state
 }
 
 export interface SDCardItem {
@@ -87,6 +92,7 @@ export interface SDCardItem {
   location: string;
   serialNumbers: string[];
   assetStatuses: string[];
+  assetGroup: 'FA' | 'NFA' | ''; // Added assetGroup with empty string for initial state
 }
 
 export interface PendriveItem {
@@ -96,6 +102,7 @@ export interface PendriveItem {
   location: string;
   serialNumbers: string[];
   assetStatuses: string[];
+  assetGroup: 'FA' | 'NFA' | ''; // Added assetGroup with empty string for initial state
 }
 
 export interface EditHistoryEntry {

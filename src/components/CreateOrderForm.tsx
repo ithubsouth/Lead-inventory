@@ -88,6 +88,7 @@ const CreateOrderForm: React.FC<CreateOrderFormProps> = ({
   const sdCardSizes = ['64 GB', '128 GB', '256 GB', '512 GB'];
   const locations = ['Trichy', 'Bangalore', 'Hyderabad', 'Kolkata', 'Bhiwandi', 'Ghaziabad', 'Zirakpur', 'Indore', 'Jaipur'];
   const assetStatuses = ['Fresh', 'Refurb', 'Scrap'];
+  const assetGroups = ['NFA', 'FA']; // Define asset group options
 
   const generateId = () => Math.random().toString(36).substr(2, 9);
 
@@ -109,6 +110,7 @@ const CreateOrderForm: React.FC<CreateOrderFormProps> = ({
       location: '',
       serialNumbers: [],
       assetStatuses: ['Fresh'],
+      assetGroup: 'NFA', // Default to NFA
     };
     setTablets([...tablets, newTablet]);
   };
@@ -123,6 +125,7 @@ const CreateOrderForm: React.FC<CreateOrderFormProps> = ({
       location: '',
       serialNumbers: [],
       assetStatuses: ['Fresh'],
+      assetGroup: 'NFA', // Default to NFA
     };
     setTvs([...tvs, newTV]);
   };
@@ -185,15 +188,15 @@ const CreateOrderForm: React.FC<CreateOrderFormProps> = ({
       toast({ title: 'Error', description: 'Please select at least one of Tablets or TVs', variant: 'destructive' });
       return false;
     }
-    const validTablets = tabletsToggle ? tablets.filter(t => t.model && t.location && t.quantity > 0) : [];
-    const validTVs = tvsToggle ? tvs.filter(t => t.model && t.location && t.quantity > 0) : [];
+    const validTablets = tabletsToggle ? tablets.filter(t => t.model && t.location && t.quantity > 0 && t.assetGroup) : [];
+    const validTVs = tvsToggle ? tvs.filter(t => t.model && t.location && t.quantity > 0 && t.assetGroup) : [];
 
     if (tabletsToggle && !validTablets.length && !validTVs.length) {
-      toast({ title: 'Error', description: 'Please add at least one tablet with model, location, and quantity', variant: 'destructive' });
+      toast({ title: 'Error', description: 'Please add at least one tablet with model, location, quantity, and asset group', variant: 'destructive' });
       return false;
     }
     if (tvsToggle && !validTVs.length && !validTablets.length) {
-      toast({ title: 'Error', description: 'Please add at least one TV with model, location, and quantity', variant: 'destructive' });
+      toast({ title: 'Error', description: 'Please add at least one TV with model, location, quantity, and asset group', variant: 'destructive' });
       return false;
     }
 
@@ -207,6 +210,14 @@ const CreateOrderForm: React.FC<CreateOrderFormProps> = ({
         });
         return false;
       }
+      if (!assetGroups.includes(tablet.assetGroup)) {
+        toast({
+          title: 'Validation Error',
+          description: `Invalid asset group for tablet: ${tablet.assetGroup}. Must be FA or NFA.`,
+          variant: 'destructive',
+        });
+        return false;
+      }
     }
 
     for (const tv of validTVs) {
@@ -215,6 +226,14 @@ const CreateOrderForm: React.FC<CreateOrderFormProps> = ({
         toast({
           title: 'Validation Error',
           description: `Number of valid asset statuses (${validStatuses.length}) does not match quantity (${tv.quantity}) for TV order`,
+          variant: 'destructive',
+        });
+        return false;
+      }
+      if (!assetGroups.includes(tv.assetGroup)) {
+        toast({
+          title: 'Validation Error',
+          description: `Invalid asset group for TV: ${tv.assetGroup}. Must be FA or NFA.`,
           variant: 'destructive',
         });
         return false;
@@ -235,8 +254,8 @@ const CreateOrderForm: React.FC<CreateOrderFormProps> = ({
       const userEmail = userData.user.email;
 
       console.log('Creating order with:', { orderType, salesOrder, dealId, nucleusId, schoolName, tablets, tvs });
-      const validTablets = tabletsToggle ? tablets.filter(t => t.model && t.location && t.quantity > 0) : [];
-      const validTVs = tvsToggle ? tvs.filter(t => t.model && t.location && t.quantity > 0) : [];
+      const validTablets = tabletsToggle ? tablets.filter(t => t.model && t.location && t.quantity > 0 && t.assetGroup) : [];
+      const validTVs = tvsToggle ? tvs.filter(t => t.model && t.location && t.quantity > 0 && t.assetGroup) : [];
       const materialType = (orderType === 'Stock' || orderType === 'Return') ? 'Inward' : 'Outward';
 
       for (const tablet of validTablets) {
@@ -262,6 +281,7 @@ const CreateOrderForm: React.FC<CreateOrderFormProps> = ({
             is_deleted: false,
             configuration: tablet.configuration || null,
             product: tablet.product || null,
+            asset_group: tablet.assetGroup, // Include assetGroup
             created_by: userEmail,
             updated_by: userEmail,
           })
@@ -270,7 +290,7 @@ const CreateOrderForm: React.FC<CreateOrderFormProps> = ({
         if (orderError) throw new Error(`Order insertion failed: ${orderError.message}`);
 
         for (let i = 0; i < tablet.quantity; i++) {
-          const serialNumber = tabletSerials[i] || "";
+          const serialNumber = tabletSerials[i] || '';
           const assetStatus = tablet.assetStatuses[i] || 'Fresh';
           const { error: deviceError } = await supabase
             .from('devices')
@@ -292,6 +312,7 @@ const CreateOrderForm: React.FC<CreateOrderFormProps> = ({
               configuration: tablet.configuration || null,
               product: tablet.product || null,
               asset_status: assetStatus,
+              asset_group: tablet.assetGroup, // Include assetGroup
               created_by: userEmail,
               updated_by: userEmail,
             });
@@ -322,6 +343,7 @@ const CreateOrderForm: React.FC<CreateOrderFormProps> = ({
             is_deleted: false,
             configuration: tv.configuration || null,
             product: tv.product || null,
+            asset_group: tv.assetGroup, // Include assetGroup
             created_by: userEmail,
             updated_by: userEmail,
           })
@@ -330,7 +352,7 @@ const CreateOrderForm: React.FC<CreateOrderFormProps> = ({
         if (orderError) throw new Error(`Order insertion failed: ${orderError.message}`);
 
         for (let i = 0; i < tv.quantity; i++) {
-          const serialNumber = tvSerials[i] || "";
+          const serialNumber = tvSerials[i] || '';
           const assetStatus = tv.assetStatuses[i] || 'Fresh';
           const { error: deviceError } = await supabase
             .from('devices')
@@ -352,6 +374,7 @@ const CreateOrderForm: React.FC<CreateOrderFormProps> = ({
               configuration: tv.configuration || null,
               product: tv.product || null,
               asset_status: assetStatus,
+              asset_group: tv.assetGroup, // Include assetGroup
               created_by: userEmail,
               updated_by: userEmail,
             });
@@ -390,10 +413,10 @@ const CreateOrderForm: React.FC<CreateOrderFormProps> = ({
       const lines = text.split('\n').filter(line => line.trim());
       const headers = lines[0].split(',').map(h => h.trim());
 
-      if (headers.length < 9) {
+      if (headers.length < 14) {
         toast({
           title: 'Invalid CSV Format',
-          description: 'CSV must have at least 9 columns: order_type,asset_type,model,quantity,warehouse,sales_order,deal_id,school_name,nucleus_id,serial_numbers,configuration,product,asset_statuses',
+          description: 'CSV must have at least 14 columns: order_type,asset_type,model,quantity,warehouse,sales_order,deal_id,school_name,nucleus_id,serial_numbers,configuration,product,asset_statuses,asset_group',
           variant: 'destructive',
         });
         return;
@@ -404,6 +427,7 @@ const CreateOrderForm: React.FC<CreateOrderFormProps> = ({
         const serialNumbers = values[9] ? values[9].split(';').map(s => s.trim()).filter(s => s) : [];
         const assetStatuses = values[12] ? values[12].split(';').map(s => s.trim()).filter(s => s) : Array(parseInt(values[3]) || 1).fill('Fresh');
         const configuration = values[10] || '';
+        const assetGroup = values[13] || 'NFA'; // Default to NFA
 
         if (values[1] === 'TV' && configuration && !tvConfigurations.includes(configuration)) {
           toast({
@@ -416,6 +440,14 @@ const CreateOrderForm: React.FC<CreateOrderFormProps> = ({
           toast({
             title: 'Invalid Tablet Configuration',
             description: `Configuration "${configuration}" is not valid for Tablets. Valid options are: ${configurations.join(', ')}`,
+            variant: 'destructive',
+          });
+          return null;
+        }
+        if (assetGroup && !assetGroups.includes(assetGroup)) {
+          toast({
+            title: 'Invalid Asset Group',
+            description: `Asset group "${assetGroup}" is not valid. Valid options are: ${assetGroups.join(', ')}`,
             variant: 'destructive',
           });
           return null;
@@ -435,6 +467,7 @@ const CreateOrderForm: React.FC<CreateOrderFormProps> = ({
           configuration: configuration,
           product: values[11] || '',
           asset_statuses: assetStatuses,
+          asset_group: assetGroup,
         };
       }).filter((data): data is NonNullable<typeof importedData[0]> => data !== null);
 
@@ -452,6 +485,7 @@ const CreateOrderForm: React.FC<CreateOrderFormProps> = ({
             assetStatuses: data.asset_statuses,
             sdCardSize: '',
             profileId: '',
+            assetGroup: data.asset_group || 'NFA', // Default to NFA
           };
           setTablets((prev: TabletItem[]) => [...prev, newTablet]);
           setTabletsToggle(true);
@@ -465,6 +499,7 @@ const CreateOrderForm: React.FC<CreateOrderFormProps> = ({
             location: data.warehouse,
             serialNumbers: data.serial_numbers,
             assetStatuses: data.asset_statuses,
+            assetGroup: data.asset_group || 'NFA', // Default to NFA
           };
           setTvs((prev: TVItem[]) => [...prev, newTV]);
           setTVsToggle(true);
@@ -490,9 +525,9 @@ const CreateOrderForm: React.FC<CreateOrderFormProps> = ({
   };
 
   const downloadCSVTemplate = () => {
-    const template = `order_type,asset_type,model,quantity,warehouse,sales_order,deal_id,school_name,nucleus_id,serial_numbers,configuration,product,asset_statuses
-Hardware,Tablet,Lenovo TB301FU,2,Trichy,SO001,DEAL001,Example School,NUC001,"","2G+32 GB (Android-10)",Lead,"Fresh;Fresh"
-Stock,TV,Hyundai TV - 43",1,Bangalore,SO002,DEAL002,Another School,NUC002,,Android TV,BoardAce,Fresh`;
+    const template = `order_type,asset_type,model,quantity,warehouse,sales_order,deal_id,school_name,nucleus_id,serial_numbers,configuration,product,asset_statuses,asset_group
+Hardware,Tablet,Lenovo TB301FU,2,Trichy,SO001,DEAL001,Example School,NUC001,"","2G+32 GB (Android-10)",Lead,"Fresh;Fresh",NFA
+Stock,TV,Hyundai TV - 43",1,Bangalore,SO002,DEAL002,Another School,NUC002,,Android TV,BoardAce,Fresh,NFA`;
     const blob = new Blob([template], { type: 'text/csv' });
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -709,6 +744,17 @@ Stock,TV,Hyundai TV - 43",1,Bangalore,SO002,DEAL002,Another School,NUC002,,Andro
                         </div>
                       </div>
                       <div>
+                        <label style={{ fontSize: '12px', color: '#6b7280', display: 'block', marginBottom: '4px' }}>Asset Group *</label>
+                        <select
+                          value={tablet.assetGroup}
+                          onChange={(e) => updateTablet(tablet.id, 'assetGroup', e.target.value)}
+                          style={{ fontSize: '12px', width: '100%', border: '1px solid #d1d5db', borderRadius: '4px', padding: '8px' }}
+                        >
+                          <option value="NFA">NFA</option>
+                          <option value="FA">FA</option>
+                        </select>
+                      </div>
+                      <div>
                         <label style={{ fontSize: '12px', color: '#6b7280', display: 'block', marginBottom: '4px' }}>Location *</label>
                         <select
                           value={tablet.location}
@@ -865,6 +911,17 @@ Stock,TV,Hyundai TV - 43",1,Bangalore,SO002,DEAL002,Another School,NUC002,,Andro
                         </div>
                       </div>
                       <div>
+                        <label style={{ fontSize: '12px', color: '#6b7280', display: 'block', marginBottom: '4px' }}>Asset Group *</label>
+                        <select
+                          value={tv.assetGroup}
+                          onChange={(e) => updateTV(tv.id, 'assetGroup', e.target.value)}
+                          style={{ fontSize: '12px', width: '100%', border: '1px solid #d1d5db', borderRadius: '4px', padding: '8px' }}
+                        >
+                          <option value="NFA">NFA</option>
+                          <option value="FA">FA</option>
+                        </select>
+                      </div>
+                      <div>
                         <label style={{ fontSize: '12px', color: '#6b7280', display: 'block', marginBottom: '4px' }}>Location *</label>
                         <select
                           value={tv.location}
@@ -965,7 +1022,7 @@ Stock,TV,Hyundai TV - 43",1,Bangalore,SO002,DEAL002,Another School,NUC002,,Andro
               <div style={{ fontSize: '12px', color: '#6b7280' }}>
                 Upload a CSV file with the following format:
                 <br />
-                order_type,asset_type,model,quantity,warehouse,sales_order,deal_id,school_name,nucleus_id,serial_numbers,configuration,product,asset_statuses
+                order_type,asset_type,model,quantity,warehouse,sales_order,deal_id,school_name,nucleus_id,serial_numbers,configuration,product,asset_statuses,asset_group
               </div>
               <input
                 type="file"
