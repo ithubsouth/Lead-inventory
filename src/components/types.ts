@@ -1,5 +1,3 @@
-// types.ts
-// types.ts
 export interface Order {
     id: string;
     order_type: string;
@@ -38,8 +36,8 @@ export interface Device {
     material_type: string;
     configuration?: string;
     product?: string;
-    asset_status: string; // e.g., 'Fresh', 'Refurb', 'Scrap'
-    asset_group: string;  // e.g., 'NFA', 'FA'
+    asset_status: string;
+    asset_group: string;
     created_at: string;
     updated_at: string;
     created_by: string;
@@ -51,6 +49,9 @@ export interface OrderSummary {
   warehouse: string;
   asset_type: 'Tablet' | 'TV' | 'SD Card' | 'Pendrive';
   model: string;
+  configuration: string;
+  asset_status: 'Stock' | 'Assigned';
+  product: string;
   inward: number;
   outward: number;
   stock: number;
@@ -67,7 +68,7 @@ export interface TabletItem {
   location: string;
   serialNumbers: string[];
   assetStatuses: string[];
-  assetGroup: 'FA' | 'NFA' | ''; // Added assetGroup with empty string for initial state
+  assetGroup: 'FA' | 'NFA' | '';
 }
 
 export interface TVItem {
@@ -79,7 +80,7 @@ export interface TVItem {
   location: string;
   serialNumbers: string[];
   assetStatuses: string[];
-  assetGroup: 'FA' | 'NFA' | ''; // Added assetGroup with empty string for initial state
+  assetGroup: 'FA' | 'NFA' | '';
 }
 
 export interface SDCardItem {
@@ -89,7 +90,7 @@ export interface SDCardItem {
   location: string;
   serialNumbers: string[];
   assetStatuses: string[];
-  assetGroup: 'FA' | 'NFA' | ''; // Added assetGroup with empty string for initial state
+  assetGroup: 'FA' | 'NFA' | '';
 }
 
 export interface PendriveItem {
@@ -99,7 +100,7 @@ export interface PendriveItem {
   location: string;
   serialNumbers: string[];
   assetStatuses: string[];
-  assetGroup: 'FA' | 'NFA' | ''; // Added assetGroup with empty string for initial state
+  assetGroup: 'FA' | 'NFA' | '';
 }
 
 export interface EditHistoryEntry {

@@ -8,13 +8,12 @@ import OrdersTable from './OrdersTable';
 import DevicesTable from './DevicesTable';
 import OrderSummaryTable from './OrderSummaryTable';
 import EnhancedBarcodeScanner from './EnhancedBarcodeScanner';
-import { Order, Device, OrderSummary, TabletItem, TVItem } from './types';
+import { Order, Device, TabletItem, TVItem } from './types';
 import { UserProfile } from '@/components/UserProfile';
 
 const InventoryManagement = () => {
   const [orders, setOrders] = useState<Order[]>([]);
   const [devices, setDevices] = useState<Device[]>([]);
-  const [orderSummary, setOrderSummary] = useState<OrderSummary[]>([]);
   const [loading, setLoading] = useState(false);
   const [showScanner, setShowScanner] = useState(false);
   const [currentSerialIndex, setCurrentSerialIndex] = useState<{ itemId: string; index: number; type: 'tablet' | 'tv' } | null>(null);
@@ -41,7 +40,6 @@ const InventoryManagement = () => {
   useEffect(() => {
     loadOrders();
     loadDevices();
-    loadOrderSummary();
   }, []);
 
   const loadOrders = async () => {
@@ -59,9 +57,13 @@ const InventoryManagement = () => {
           .order('created_at', { ascending: false })
           .range(page * batchSize, (page + 1) * batchSize - 1);
         if (error) throw error;
-        allOrders = [...allOrders, ...data];
-        hasMoreOrders = data.length === batchSize;
+        allOrders = [...allOrders, ...(data || [])];
+        hasMoreOrders = data?.length === batchSize;
         page += 1;
+      }
+
+      if (!allOrders.length) {
+        toast({ title: 'No Orders', description: 'No orders found in the database.', variant: 'destructive' });
       }
 
       let allDevices: any[] = [];
@@ -74,9 +76,13 @@ const InventoryManagement = () => {
           .select('order_id, serial_number')
           .range(page * batchSize, (page + 1) * batchSize - 1);
         if (error) throw error;
-        allDevices = [...allDevices, ...data];
-        hasMoreDevices = data.length === batchSize;
+        allDevices = [...allDevices, ...(data || [])];
+        hasMoreDevices = data?.length === batchSize;
         page += 1;
+      }
+
+      if (!allDevices.length) {
+        toast({ title: 'No Devices', description: 'No devices found in the database.', variant: 'destructive' });
       }
 
       const devicesByOrderId = new Map<string, string[]>();
@@ -188,9 +194,13 @@ const InventoryManagement = () => {
           .order('created_at', { ascending: false })
           .range(page * batchSize, (page + 1) * batchSize - 1);
         if (error) throw error;
-        allDevices = [...allDevices, ...data];
-        hasMore = data.length === batchSize;
+        allDevices = [...allDevices, ...(data || [])];
+        hasMore = data?.length === batchSize;
         page += 1;
+      }
+
+      if (!allDevices.length) {
+        toast({ title: 'No Devices', description: 'No devices found in the database.', variant: 'destructive' });
       }
 
       const updatedDevices = allDevices.map((device: any) => ({
@@ -202,67 +212,6 @@ const InventoryManagement = () => {
     } catch (error) {
       console.error('Error loading devices:', error);
       toast({ title: 'Error', description: 'Failed to load devices', variant: 'destructive' });
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const loadOrderSummary = async () => {
-    try {
-      setLoading(true);
-      const { data: ordersData, error: ordersError } = await supabase
-        .from('orders')
-        .select('warehouse, asset_type, model, material_type, quantity')
-        .eq('is_deleted', false);
-      if (ordersError) throw ordersError;
-
-      const locations = ['Trichy', 'Bangalore', 'Hyderabad', 'Kolkata', 'Bhiwandi', 'Ghaziabad', 'Zirakpur', 'Indore', 'Jaipur'];
-      const assetTypeOptions = ['Tablet', 'TV', 'SD Card', 'Pendrive'];
-      const tabletModels = ['Lenovo TB301XU', 'Lenovo TB301FU', 'Lenovo TB-8505F', 'Lenovo TB-7306F', 'Lenovo TB-7306X', 'Lenovo TB-7305X', 'IRA T811'];
-      const tvModels = ['Hyundai TV - 39"', 'Hyundai TV - 43"', 'Hyundai TV - 50"', 'Hyundai TV - 55"', 'Hyundai TV - 65"', 'Xentec TV - 39"', 'Xentec TV - 43"'];
-
-      const summaryMap = new Map<string, OrderSummary>();
-      locations.forEach(warehouse => {
-        assetTypeOptions.forEach(asset_type => {
-          const models = asset_type === 'Tablet' ? tabletModels : tvModels;
-          models.forEach(model => {
-            const key = `${warehouse}-${asset_type}-${model}`;
-            if (!summaryMap.has(key)) {
-              summaryMap.set(key, { 
-                warehouse, 
-                asset_type: asset_type as 'Tablet' | 'TV' | 'SD Card' | 'Pendrive', 
-                model, 
-                inward: 0, 
-                outward: 0, 
-                stock: 0 
-              });
-            }
-          });
-        });
-      });
-
-      ordersData?.forEach((order: any) => {
-        const key = `${order.warehouse}-${order.asset_type}-${order.model}`;
-        if (!summaryMap.has(key)) {
-          summaryMap.set(key, { 
-            warehouse: order.warehouse, 
-            asset_type: order.asset_type as 'Tablet' | 'TV' | 'SD Card' | 'Pendrive', 
-            model: order.model, 
-            inward: 0, 
-            outward: 0, 
-            stock: 0 
-          });
-        }
-        const summary = summaryMap.get(key)!;
-        if (order.material_type === 'Inward') summary.inward += order.quantity;
-        else if (order.material_type === 'Outward') summary.outward += order.quantity;
-        summary.stock = summary.inward - summary.outward;
-      });
-
-      setOrderSummary(Array.from(summaryMap.values()));
-    } catch (error) {
-      console.error('Error loading order summary:', error);
-      toast({ title: 'Error', description: 'Failed to load order summary', variant: 'destructive' });
     } finally {
       setLoading(false);
     }
@@ -349,7 +298,6 @@ const InventoryManagement = () => {
               setLoading={setLoading}
               loadOrders={loadOrders}
               loadDevices={loadDevices}
-              loadOrderSummary={loadOrderSummary}
               openScanner={(itemId, index, type) => {
                 setCurrentSerialIndex({ itemId, index, type });
                 setShowScanner(true);
@@ -378,18 +326,19 @@ const InventoryManagement = () => {
               setLoading={setLoading}
               loadOrders={loadOrders}
               loadDevices={loadDevices}
-              loadOrderSummary={loadOrderSummary}
             />
           </TabsContent>
           <TabsContent value='order' className='space-y-4'>
             <OrderSummaryTable
-              orderSummary={orderSummary}
+              devices={devices}
               selectedWarehouse={selectedWarehouse}
               setSelectedWarehouse={setSelectedWarehouse}
               selectedAssetType={selectedAssetType}
               setSelectedAssetType={setSelectedAssetType}
               selectedModel={selectedModel}
               setSelectedModel={setSelectedModel}
+              selectedConfiguration={selectedConfiguration}
+              setSelectedConfiguration={setSelectedConfiguration}
               fromDate={fromDate}
               setFromDate={setFromDate}
               toDate={toDate}
