@@ -5,7 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
-import { Plus, Minus, Camera, X } from 'lucide-react';
+import { Plus, Minus, Camera, X, Search } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import EnhancedBarcodeScanner from './EnhancedBarcodeScanner';
@@ -29,6 +29,7 @@ const EditOrderForm: React.FC<EditOrderFormProps> = ({ order, onSave, onCancel }
   const [showScanner, setShowScanner] = useState(false);
   const [currentSerialIndex, setCurrentSerialIndex] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
   const { toast } = useToast();
 
   const orderTypes = [
@@ -162,7 +163,7 @@ const EditOrderForm: React.FC<EditOrderFormProps> = ({ order, onSave, onCancel }
         field_name: fieldName,
         old_data: oldData,
         new_data: newData,
-        operation: operation, // Added to resolve NOT NULL constraint
+        operation: operation,
         updated_by: userEmail,
         updated_at: new Date().toISOString(),
       });
@@ -191,7 +192,6 @@ const EditOrderForm: React.FC<EditOrderFormProps> = ({ order, onSave, onCancel }
       const allSerials = formData.serial_numbers || Array(formData.quantity).fill('');
       const allAssetStatuses = formData.asset_statuses || Array(formData.quantity).fill('Fresh');
 
-      // Compare and log changes for orders table
       const fieldsToCompare = [
         'order_type',
         'asset_type',
@@ -223,7 +223,6 @@ const EditOrderForm: React.FC<EditOrderFormProps> = ({ order, onSave, onCancel }
         }
       }
 
-      // Compare serial_numbers and asset_statuses
       const originalSerials = originalOrder.serial_numbers || Array(originalOrder.quantity).fill('');
       const originalStatuses = originalOrder.asset_statuses || Array(originalOrder.quantity).fill('Fresh');
       const maxLength = Math.max(originalSerials.length, allSerials.length, originalStatuses.length, allAssetStatuses.length);
@@ -257,7 +256,6 @@ const EditOrderForm: React.FC<EditOrderFormProps> = ({ order, onSave, onCancel }
         }
       }
 
-      // Log all history entries
       for (const entry of historyEntries) {
         await logHistory(
           entry.tableName,
@@ -271,7 +269,6 @@ const EditOrderForm: React.FC<EditOrderFormProps> = ({ order, onSave, onCancel }
         );
       }
 
-      // Update orders table
       const { error: orderUpdateError } = await supabase
         .from('orders')
         .update({
@@ -296,7 +293,6 @@ const EditOrderForm: React.FC<EditOrderFormProps> = ({ order, onSave, onCancel }
       if (orderUpdateError) throw new Error(`Order update failed: ${orderUpdateError.message}`);
       orderUpdated = true;
 
-      // Delete existing devices
       const { error: deleteError } = await supabase
         .from('devices')
         .delete()
@@ -305,7 +301,6 @@ const EditOrderForm: React.FC<EditOrderFormProps> = ({ order, onSave, onCancel }
       if (deleteError) throw new Error(`Failed to delete existing devices: ${deleteError.message}`);
       devicesDeleted = true;
 
-      // Insert new devices
       const newDevices = Array.from({ length: formData.quantity }, (_, i) => ({
         asset_type: formData.asset_type,
         model: formData.model,
@@ -577,49 +572,67 @@ const EditOrderForm: React.FC<EditOrderFormProps> = ({ order, onSave, onCancel }
           <CardTitle className='text-xl'>Serial Numbers & Asset Statuses ({filledCount} / {formData.quantity})</CardTitle>
         </CardHeader>
         <CardContent className='space-y-3 pt-6'>
-          <Label className='text-sm text-gray-500'>Update serial numbers individually (partial updates allowed)</Label>
-          {serialNumbers.map((serial, index) => (
-            <div key={index} className='flex items-center gap-3 bg-muted p-3 rounded-lg'>
+          <div className='mb-4'>
+            <Label className='text-sm text-gray-500'>Search Serial Number</Label>
+            <div className='flex gap-2'>
               <Input
-                value={serial || ''}
-                onChange={(e) => updateSerialNumber(index, e.target.value)}
-                className='font-mono text-base w-96 flex-1'
-                placeholder={`Serial ${index + 1} (optional - can update later)`}
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder='Search serial number...'
+                className='text-base'
               />
-              <Select
-                key={`asset-status-${index}-${formData.asset_statuses?.[index] || 'Fresh'}`}
-                value={formData.asset_statuses?.[index] || 'Fresh'}
-                onValueChange={(value) => updateAssetStatus(index, value)}
-              >
-                <SelectTrigger className='text-base w-48'>
-                  <SelectValue placeholder='Asset Status' />
-                </SelectTrigger>
-                <SelectContent className='z-[1000] bg-white shadow-lg border min-w-[140px]'>
-                  {assetStatuses.map(status => (
-                    <SelectItem key={status} value={status} className='text-base'>{status}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <Button
-                variant='outline'
-                size='sm'
-                onClick={() => {
-                  setCurrentSerialIndex(index);
-                  setShowScanner(true);
-                }}
-              >
-                <Camera className='w-4 h-4' />
-              </Button>
-              <Button
-                variant='ghost'
-                size='sm'
-                onClick={() => removeSerialNumber(index)}
-                disabled={formData.quantity <= 1}
-              >
-                <X className='w-4 h-4' />
+              <Button onClick={() => {}} size='sm' disabled>
+                <Search className='h-4 w-4' />
               </Button>
             </div>
-          ))}
+          </div>
+          <Label className='text-sm text-gray-500'>Update serial numbers individually (partial updates allowed)</Label>
+          {Array.from({ length: formData.quantity }, (_, index) => {
+            const serial = serialNumbers[index] || '';
+            const shouldShow = !searchQuery || serial.toLowerCase().includes(searchQuery.toLowerCase());
+            return shouldShow ? (
+              <div key={index} className='flex items-center gap-3 bg-muted p-3 rounded-lg'>
+                <Input
+                  value={serial}
+                  onChange={(e) => updateSerialNumber(index, e.target.value)}
+                  className='font-mono text-base w-96 flex-1'
+                  placeholder={`Serial ${index + 1} (optional - can update later)`}
+                />
+                <Select
+                  key={`asset-status-${index}-${formData.asset_statuses?.[index] || 'Fresh'}`}
+                  value={formData.asset_statuses?.[index] || 'Fresh'}
+                  onValueChange={(value) => updateAssetStatus(index, value)}
+                >
+                  <SelectTrigger className='text-base w-48'>
+                    <SelectValue placeholder='Asset Status' />
+                  </SelectTrigger>
+                  <SelectContent className='z-[1000] bg-white shadow-lg border min-w-[140px]'>
+                    {assetStatuses.map(status => (
+                      <SelectItem key={status} value={status} className='text-base'>{status}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Button
+                  variant='outline'
+                  size='sm'
+                  onClick={() => {
+                    setCurrentSerialIndex(index);
+                    setShowScanner(true);
+                  }}
+                >
+                  <Camera className='w-4 h-4' />
+                </Button>
+                <Button
+                  variant='ghost'
+                  size='sm'
+                  onClick={() => removeSerialNumber(index)}
+                  disabled={formData.quantity <= 1}
+                >
+                  <X className='w-4 h-4' />
+                </Button>
+              </div>
+            ) : null;
+          })}
           {filledCount < formData.quantity && (
             <p className='text-sm text-yellow-600'>Info: {formData.quantity - filledCount} serial(s) remaining. You can save now and update later.</p>
           )}
