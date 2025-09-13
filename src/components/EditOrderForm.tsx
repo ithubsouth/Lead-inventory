@@ -370,7 +370,7 @@ const EditOrderForm: React.FC<EditOrderFormProps> = ({ order, onSave, onCancel }
   };
 
   return (
-    <div className='space-y-6 relative w-full mx-auto p-12 bg-white rounded-lg shadow-lg max-w-none'>
+    <div className='space-y-10 relative w-full md:w-100/4 lg:w-200/5 mx-auto p-2000 bg-white rounded-lg shadow-lg min-h-[80vh]'>
       <Button
         variant="ghost"
         size="sm"
