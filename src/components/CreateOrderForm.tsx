@@ -88,7 +88,7 @@ const CreateOrderForm: React.FC<CreateOrderFormProps> = ({
   const sdCardSizes = ['64 GB', '128 GB', '256 GB', '512 GB'];
   const locations = ['Trichy', 'Bangalore', 'Hyderabad', 'Kolkata', 'Bhiwandi', 'Ghaziabad', 'Zirakpur', 'Indore', 'Jaipur'];
   const assetStatuses = ['Fresh', 'Refurb', 'Scrap'];
-  const assetGroups = ['NFA', 'FA']; // Define asset group options
+  const assetGroups = ['NFA', 'FA'];
 
   const generateId = () => Math.random().toString(36).substr(2, 9);
 
@@ -108,9 +108,9 @@ const CreateOrderForm: React.FC<CreateOrderFormProps> = ({
       profileId: '',
       quantity: 1,
       location: '',
-      serialNumbers: [],
+      serialNumbers: [''],
       assetStatuses: ['Fresh'],
-      assetGroup: 'NFA', // Default to NFA
+      assetGroups: ['NFA'], // Initialize with NFA
     };
     setTablets([...tablets, newTablet]);
   };
@@ -123,9 +123,9 @@ const CreateOrderForm: React.FC<CreateOrderFormProps> = ({
       product: '',
       quantity: 1,
       location: '',
-      serialNumbers: [],
+      serialNumbers: [''],
       assetStatuses: ['Fresh'],
-      assetGroup: 'NFA', // Default to NFA
+      assetGroups: ['NFA'], // Initialize with NFA
     };
     setTvs([...tvs, newTV]);
   };
@@ -137,13 +137,17 @@ const CreateOrderForm: React.FC<CreateOrderFormProps> = ({
           const newQuantity = Math.max(1, value);
           const currentSerials = tablet.serialNumbers || [];
           const currentStatuses = tablet.assetStatuses || [];
+          const currentGroups = tablet.assetGroups || [];
           const newSerialNumbers = Array(newQuantity).fill('').map((_, i) => currentSerials[i] || '');
           const newAssetStatuses = Array(newQuantity).fill('Fresh').map((_, i) => currentStatuses[i] || 'Fresh');
-          return { ...tablet, quantity: newQuantity, serialNumbers: newSerialNumbers, assetStatuses: newAssetStatuses };
+          const newAssetGroups = Array(newQuantity).fill('NFA').map((_, i) => currentGroups[i] || 'NFA');
+          return { ...tablet, quantity: newQuantity, serialNumbers: newSerialNumbers, assetStatuses: newAssetStatuses, assetGroups: newAssetGroups };
         } else if (field === 'serialNumbers' && Array.isArray(value)) {
           return { ...tablet, serialNumbers: value };
         } else if (field === 'assetStatuses' && Array.isArray(value)) {
           return { ...tablet, assetStatuses: value };
+        } else if (field === 'assetGroups' && Array.isArray(value)) {
+          return { ...tablet, assetGroups: value };
         }
         return { ...tablet, [field]: value };
       }
@@ -158,13 +162,17 @@ const CreateOrderForm: React.FC<CreateOrderFormProps> = ({
           const newQuantity = Math.max(1, value);
           const currentSerials = tv.serialNumbers || [];
           const currentStatuses = tv.assetStatuses || [];
+          const currentGroups = tv.assetGroups || [];
           const newSerialNumbers = Array(newQuantity).fill('').map((_, i) => currentSerials[i] || '');
           const newAssetStatuses = Array(newQuantity).fill('Fresh').map((_, i) => currentStatuses[i] || 'Fresh');
-          return { ...tv, quantity: newQuantity, serialNumbers: newSerialNumbers, assetStatuses: newAssetStatuses };
+          const newAssetGroups = Array(newQuantity).fill('NFA').map((_, i) => currentGroups[i] || 'NFA');
+          return { ...tv, quantity: newQuantity, serialNumbers: newSerialNumbers, assetStatuses: newAssetStatuses, assetGroups: newAssetGroups };
         } else if (field === 'serialNumbers' && Array.isArray(value)) {
           return { ...tv, serialNumbers: value };
         } else if (field === 'assetStatuses' && Array.isArray(value)) {
           return { ...tv, assetStatuses: value };
+        } else if (field === 'assetGroups' && Array.isArray(value)) {
+          return { ...tv, assetGroups: value };
         }
         return { ...tv, [field]: value };
       }
@@ -174,6 +182,27 @@ const CreateOrderForm: React.FC<CreateOrderFormProps> = ({
 
   const removeTablet = (id: string) => setTablets(tablets.filter(tablet => tablet.id !== id));
   const removeTV = (id: string) => setTvs(tvs.filter(tv => tv.id !== id));
+
+  const logHistory = async (tableName: string, recordId: string, fieldName: string, newData: string, userEmail: string, salesOrder: string | null) => {
+    const { error } = await supabase
+      .from('history')
+      .insert({
+        record_id: recordId,
+        sales_order: salesOrder,
+        table_name: tableName,
+        field_name: fieldName,
+        old_data: '',
+        new_data: newData,
+        operation: 'INSERT',
+        updated_by: userEmail,
+        updated_at: new Date().toISOString(),
+      });
+
+    if (error) {
+      console.error(`Failed to log history for ${tableName}.${fieldName}:`, error.message);
+      throw new Error(`History logging failed: ${error.message}`);
+    }
+  };
 
   const validateForm = () => {
     if (!orderType) {
@@ -188,20 +217,21 @@ const CreateOrderForm: React.FC<CreateOrderFormProps> = ({
       toast({ title: 'Error', description: 'Please select at least one of Tablets or TVs', variant: 'destructive' });
       return false;
     }
-    const validTablets = tabletsToggle ? tablets.filter(t => t.model && t.location && t.quantity > 0 && t.assetGroup) : [];
-    const validTVs = tvsToggle ? tvs.filter(t => t.model && t.location && t.quantity > 0 && t.assetGroup) : [];
+    const validTablets = tabletsToggle ? tablets.filter(t => t.model && t.location && t.quantity > 0 && t.assetGroups?.length === t.quantity) : [];
+    const validTVs = tvsToggle ? tvs.filter(t => t.model && t.location && t.quantity > 0 && t.assetGroups?.length === t.quantity) : [];
 
     if (tabletsToggle && !validTablets.length && !validTVs.length) {
-      toast({ title: 'Error', description: 'Please add at least one tablet with model, location, quantity, and asset group', variant: 'destructive' });
+      toast({ title: 'Error', description: 'Please add at least one tablet with model, location, quantity, and asset groups', variant: 'destructive' });
       return false;
     }
     if (tvsToggle && !validTVs.length && !validTablets.length) {
-      toast({ title: 'Error', description: 'Please add at least one TV with model, location, quantity, and asset group', variant: 'destructive' });
+      toast({ title: 'Error', description: 'Please add at least one TV with model, location, quantity, and asset groups', variant: 'destructive' });
       return false;
     }
 
     for (const tablet of validTablets) {
       const validStatuses = tablet.assetStatuses.filter(status => assetStatuses.includes(status));
+      const validGroups = tablet.assetGroups.filter(group => assetGroups.includes(group));
       if (validStatuses.length !== tablet.quantity) {
         toast({
           title: 'Validation Error',
@@ -210,10 +240,10 @@ const CreateOrderForm: React.FC<CreateOrderFormProps> = ({
         });
         return false;
       }
-      if (!assetGroups.includes(tablet.assetGroup)) {
+      if (validGroups.length !== tablet.quantity) {
         toast({
           title: 'Validation Error',
-          description: `Invalid asset group for tablet: ${tablet.assetGroup}. Must be FA or NFA.`,
+          description: `Number of valid asset groups (${validGroups.length}) does not match quantity (${tablet.quantity}) for tablet order`,
           variant: 'destructive',
         });
         return false;
@@ -222,6 +252,7 @@ const CreateOrderForm: React.FC<CreateOrderFormProps> = ({
 
     for (const tv of validTVs) {
       const validStatuses = tv.assetStatuses.filter(status => assetStatuses.includes(status));
+      const validGroups = tv.assetGroups.filter(group => assetGroups.includes(group));
       if (validStatuses.length !== tv.quantity) {
         toast({
           title: 'Validation Error',
@@ -230,10 +261,10 @@ const CreateOrderForm: React.FC<CreateOrderFormProps> = ({
         });
         return false;
       }
-      if (!assetGroups.includes(tv.assetGroup)) {
+      if (validGroups.length !== tv.quantity) {
         toast({
           title: 'Validation Error',
-          description: `Invalid asset group for TV: ${tv.assetGroup}. Must be FA or NFA.`,
+          description: `Number of valid asset groups (${validGroups.length}) does not match quantity (${tv.quantity}) for TV order`,
           variant: 'destructive',
         });
         return false;
@@ -253,9 +284,8 @@ const CreateOrderForm: React.FC<CreateOrderFormProps> = ({
       }
       const userEmail = userData.user.email;
 
-      console.log('Creating order with:', { orderType, salesOrder, dealId, nucleusId, schoolName, tablets, tvs });
-      const validTablets = tabletsToggle ? tablets.filter(t => t.model && t.location && t.quantity > 0 && t.assetGroup) : [];
-      const validTVs = tvsToggle ? tvs.filter(t => t.model && t.location && t.quantity > 0 && t.assetGroup) : [];
+      const validTablets = tabletsToggle ? tablets.filter(t => t.model && t.location && t.quantity > 0 && t.assetGroups?.length === t.quantity) : [];
+      const validTVs = tvsToggle ? tvs.filter(t => t.model && t.location && t.quantity > 0 && t.assetGroups?.length === t.quantity) : [];
       const materialType = (orderType === 'Stock' || orderType === 'Return') ? 'Inward' : 'Outward';
 
       for (const tablet of validTablets) {
@@ -281,7 +311,6 @@ const CreateOrderForm: React.FC<CreateOrderFormProps> = ({
             is_deleted: false,
             configuration: tablet.configuration || null,
             product: tablet.product || null,
-            asset_group: tablet.assetGroup, // Include assetGroup
             created_by: userEmail,
             updated_by: userEmail,
           })
@@ -289,9 +318,31 @@ const CreateOrderForm: React.FC<CreateOrderFormProps> = ({
           .single();
         if (orderError) throw new Error(`Order insertion failed: ${orderError.message}`);
 
+        const historyEntries: { tableName: string; recordId: string; fieldName: string; newData: string }[] = [
+          { tableName: 'orders', recordId: orderData.id, fieldName: 'order_type', newData: orderType },
+          { tableName: 'orders', recordId: orderData.id, fieldName: 'asset_type', newData: 'Tablet' },
+          { tableName: 'orders', recordId: orderData.id, fieldName: 'model', newData: tablet.model },
+          { tableName: 'orders', recordId: orderData.id, fieldName: 'quantity', newData: String(tablet.quantity) },
+          { tableName: 'orders', recordId: orderData.id, fieldName: 'warehouse', newData: tablet.location },
+          { tableName: 'orders', recordId: orderData.id, fieldName: 'sales_order', newData: salesOrderId },
+          { tableName: 'orders', recordId: orderData.id, fieldName: 'deal_id', newData: dealId || '' },
+          { tableName: 'orders', recordId: orderData.id, fieldName: 'school_name', newData: schoolName },
+          { tableName: 'orders', recordId: orderData.id, fieldName: 'nucleus_id', newData: nucleusId || '' },
+          { tableName: 'orders', recordId: orderData.id, fieldName: 'material_type', newData: materialType },
+          { tableName: 'orders', recordId: orderData.id, fieldName: 'configuration', newData: tablet.configuration || '' },
+          { tableName: 'orders', recordId: orderData.id, fieldName: 'product', newData: tablet.product || '' },
+        ];
+
         for (let i = 0; i < tablet.quantity; i++) {
-          const serialNumber = tabletSerials[i] || '';
+          const serialNumber = tablet.serialNumbers[i] || '';
           const assetStatus = tablet.assetStatuses[i] || 'Fresh';
+          const assetGroup = tablet.assetGroups[i] || 'NFA';
+          historyEntries.push(
+            { tableName: 'devices', recordId: orderData.id, fieldName: `serial_number_${i + 1}`, newData: serialNumber },
+            { tableName: 'devices', recordId: orderData.id, fieldName: `asset_status_${i + 1}`, newData: assetStatus },
+            { tableName: 'devices', recordId: orderData.id, fieldName: `asset_group_${i + 1}`, newData: assetGroup }
+          );
+
           const { error: deviceError } = await supabase
             .from('devices')
             .insert({
@@ -312,11 +363,15 @@ const CreateOrderForm: React.FC<CreateOrderFormProps> = ({
               configuration: tablet.configuration || null,
               product: tablet.product || null,
               asset_status: assetStatus,
-              asset_group: tablet.assetGroup, // Include assetGroup
+              asset_group: assetGroup,
               created_by: userEmail,
               updated_by: userEmail,
             });
           if (deviceError) throw new Error(`Device insertion failed: ${deviceError.message}`);
+        }
+
+        for (const entry of historyEntries) {
+          await logHistory(entry.tableName, entry.recordId, entry.fieldName, entry.newData, userEmail, salesOrderId);
         }
       }
 
@@ -343,7 +398,6 @@ const CreateOrderForm: React.FC<CreateOrderFormProps> = ({
             is_deleted: false,
             configuration: tv.configuration || null,
             product: tv.product || null,
-            asset_group: tv.assetGroup, // Include assetGroup
             created_by: userEmail,
             updated_by: userEmail,
           })
@@ -351,9 +405,31 @@ const CreateOrderForm: React.FC<CreateOrderFormProps> = ({
           .single();
         if (orderError) throw new Error(`Order insertion failed: ${orderError.message}`);
 
+        const historyEntries: { tableName: string; recordId: string; fieldName: string; newData: string }[] = [
+          { tableName: 'orders', recordId: orderData.id, fieldName: 'order_type', newData: orderType },
+          { tableName: 'orders', recordId: orderData.id, fieldName: 'asset_type', newData: 'TV' },
+          { tableName: 'orders', recordId: orderData.id, fieldName: 'model', newData: tv.model },
+          { tableName: 'orders', recordId: orderData.id, fieldName: 'quantity', newData: String(tv.quantity) },
+          { tableName: 'orders', recordId: orderData.id, fieldName: 'warehouse', newData: tv.location },
+          { tableName: 'orders', recordId: orderData.id, fieldName: 'sales_order', newData: salesOrderId },
+          { tableName: 'orders', recordId: orderData.id, fieldName: 'deal_id', newData: dealId || '' },
+          { tableName: 'orders', recordId: orderData.id, fieldName: 'school_name', newData: schoolName },
+          { tableName: 'orders', recordId: orderData.id, fieldName: 'nucleus_id', newData: nucleusId || '' },
+          { tableName: 'orders', recordId: orderData.id, fieldName: 'material_type', newData: materialType },
+          { tableName: 'orders', recordId: orderData.id, fieldName: 'configuration', newData: tv.configuration || '' },
+          { tableName: 'orders', recordId: orderData.id, fieldName: 'product', newData: tv.product || '' },
+        ];
+
         for (let i = 0; i < tv.quantity; i++) {
-          const serialNumber = tvSerials[i] || '';
+          const serialNumber = tv.serialNumbers[i] || '';
           const assetStatus = tv.assetStatuses[i] || 'Fresh';
+          const assetGroup = tv.assetGroups[i] || 'NFA';
+          historyEntries.push(
+            { tableName: 'devices', recordId: orderData.id, fieldName: `serial_number_${i + 1}`, newData: serialNumber },
+            { tableName: 'devices', recordId: orderData.id, fieldName: `asset_status_${i + 1}`, newData: assetStatus },
+            { tableName: 'devices', recordId: orderData.id, fieldName: `asset_group_${i + 1}`, newData: assetGroup }
+          );
+
           const { error: deviceError } = await supabase
             .from('devices')
             .insert({
@@ -374,11 +450,15 @@ const CreateOrderForm: React.FC<CreateOrderFormProps> = ({
               configuration: tv.configuration || null,
               product: tv.product || null,
               asset_status: assetStatus,
-              asset_group: tv.assetGroup, // Include assetGroup
+              asset_group: assetGroup,
               created_by: userEmail,
               updated_by: userEmail,
             });
           if (deviceError) throw new Error(`Device insertion failed: ${deviceError.message}`);
+        }
+
+        for (const entry of historyEntries) {
+          await logHistory(entry.tableName, entry.recordId, entry.fieldName, entry.newData, userEmail, salesOrderId);
         }
       }
 
@@ -416,7 +496,7 @@ const CreateOrderForm: React.FC<CreateOrderFormProps> = ({
       if (headers.length < 14) {
         toast({
           title: 'Invalid CSV Format',
-          description: 'CSV must have at least 14 columns: order_type,asset_type,model,quantity,warehouse,sales_order,deal_id,school_name,nucleus_id,serial_numbers,configuration,product,asset_statuses,asset_group',
+          description: 'CSV must have at least 14 columns: order_type,asset_type,model,quantity,warehouse,sales_order,deal_id,school_name,nucleus_id,serial_numbers,configuration,product,asset_statuses,asset_groups',
           variant: 'destructive',
         });
         return;
@@ -426,8 +506,8 @@ const CreateOrderForm: React.FC<CreateOrderFormProps> = ({
         const values = line.split(',').map(v => v.trim());
         const serialNumbers = values[9] ? values[9].split(';').map(s => s.trim()).filter(s => s) : [];
         const assetStatuses = values[12] ? values[12].split(';').map(s => s.trim()).filter(s => s) : Array(parseInt(values[3]) || 1).fill('Fresh');
+        const assetGroups = values[13] ? values[13].split(';').map(s => s.trim()).filter(s => s) : Array(parseInt(values[3]) || 1).fill('NFA');
         const configuration = values[10] || '';
-        const assetGroup = values[13] || 'NFA'; // Default to NFA
 
         if (values[1] === 'TV' && configuration && !tvConfigurations.includes(configuration)) {
           toast({
@@ -444,10 +524,18 @@ const CreateOrderForm: React.FC<CreateOrderFormProps> = ({
           });
           return null;
         }
-        if (assetGroup && !assetGroups.includes(assetGroup)) {
+        if (assetGroups.some(group => !assetGroups.includes(group))) {
           toast({
             title: 'Invalid Asset Group',
-            description: `Asset group "${assetGroup}" is not valid. Valid options are: ${assetGroups.join(', ')}`,
+            description: `Asset groups must be one of: ${assetGroups.join(', ')}`,
+            variant: 'destructive',
+          });
+          return null;
+        }
+        if (assetGroups.length !== (parseInt(values[3]) || 1)) {
+          toast({
+            title: 'Invalid Asset Groups',
+            description: `Number of asset groups (${assetGroups.length}) does not match quantity (${parseInt(values[3]) || 1})`,
             variant: 'destructive',
           });
           return null;
@@ -467,7 +555,7 @@ const CreateOrderForm: React.FC<CreateOrderFormProps> = ({
           configuration: configuration,
           product: values[11] || '',
           asset_statuses: assetStatuses,
-          asset_group: assetGroup,
+          asset_groups: assetGroups,
         };
       }).filter((data): data is NonNullable<typeof importedData[0]> => data !== null);
 
@@ -483,9 +571,9 @@ const CreateOrderForm: React.FC<CreateOrderFormProps> = ({
             location: data.warehouse,
             serialNumbers: data.serial_numbers,
             assetStatuses: data.asset_statuses,
+            assetGroups: data.asset_groups,
             sdCardSize: '',
             profileId: '',
-            assetGroup: data.asset_group || 'NFA', // Default to NFA
           };
           setTablets((prev: TabletItem[]) => [...prev, newTablet]);
           setTabletsToggle(true);
@@ -499,7 +587,7 @@ const CreateOrderForm: React.FC<CreateOrderFormProps> = ({
             location: data.warehouse,
             serialNumbers: data.serial_numbers,
             assetStatuses: data.asset_statuses,
-            assetGroup: data.asset_group || 'NFA', // Default to NFA
+            assetGroups: data.asset_groups,
           };
           setTvs((prev: TVItem[]) => [...prev, newTV]);
           setTVsToggle(true);
@@ -525,8 +613,8 @@ const CreateOrderForm: React.FC<CreateOrderFormProps> = ({
   };
 
   const downloadCSVTemplate = () => {
-    const template = `order_type,asset_type,model,quantity,warehouse,sales_order,deal_id,school_name,nucleus_id,serial_numbers,configuration,product,asset_statuses,asset_group
-Hardware,Tablet,Lenovo TB301FU,2,Trichy,SO001,DEAL001,Example School,NUC001,"","2G+32 GB (Android-10)",Lead,"Fresh;Fresh",NFA
+    const template = `order_type,asset_type,model,quantity,warehouse,sales_order,deal_id,school_name,nucleus_id,serial_numbers,configuration,product,asset_statuses,asset_groups
+Hardware,Tablet,Lenovo TB301FU,2,Trichy,SO001,DEAL001,Example School,NUC001,"","2G+32 GB (Android-10)",Lead,"Fresh;Fresh","NFA;NFA"
 Stock,TV,Hyundai TV - 43",1,Bangalore,SO002,DEAL002,Another School,NUC002,,Android TV,BoardAce,Fresh,NFA`;
     const blob = new Blob([template], { type: 'text/csv' });
     const url = window.URL.createObjectURL(blob);
@@ -744,17 +832,6 @@ Stock,TV,Hyundai TV - 43",1,Bangalore,SO002,DEAL002,Another School,NUC002,,Andro
                         </div>
                       </div>
                       <div>
-                        <label style={{ fontSize: '12px', color: '#6b7280', display: 'block', marginBottom: '4px' }}>Asset Group *</label>
-                        <select
-                          value={tablet.assetGroup}
-                          onChange={(e) => updateTablet(tablet.id, 'assetGroup', e.target.value)}
-                          style={{ fontSize: '12px', width: '100%', border: '1px solid #d1d5db', borderRadius: '4px', padding: '8px' }}
-                        >
-                          <option value="NFA">NFA</option>
-                          <option value="FA">FA</option>
-                        </select>
-                      </div>
-                      <div>
                         <label style={{ fontSize: '12px', color: '#6b7280', display: 'block', marginBottom: '4px' }}>Location *</label>
                         <select
                           value={tablet.location}
@@ -769,7 +846,7 @@ Stock,TV,Hyundai TV - 43",1,Bangalore,SO002,DEAL002,Another School,NUC002,,Andro
                       </div>
                     </div>
                     <div style={{ marginTop: '8px' }}>
-                      <label style={{ fontSize: '12px', color: '#6b7280', display: 'block', marginBottom: '4px' }}>Serial Numbers & Asset Status</label>
+                      <label style={{ fontSize: '12px', color: '#6b7280', display: 'block', marginBottom: '4px' }}>Serial Numbers, Asset Status & Asset Group</label>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', marginTop: '4px' }}>
                         {Array.from({ length: tablet.quantity }, (_, index) => (
                           <div key={index} style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
@@ -794,6 +871,19 @@ Stock,TV,Hyundai TV - 43",1,Bangalore,SO002,DEAL002,Another School,NUC002,,Andro
                             >
                               {assetStatuses.map(status => (
                                 <option key={status} value={status}>{status}</option>
+                              ))}
+                            </select>
+                            <select
+                              value={tablet.assetGroups[index] || 'NFA'}
+                              onChange={(e) => {
+                                const newAssetGroups = [...tablet.assetGroups];
+                                newAssetGroups[index] = e.target.value;
+                                updateTablet(tablet.id, 'assetGroups', newAssetGroups);
+                              }}
+                              style={{ fontSize: '12px', width: '80px', border: '1px solid #d1d5db', borderRadius: '4px', padding: '8px' }}
+                            >
+                              {assetGroups.map(group => (
+                                <option key={group} value={group}>{group}</option>
                               ))}
                             </select>
                             <button
@@ -911,17 +1001,6 @@ Stock,TV,Hyundai TV - 43",1,Bangalore,SO002,DEAL002,Another School,NUC002,,Andro
                         </div>
                       </div>
                       <div>
-                        <label style={{ fontSize: '12px', color: '#6b7280', display: 'block', marginBottom: '4px' }}>Asset Group *</label>
-                        <select
-                          value={tv.assetGroup}
-                          onChange={(e) => updateTV(tv.id, 'assetGroup', e.target.value)}
-                          style={{ fontSize: '12px', width: '100%', border: '1px solid #d1d5db', borderRadius: '4px', padding: '8px' }}
-                        >
-                          <option value="NFA">NFA</option>
-                          <option value="FA">FA</option>
-                        </select>
-                      </div>
-                      <div>
                         <label style={{ fontSize: '12px', color: '#6b7280', display: 'block', marginBottom: '4px' }}>Location *</label>
                         <select
                           value={tv.location}
@@ -936,7 +1015,7 @@ Stock,TV,Hyundai TV - 43",1,Bangalore,SO002,DEAL002,Another School,NUC002,,Andro
                       </div>
                     </div>
                     <div style={{ marginTop: '8px' }}>
-                      <label style={{ fontSize: '12px', color: '#6b7280', display: 'block', marginBottom: '4px' }}>Serial Numbers & Asset Status</label>
+                      <label style={{ fontSize: '12px', color: '#6b7280', display: 'block', marginBottom: '4px' }}>Serial Numbers, Asset Status & Asset Group</label>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', marginTop: '4px' }}>
                         {Array.from({ length: tv.quantity }, (_, index) => (
                           <div key={index} style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
@@ -961,6 +1040,19 @@ Stock,TV,Hyundai TV - 43",1,Bangalore,SO002,DEAL002,Another School,NUC002,,Andro
                             >
                               {assetStatuses.map(status => (
                                 <option key={status} value={status}>{status}</option>
+                              ))}
+                            </select>
+                            <select
+                              value={tv.assetGroups[index] || 'NFA'}
+                              onChange={(e) => {
+                                const newAssetGroups = [...tv.assetGroups];
+                                newAssetGroups[index] = e.target.value;
+                                updateTV(tv.id, 'assetGroups', newAssetGroups);
+                              }}
+                              style={{ fontSize: '12px', width: '80px', border: '1px solid #d1d5db', borderRadius: '4px', padding: '8px' }}
+                            >
+                              {assetGroups.map(group => (
+                                <option key={group} value={group}>{group}</option>
                               ))}
                             </select>
                             <button
@@ -1022,7 +1114,7 @@ Stock,TV,Hyundai TV - 43",1,Bangalore,SO002,DEAL002,Another School,NUC002,,Andro
               <div style={{ fontSize: '12px', color: '#6b7280' }}>
                 Upload a CSV file with the following format:
                 <br />
-                order_type,asset_type,model,quantity,warehouse,sales_order,deal_id,school_name,nucleus_id,serial_numbers,configuration,product,asset_statuses,asset_group
+                order_type,asset_type,model,quantity,warehouse,sales_order,deal_id,school_name,nucleus_id,serial_numbers,configuration,product,asset_statuses,asset_groups
               </div>
               <input
                 type="file"

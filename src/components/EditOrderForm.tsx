@@ -9,7 +9,7 @@ import { Plus, Minus, Camera, X, Search } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import EnhancedBarcodeScanner from './EnhancedBarcodeScanner';
-import { Order } from './types';
+import { Order, Device } from './types';
 import { formatDate } from './utils';
 
 interface EditOrderFormProps {
@@ -19,14 +19,10 @@ interface EditOrderFormProps {
 }
 
 const EditOrderForm: React.FC<EditOrderFormProps> = ({ order, onSave, onCancel }) => {
-  const [formData, setFormData] = useState<Order>(() => {
-    const data = { ...order };
-    data.serial_numbers = data.serial_numbers?.length > 0 ? data.serial_numbers : Array(data.quantity || 1).fill('');
-    data.asset_statuses = data.asset_statuses || Array(data.quantity || 1).fill('Fresh');
-    data.asset_group = data.asset_group || 'NFA'; // Default to NFA if not set
-    return data;
-  });
+  const [formData, setFormData] = useState<Order>({ ...order });
+  const [devices, setDevices] = useState<Device[]>([]);
   const [originalOrder] = useState<Order>({ ...order });
+  const [originalDevices, setOriginalDevices] = useState<Device[]>([]);
   const [showScanner, setShowScanner] = useState(false);
   const [currentSerialIndex, setCurrentSerialIndex] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
@@ -64,8 +60,28 @@ const EditOrderForm: React.FC<EditOrderFormProps> = ({ order, onSave, onCancel }
   const assetStatuses = ['Fresh', 'Refurb', 'Scrap'];
   const assetGroups = ['NFA', 'FA'];
 
-  const serialNumbers = formData.serial_numbers || [];
-  const filledCount = serialNumbers.filter(sn => sn.trim()).length;
+  // Fetch devices for the order on mount
+  useEffect(() => {
+    const fetchDevices = async () => {
+      const { data, error } = await supabase
+        .from('devices')
+        .select('*')
+        .eq('order_id', order.id)
+        .eq('is_deleted', false);
+      if (error) {
+        toast({ title: 'Error', description: `Failed to fetch devices: ${error.message}`, variant: 'destructive' });
+        return;
+      }
+      setDevices(data || []);
+      setOriginalDevices(data || []);
+      setFormData(prev => ({
+        ...prev,
+        serial_numbers: data.map(d => d.serial_number || ''),
+        quantity: data.length || 1,
+      }));
+    };
+    fetchDevices();
+  }, [order.id, toast]);
 
   useEffect(() => {
     if (formData.asset_type && !['Tablet', 'TV'].includes(formData.asset_type)) {
@@ -78,33 +94,40 @@ const EditOrderForm: React.FC<EditOrderFormProps> = ({ order, onSave, onCancel }
   }, [formData.asset_type]);
 
   const removeSerialNumber = (index: number) => {
-    setFormData(prev => {
-      if ((prev.serial_numbers?.length || 0) <= index) return prev;
-      const newSerials = (prev.serial_numbers || []).filter((_, i) => i !== index);
-      const newStatuses = (prev.asset_statuses || []).filter((_, i) => i !== index);
-      return {
-        ...prev,
-        serial_numbers: newSerials,
-        asset_statuses: newStatuses,
-        quantity: Math.max(1, newSerials.length),
-      };
-    });
+    setDevices(prev => prev.filter((_, i) => i !== index));
+    setFormData(prev => ({
+      ...prev,
+      serial_numbers: prev.serial_numbers.filter((_, i) => i !== index),
+      quantity: Math.max(1, prev.quantity - 1),
+    }));
   };
 
   const updateSerialNumber = (index: number, value: string) => {
     const trimmedValue = value.trim();
-    setFormData(prev => {
-      const newSerials = [...(prev.serial_numbers || [])];
-      newSerials[index] = trimmedValue;
-      return { ...prev, serial_numbers: newSerials };
+    setDevices(prev => {
+      const newDevices = [...prev];
+      newDevices[index] = { ...newDevices[index], serial_number: trimmedValue };
+      return newDevices;
     });
+    setFormData(prev => ({
+      ...prev,
+      serial_numbers: prev.serial_numbers.map((sn, i) => (i === index ? trimmedValue : sn)),
+    }));
   };
 
   const updateAssetStatus = (index: number, value: string) => {
-    setFormData(prev => {
-      const newStatuses = [...(prev.asset_statuses || [])];
-      newStatuses[index] = value;
-      return { ...prev, asset_statuses: newStatuses };
+    setDevices(prev => {
+      const newDevices = [...prev];
+      newDevices[index] = { ...newDevices[index], asset_status: value };
+      return newDevices;
+    });
+  };
+
+  const updateAssetGroup = (index: number, value: string) => {
+    setDevices(prev => {
+      const newDevices = [...prev];
+      newDevices[index] = { ...newDevices[index], asset_group: value };
+      return newDevices;
     });
   };
 
@@ -118,16 +141,47 @@ const EditOrderForm: React.FC<EditOrderFormProps> = ({ order, onSave, onCancel }
 
   const handleQuantityChange = (value: number) => {
     const newQuantity = Math.max(1, value);
+    const currentDevices = [...devices];
     const currentSerials = formData.serial_numbers || [];
-    const currentStatuses = formData.asset_statuses || [];
-    const newSerialNumbers = [...currentSerials, ...Array(newQuantity - currentSerials.length).fill('')].slice(0, newQuantity);
-    const newAssetStatuses = [...currentStatuses, ...Array(newQuantity - currentStatuses.length).fill('Fresh')].slice(0, newQuantity);
-    setFormData(prev => ({
-      ...prev,
-      quantity: newQuantity,
-      serial_numbers: newSerialNumbers,
-      asset_statuses: newAssetStatuses,
-    }));
+
+    if (newQuantity > currentDevices.length) {
+      const newDevices = Array(newQuantity - currentDevices.length).fill(null).map(() => ({
+        id: Math.random().toString(36).substr(2, 9),
+        order_id: formData.id,
+        asset_type: formData.asset_type,
+        model: formData.model,
+        serial_number: '',
+        warehouse: formData.warehouse,
+        sales_order: formData.sales_order || null,
+        deal_id: formData.deal_id || null,
+        school_name: formData.school_name,
+        nucleus_id: formData.nucleus_id || null,
+        status: formData.material_type === 'Inward' ? 'Available' : 'Assigned',
+        material_type: formData.material_type,
+        configuration: formData.configuration || null,
+        product: formData.product || null,
+        asset_status: 'Fresh',
+        asset_group: 'NFA',
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        created_by: '',
+        updated_by: '',
+        is_deleted: false,
+      }));
+      setDevices([...currentDevices, ...newDevices]);
+      setFormData(prev => ({
+        ...prev,
+        quantity: newQuantity,
+        serial_numbers: [...currentSerials, ...Array(newQuantity - currentSerials.length).fill('')],
+      }));
+    } else {
+      setDevices(currentDevices.slice(0, newQuantity));
+      setFormData(prev => ({
+        ...prev,
+        quantity: newQuantity,
+        serial_numbers: currentSerials.slice(0, newQuantity),
+      }));
+    }
   };
 
   const validateForm = () => {
@@ -143,31 +197,36 @@ const EditOrderForm: React.FC<EditOrderFormProps> = ({ order, onSave, onCancel }
       toast({ title: 'Error', description: 'Warehouse is required', variant: 'destructive' });
       return false;
     }
-    if (!formData.asset_group) {
-      toast({ title: 'Error', description: 'Asset Group is required', variant: 'destructive' });
-      return false;
-    }
-    if (!assetGroups.includes(formData.asset_group)) {
+    if (devices.length !== formData.quantity) {
       toast({
         title: 'Validation Error',
-        description: `Invalid asset group: ${formData.asset_group}. Must be FA or NFA.`,
+        description: `Number of devices (${devices.length}) does not match quantity (${formData.quantity})`,
         variant: 'destructive',
       });
       return false;
     }
-    const validStatusesCount = (formData.asset_statuses || []).length;
-    if (validStatusesCount !== formData.quantity) {
+    const invalidGroups = devices.some(device => !assetGroups.includes(device.asset_group));
+    if (invalidGroups) {
       toast({
-        title: 'Warning',
-        description: `Asset statuses length does not match quantity. Some may be missing.`,
-        variant: 'default',
+        title: 'Validation Error',
+        description: `Invalid asset groups detected. Must be one of: ${assetGroups.join(', ')}`,
+        variant: 'destructive',
       });
-      return true;
+      return false;
     }
     return true;
   };
 
-  const logHistory = async (tableName: string, recordId: string, fieldName: string, oldData: string, newData: string, userEmail: string, salesOrder: string | null, operation: string) => {
+  const logHistory = async (
+    tableName: string,
+    recordId: string,
+    fieldName: string,
+    oldData: string,
+    newData: string,
+    userEmail: string,
+    salesOrder: string | null,
+    operation: string
+  ) => {
     const { error } = await supabase
       .from('history')
       .insert({
@@ -203,9 +262,6 @@ const EditOrderForm: React.FC<EditOrderFormProps> = ({ order, onSave, onCancel }
       }
       const userEmail = userData.user.email;
 
-      const allSerials = formData.serial_numbers || Array(formData.quantity).fill('');
-      const allAssetStatuses = formData.asset_statuses || Array(formData.quantity).fill('Fresh');
-
       const fieldsToCompare = [
         'order_type',
         'asset_type',
@@ -218,7 +274,6 @@ const EditOrderForm: React.FC<EditOrderFormProps> = ({ order, onSave, onCancel }
         'nucleus_id',
         'quantity',
         'warehouse',
-        'asset_group',
       ];
 
       const historyEntries: { tableName: string; recordId: string; fieldName: string; oldData: string; newData: string; operation: string }[] = [];
@@ -238,35 +293,42 @@ const EditOrderForm: React.FC<EditOrderFormProps> = ({ order, onSave, onCancel }
         }
       }
 
-      const originalSerials = originalOrder.serial_numbers || Array(originalOrder.quantity).fill('');
-      const originalStatuses = originalOrder.asset_statuses || Array(originalOrder.quantity).fill('Fresh');
-      const maxLength = Math.max(originalSerials.length, allSerials.length, originalStatuses.length, allAssetStatuses.length);
-
+      const maxLength = Math.max(originalDevices.length, devices.length);
       for (let i = 0; i < maxLength; i++) {
-        const oldSerial = originalSerials[i] || '';
-        const newSerial = allSerials[i] || '';
-        const oldStatus = originalStatuses[i] || 'Fresh';
-        const newStatus = allAssetStatuses[i] || 'Fresh';
+        const oldDevice = originalDevices[i] || {};
+        const newDevice = devices[i] || {};
+        const deviceId = newDevice.id || oldDevice.id || formData.id;
 
-        if (oldSerial !== newSerial) {
+        if ((oldDevice.serial_number || '') !== (newDevice.serial_number || '')) {
           historyEntries.push({
             tableName: 'devices',
-            recordId: formData.id,
+            recordId: deviceId,
             fieldName: `serial_number_${i + 1}`,
-            oldData: oldSerial,
-            newData: newSerial,
-            operation: 'UPDATE',
+            oldData: oldDevice.serial_number || '',
+            newData: newDevice.serial_number || '',
+            operation: i < originalDevices.length ? 'UPDATE' : 'INSERT',
           });
         }
 
-        if (oldStatus !== newStatus) {
+        if ((oldDevice.asset_status || 'Fresh') !== (newDevice.asset_status || 'Fresh')) {
           historyEntries.push({
             tableName: 'devices',
-            recordId: formData.id,
+            recordId: deviceId,
             fieldName: `asset_status_${i + 1}`,
-            oldData: oldStatus,
-            newData: newStatus,
-            operation: 'UPDATE',
+            oldData: oldDevice.asset_status || 'Fresh',
+            newData: newDevice.asset_status || 'Fresh',
+            operation: i < originalDevices.length ? 'UPDATE' : 'INSERT',
+          });
+        }
+
+        if ((oldDevice.asset_group || 'NFA') !== (newDevice.asset_group || 'NFA')) {
+          historyEntries.push({
+            tableName: 'devices',
+            recordId: deviceId,
+            fieldName: `asset_group_${i + 1}`,
+            oldData: oldDevice.asset_group || 'NFA',
+            newData: newDevice.asset_group || 'NFA',
+            operation: i < originalDevices.length ? 'UPDATE' : 'INSERT',
           });
         }
       }
@@ -298,8 +360,7 @@ const EditOrderForm: React.FC<EditOrderFormProps> = ({ order, onSave, onCancel }
           nucleus_id: formData.nucleus_id || null,
           quantity: formData.quantity,
           warehouse: formData.warehouse,
-          serial_numbers: allSerials,
-          asset_group: formData.asset_group,
+          serial_numbers: devices.map(d => d.serial_number || ''),
           updated_at: new Date().toISOString(),
           updated_by: userEmail,
         })
@@ -317,10 +378,12 @@ const EditOrderForm: React.FC<EditOrderFormProps> = ({ order, onSave, onCancel }
       if (deleteError) throw new Error(`Failed to delete existing devices: ${deleteError.message}`);
       devicesDeleted = true;
 
-      const newDevices = Array.from({ length: formData.quantity }, (_, i) => ({
+      const newDevices = devices.map(device => ({
+        id: device.id || Math.random().toString(36).substr(2, 9),
+        order_id: formData.id,
         asset_type: formData.asset_type,
         model: formData.model,
-        serial_number: allSerials[i] || '',
+        serial_number: device.serial_number || '',
         warehouse: formData.warehouse,
         sales_order: formData.sales_order || null,
         deal_id: formData.deal_id || null,
@@ -328,16 +391,15 @@ const EditOrderForm: React.FC<EditOrderFormProps> = ({ order, onSave, onCancel }
         nucleus_id: formData.nucleus_id || null,
         status: formData.material_type === 'Inward' ? 'Available' : 'Assigned',
         material_type: formData.material_type,
-        order_id: formData.id,
         configuration: formData.configuration || null,
         product: formData.product || null,
-        asset_status: allAssetStatuses[i] || 'Fresh',
-        asset_group: formData.asset_group,
-        created_at: new Date().toISOString(),
+        asset_status: device.asset_status || 'Fresh',
+        asset_group: device.asset_group || 'NFA',
+        created_at: device.created_at || new Date().toISOString(),
         updated_at: new Date().toISOString(),
-        is_deleted: false,
-        created_by: userEmail,
+        created_by: device.created_by || userEmail,
         updated_by: userEmail,
+        is_deleted: false,
       }));
 
       const { error: insertError } = await supabase
@@ -347,7 +409,11 @@ const EditOrderForm: React.FC<EditOrderFormProps> = ({ order, onSave, onCancel }
       if (insertError) throw new Error(`Failed to insert new devices: ${insertError.message}`);
       devicesInserted = true;
 
-      onSave(formData);
+      const updatedOrder = {
+        ...formData,
+        serial_numbers: devices.map(d => d.serial_number || ''),
+      };
+      onSave(updatedOrder);
       toast({ title: 'Success', description: 'Order and devices updated successfully. Changes logged in history.' });
     } catch (error) {
       console.error('Error during save:', error);
@@ -486,22 +552,6 @@ const EditOrderForm: React.FC<EditOrderFormProps> = ({ order, onSave, onCancel }
               </Select>
             </div>
             <div>
-              <Label className='text-sm text-gray-500'>Asset Group *</Label>
-              <Select
-                value={formData.asset_group || 'NFA'}
-                onValueChange={(value) => setFormData(prev => ({ ...prev, asset_group: value }))}
-              >
-                <SelectTrigger className='text-base'>
-                  <SelectValue placeholder='Select asset group' />
-                </SelectTrigger>
-                <SelectContent className='z-[1000] bg-white shadow-lg border min-w-[150px]'>
-                  {assetGroups.map(group => (
-                    <SelectItem key={group} value={group} className='text-base'>{group}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
               <Label className='text-sm text-gray-500'>Sales Order</Label>
               <Input
                 value={formData.sales_order || ''}
@@ -602,7 +652,7 @@ const EditOrderForm: React.FC<EditOrderFormProps> = ({ order, onSave, onCancel }
 
       <Card className='mt-8'>
         <CardHeader>
-          <CardTitle className='text-xl'>Serial Numbers & Asset Statuses ({filledCount} / {formData.quantity})</CardTitle>
+          <CardTitle className='text-xl'>Serial Numbers, Asset Statuses & Asset Groups ({devices.filter(d => d.serial_number?.trim()).length} / {formData.quantity})</CardTitle>
         </CardHeader>
         <CardContent className='space-y-3 pt-6'>
           <div className='mb-4'>
@@ -619,9 +669,9 @@ const EditOrderForm: React.FC<EditOrderFormProps> = ({ order, onSave, onCancel }
               </Button>
             </div>
           </div>
-          <Label className='text-sm text-gray-500'>Update serial numbers individually (partial updates allowed)</Label>
-          {Array.from({ length: formData.quantity }, (_, index) => {
-            const serial = serialNumbers[index] || '';
+          <Label className='text-sm text-gray-500'>Update serial numbers, asset statuses, and asset groups individually (partial updates allowed)</Label>
+          {devices.map((device, index) => {
+            const serial = device.serial_number || '';
             const shouldShow = !searchQuery || serial.toLowerCase().includes(searchQuery.toLowerCase());
             return shouldShow ? (
               <div key={index} className='flex items-center gap-3 bg-muted p-3 rounded-lg'>
@@ -632,8 +682,7 @@ const EditOrderForm: React.FC<EditOrderFormProps> = ({ order, onSave, onCancel }
                   placeholder={`Serial ${index + 1} (optional - can update later)`}
                 />
                 <Select
-                  key={`asset-status-${index}-${formData.asset_statuses?.[index] || 'Fresh'}`}
-                  value={formData.asset_statuses?.[index] || 'Fresh'}
+                  value={device.asset_status || 'Fresh'}
                   onValueChange={(value) => updateAssetStatus(index, value)}
                 >
                   <SelectTrigger className='text-base w-48'>
@@ -642,6 +691,19 @@ const EditOrderForm: React.FC<EditOrderFormProps> = ({ order, onSave, onCancel }
                   <SelectContent className='z-[1000] bg-white shadow-lg border min-w-[140px]'>
                     {assetStatuses.map(status => (
                       <SelectItem key={status} value={status} className='text-base'>{status}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Select
+                  value={device.asset_group || 'NFA'}
+                  onValueChange={(value) => updateAssetGroup(index, value)}
+                >
+                  <SelectTrigger className='text-base w-24'>
+                    <SelectValue placeholder='Asset Group' />
+                  </SelectTrigger>
+                  <SelectContent className='z-[1000] bg-white shadow-lg border min-w-[80px]'>
+                    {assetGroups.map(group => (
+                      <SelectItem key={group} value={group} className='text-base'>{group}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
@@ -666,8 +728,8 @@ const EditOrderForm: React.FC<EditOrderFormProps> = ({ order, onSave, onCancel }
               </div>
             ) : null;
           })}
-          {filledCount < formData.quantity && (
-            <p className='text-sm text-yellow-600'>Info: {formData.quantity - filledCount} serial(s) remaining. You can save now and update later.</p>
+          {devices.filter(d => d.serial_number?.trim()).length < formData.quantity && (
+            <p className='text-sm text-yellow-600'>Info: {formData.quantity - devices.filter(d => d.serial_number?.trim()).length} serial(s) remaining. You can save now and update later.</p>
           )}
         </CardContent>
       </Card>

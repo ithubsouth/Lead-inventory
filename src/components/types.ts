@@ -1,53 +1,50 @@
 // types.ts
+// types.ts
 export interface Order {
-  id: string;
-  order_type: string;
-  material_type: 'Inward' | 'Outward';
-  asset_type: 'Tablet' | 'TV' | 'SD Card' | 'Pendrive';
-  model: string;
-  product: string | null;
-  configuration: string | null;
-  asset_statuses: string[];
-  quantity: number;
-  warehouse: string;
-  sales_order: string | null;
-  deal_id: string | null;
-  school_name: string;
-  nucleus_id: string | null;
-  serial_numbers: string[];
-  order_date: string;
-  created_at: string;
-  updated_at: string;
-  is_deleted: boolean;
-  created_by: string | null;
-  updated_by: string | null;
-  asset_group: 'FA' | 'NFA' | null; // Added asset_group
-  editHistory?: EditHistoryEntry[];
-  status?: 'Success' | 'Failed' | 'Pending';
-  statusDetails?: string;
+    id: string;
+    order_type: string;
+    asset_type: string;
+    model: string;
+    quantity: number;
+    warehouse: string;
+    sales_order?: string;
+    deal_id?: string;
+    school_name: string;
+    nucleus_id?: string;
+    serial_numbers: string[];
+    configuration?: string;
+    product?: string;
+    material_type: string;
+    order_date: string;
+    created_at: string;
+    updated_at: string;
+    created_by: string;
+    updated_by: string;
+    is_deleted: boolean;
 }
 
 export interface Device {
-  id: string;
-  asset_type: 'Tablet' | 'TV' | 'SD Card' | 'Pendrive';
-  model: string;
-  product: string | null;
-  configuration: string | null;
-  asset_status: string;
-  serial_number: string;
-  warehouse: string;
-  sales_order: string | null;
-  deal_id: string | null;
-  school_name: string;
-  nucleus_id: string | null;
-  status: 'Available' | 'Assigned';
-  order_id: string;
-  created_at: string;
-  updated_at: string;
-  created_by: string | null;
-  updated_by: string | null;
-  is_deleted: boolean;
-  asset_group: 'FA' | 'NFA' | null; // Added asset_group
+    id: string;
+    order_id: string;
+    asset_type: string;
+    model: string;
+    serial_number: string;
+    warehouse: string;
+    sales_order?: string;
+    deal_id?: string;
+    school_name: string;
+    nucleus_id?: string;
+    status: string;
+    material_type: string;
+    configuration?: string;
+    product?: string;
+    asset_status: string; // e.g., 'Fresh', 'Refurb', 'Scrap'
+    asset_group: string;  // e.g., 'NFA', 'FA'
+    created_at: string;
+    updated_at: string;
+    created_by: string;
+    updated_by: string;
+    is_deleted: boolean;
 }
 
 export interface OrderSummary {
