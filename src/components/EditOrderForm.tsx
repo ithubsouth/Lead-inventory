@@ -9,8 +9,8 @@ import { Plus, Minus, Camera, X } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import EnhancedBarcodeScanner from './EnhancedBarcodeScanner';
-import { Order, EditHistoryEntry } from './types';
-import { generateDummyId, formatDate } from './utils';
+import { Order } from './types';
+import { formatDate } from './utils';
 
 interface EditOrderFormProps {
   order: Order;
@@ -19,64 +19,61 @@ interface EditOrderFormProps {
 }
 
 const EditOrderForm: React.FC<EditOrderFormProps> = ({ order, onSave, onCancel }) => {
-  const [formData, setFormData] = useState<Order>({ ...order });
+  const [formData, setFormData] = useState<Order>(() => {
+    const data = { ...order };
+    data.serial_numbers = data.serial_numbers?.length > 0 ? data.serial_numbers : Array(data.quantity || 1).fill('');
+    data.asset_statuses = data.asset_statuses || Array(data.quantity || 1).fill('Fresh');
+    return data;
+  });
   const [originalOrder] = useState<Order>({ ...order });
-  const [newSerialNumber, setNewSerialNumber] = useState('');
-  const [newAssetStatus, setNewAssetStatus] = useState('Fresh');
   const [showScanner, setShowScanner] = useState(false);
   const [currentSerialIndex, setCurrentSerialIndex] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
   const { toast } = useToast();
 
+  const orderTypes = [
+    'Hardware',
+    'Additional Hardware',
+    'Replacement Hardware (FOC)',
+    'Replacement Hardware (CB)',
+    'Exp Hub',
+    'Stock Movement',
+    'Employee',
+    'Stock',
+    'Return',
+    'Other',
+  ];
+  const tabletModels = ['Lenovo TB301XU', 'Lenovo TB301FU', 'Lenovo TB-8505F', 'Lenovo TB-7306F', 'Lenovo TB-7306X', 'Lenovo TB-7305X', 'IRA T811'];
+  const tvModels = ['Hyundai TV - 39"', 'Hyundai TV - 43"', 'Hyundai TV - 50"', 'Hyundai TV - 55"', 'Hyundai TV - 65"', 'Xentec TV - 39"', 'Xentec TV - 43"'];
+  const configurations = [
+    '1G+8 GB (Android-7)',
+    '1G+16 GB (Android-9)',
+    '1G+32 GB (Android-9)',
+    '2G+16 GB (Android-9)',
+    '2G+32 GB (Android-9)',
+    '2G+32 GB (Android-10)',
+    '3G+32 GB (Android-10)',
+    '3G+32 GB (Android-13)',
+    '4G+64 GB (Android-13)',
+  ];
+  const tvConfigurations = ['Non Smart TV', 'Smart TV', 'Android TV', 'Web OS'];
+  const products = ['Lead', 'Propel', 'Pinnacle', 'Techbook', 'BoardAce'];
   const locations = ['Trichy', 'Bangalore', 'Hyderabad', 'Kolkata', 'Bhiwandi', 'Ghaziabad', 'Zirakpur', 'Indore', 'Jaipur'];
   const assetStatuses = ['Fresh', 'Refurb', 'Scrap'];
 
+  const serialNumbers = formData.serial_numbers || [];
+  const filledCount = serialNumbers.filter(sn => sn.trim()).length;
+
   useEffect(() => {
-    setFormData(prev => ({
-      ...prev,
-      serial_numbers: prev.serial_numbers || [],
-      asset_statuses: prev.asset_statuses || Array(prev.quantity).fill('Fresh'),
-      editHistory: prev.editHistory || [],
-    }));
-  }, [order]);
-
-  const generateEditHistoryEntry = (originalOrder: Order, updatedOrder: Order): EditHistoryEntry | null => {
-    const changedFields: string[] = [];
-    const changes: string[] = [];
-
-    if (originalOrder.serial_numbers?.length !== updatedOrder.serial_numbers?.length) {
-      changedFields.push('serial_numbers');
-      changes.push(`Serial Numbers: ${originalOrder.serial_numbers?.length || 0} → ${updatedOrder.serial_numbers?.length || 0}`);
+    // Ensure model and configuration options are filtered based on asset_type
+    if (formData.asset_type && !['Tablet', 'TV'].includes(formData.asset_type)) {
+      setFormData(prev => ({
+        ...prev,
+        model: '',
+        configuration: '',
+      }));
     }
-    if (JSON.stringify(originalOrder.asset_statuses) !== JSON.stringify(updatedOrder.asset_statuses)) {
-      changedFields.push('asset_statuses');
-      changes.push('Asset Statuses updated');
-    }
-    if (changes.length === 0) return null;
-
-    return {
-      timestamp: new Date().toISOString(),
-      changes: changes.join(', '),
-      changedFields,
-    };
-  };
-
-  const addSerialNumber = (serial: string, assetStatus: string = 'Fresh') => {
-    if (serial.trim()) {
-      setFormData(prev => {
-        const newSerials = [...(prev.serial_numbers || []), serial.trim()];
-        const newStatuses = [...(prev.asset_statuses || []), assetStatus];
-        return {
-          ...prev,
-          serial_numbers: newSerials,
-          asset_statuses: newStatuses,
-          quantity: Math.max(prev.quantity || 1, newSerials.length),
-        };
-      });
-      setNewSerialNumber('');
-      setNewAssetStatus('Fresh');
-    }
-  };
+  }, [formData.asset_type]);
 
   const removeSerialNumber = (index: number) => {
     setFormData(prev => {
@@ -110,13 +107,11 @@ const EditOrderForm: React.FC<EditOrderFormProps> = ({ order, onSave, onCancel }
   };
 
   const handleScanSuccess = (result: string) => {
-    if (currentSerialIndex !== null && (formData.serial_numbers?.length || 0) > currentSerialIndex) {
+    setShowScanner(false);
+    if (currentSerialIndex !== null) {
       updateSerialNumber(currentSerialIndex, result);
       setCurrentSerialIndex(null);
-    } else {
-      addSerialNumber(result, newAssetStatus);
     }
-    setShowScanner(false);
   };
 
   const handleQuantityChange = (value: number) => {
@@ -146,14 +141,14 @@ const EditOrderForm: React.FC<EditOrderFormProps> = ({ order, onSave, onCancel }
       toast({ title: 'Error', description: 'Warehouse is required', variant: 'destructive' });
       return false;
     }
-    const validSerials = (formData.serial_numbers || []).filter(sn => sn.trim());
-    if (validSerials.length > formData.quantity) {
+    const validStatusesCount = (formData.asset_statuses || []).length;
+    if (validStatusesCount !== formData.quantity) {
       toast({
-        title: 'Error',
-        description: `Number of serial numbers (${validSerials.length}) exceeds quantity (${formData.quantity})`,
-        variant: 'destructive',
+        title: 'Warning',
+        description: `Asset statuses length does not match quantity. Some may be missing.`,
+        variant: 'default',
       });
-      return false;
+      return true; // Allow save anyway
     }
     return true;
   };
@@ -161,162 +156,114 @@ const EditOrderForm: React.FC<EditOrderFormProps> = ({ order, onSave, onCancel }
   const handleSave = async () => {
     if (!validateForm()) return;
 
-    let originalDevices: any[] = [];
-    let updateSucceeded = false;
+    setLoading(true);
+    let orderUpdated = false;
+    let devicesDeleted = false;
+    let devicesInserted = false;
 
     try {
-      setLoading(true);
-
-      // Get the authenticated user's email
       const { data: userData, error: userError } = await supabase.auth.getUser();
       if (userError || !userData?.user?.email) {
-        throw new Error('Failed to retrieve authenticated user email');
+        throw new Error('Authentication failed: Unable to retrieve user email');
       }
       const userEmail = userData.user.email;
 
-      // Fetch original devices for potential rollback
-      const { data: fetchedOriginalDevices, error: fetchError } = await supabase
-        .from('devices')
-        .select('*')
-        .eq('order_id', formData.id);
-      if (fetchError) throw fetchError;
-      originalDevices = fetchedOriginalDevices || [];
+      const allSerials = formData.serial_numbers || Array(formData.quantity).fill('');
+      const allAssetStatuses = formData.asset_statuses || Array(formData.quantity).fill('Fresh');
 
-      // Prepare history and valid data
-      const validSerials = (formData.serial_numbers || []).filter(sn => sn.trim());
-      const validAssetStatuses = (formData.asset_statuses || []).slice(0, validSerials.length).concat(Array(Math.max(0, formData.quantity - validSerials.length)).fill('Fresh'));
-      const historyEntry = generateEditHistoryEntry(originalOrder, formData);
-      const updatedEditHistory = [...(formData.editHistory || [])];
-      if (historyEntry) updatedEditHistory.push(historyEntry);
-
-      // Update order
-      const { error: orderError } = await supabase
+      const { error: orderUpdateError } = await supabase
         .from('orders')
         .update({
+          order_type: formData.order_type,
+          asset_type: formData.asset_type,
+          model: formData.model,
+          configuration: formData.configuration || null,
+          product: formData.product || null,
           sales_order: formData.sales_order || null,
           deal_id: formData.deal_id || null,
           school_name: formData.school_name,
           nucleus_id: formData.nucleus_id || null,
           quantity: formData.quantity,
           warehouse: formData.warehouse,
-          serial_numbers: validSerials,
-          asset_statuses: validAssetStatuses,
+          serial_numbers: allSerials,
           updated_at: new Date().toISOString(),
-          editHistory: updatedEditHistory,
-          updated_by: userEmail, // Use email for updated_by
+          updated_by: userEmail,
         })
-        .eq('id', formData.id);
-      if (orderError) throw orderError;
+        .eq('id', formData.id)
+        .select();
 
-      // Update or insert devices, creating new records for non-existing serials
-      const existingDeviceMap = new Map(originalDevices.map(d => [d.serial_number, d]));
-      const newDevices = validSerials.map((serial, i) => {
-        const existingDevice = existingDeviceMap.get(serial);
-        return {
-          id: existingDevice?.id || generateDummyId('DEV'),
-          asset_type: formData.asset_type,
-          model: formData.model,
-          product: (formData.asset_type === 'Tablet' || formData.asset_type === 'TV') ? formData.product || null : null,
-          serial_number: serial.trim(),
-          warehouse: formData.warehouse,
-          sales_order: formData.sales_order || generateDummyId('SO'),
-          deal_id: formData.deal_id || null,
-          school_name: formData.school_name,
-          nucleus_id: formData.nucleus_id || null,
-          status: formData.order_type === 'Inward' ? 'Available' : 'Assigned',
-          order_id: formData.id,
-          created_at: existingDevice?.created_at || new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-          is_deleted: false,
-          configuration: formData.configuration || null,
-          asset_status: validAssetStatuses[i] || 'Fresh',
-          created_by: existingDevice?.created_by || userEmail, // Preserve existing created_by or use email
-          updated_by: userEmail, // Use email for updated_by
-        };
-      });
+      if (orderUpdateError) throw new Error(`Order update failed: ${orderUpdateError.message}`);
+      orderUpdated = true;
 
-      for (const device of newDevices) {
-        if (device.id && existingDeviceMap.has(device.serial_number)) {
-          const { error: updateError } = await supabase
-            .from('devices')
-            .update(device)
-            .eq('id', device.id);
-          if (updateError) throw updateError;
-        } else {
-          const { error: insertError } = await supabase
-            .from('devices')
-            .insert(device);
-          if (insertError) throw insertError;
-        }
-      }
+      const { error: deleteError } = await supabase
+        .from('devices')
+        .delete()
+        .eq('order_id', formData.id);
 
-      // Mark removed devices as deleted
-      const removedSerials = (originalOrder.serial_numbers || []).filter(sn => !validSerials.includes(sn));
-      if (removedSerials.length > 0) {
-        const { error: deleteError } = await supabase
-          .from('devices')
-          .update({ is_deleted: true, updated_at: new Date().toISOString(), updated_by: userEmail })
-          .in('serial_number', removedSerials)
-          .eq('order_id', formData.id);
-        if (deleteError) throw deleteError;
-      }
+      if (deleteError) throw new Error(`Failed to delete existing devices: ${deleteError.message}`);
+      devicesDeleted = true;
 
-      updateSucceeded = true;
-      const updatedFormData = { ...formData, editHistory: updatedEditHistory };
-      onSave(updatedFormData);
-      toast({ title: 'Success', description: 'Order and devices updated successfully' });
+      const newDevices = Array.from({ length: formData.quantity }, (_, i) => ({
+        asset_type: formData.asset_type,
+        model: formData.model,
+        serial_number: allSerials[i] || '',
+        warehouse: formData.warehouse,
+        sales_order: formData.sales_order || null,
+        deal_id: formData.deal_id || null,
+        school_name: formData.school_name,
+        nucleus_id: formData.nucleus_id || null,
+        status: formData.material_type === 'Inward' ? 'Available' : 'Assigned',
+        material_type: formData.material_type,
+        order_id: formData.id,
+        configuration: formData.configuration || null,
+        product: formData.product || null,
+        asset_status: allAssetStatuses[i] || 'Fresh',
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        is_deleted: false,
+        created_by: userEmail,
+        updated_by: userEmail,
+      }));
+
+      const { error: insertError } = await supabase
+        .from('devices')
+        .insert(newDevices);
+
+      if (insertError) throw new Error(`Failed to insert new devices: ${insertError.message}`);
+      devicesInserted = true;
+
+      onSave(formData);
+      toast({ title: 'Success', description: 'Order and devices updated successfully. Partial serial updates are saved.' });
     } catch (error) {
-      console.error('Error updating order:', error);
+      console.error('Error during save:', error);
 
-      if (updateSucceeded) {
-        const rollbackFields = {
-          sales_order: originalOrder.sales_order || null,
-          deal_id: originalOrder.deal_id || null,
-          school_name: originalOrder.school_name,
-          nucleus_id: originalOrder.nucleus_id || null,
-          quantity: originalOrder.quantity,
-          warehouse: originalOrder.warehouse,
-          serial_numbers: originalOrder.serial_numbers || [],
-          asset_statuses: originalOrder.asset_statuses || [],
-          updated_at: new Date().toISOString(),
-          editHistory: originalOrder.editHistory || [],
-          updated_by: userEmail, // Use email for rollback
-        };
-        const { error: rollbackError } = await supabase
-          .from('orders')
-          .update(rollbackFields)
-          .eq('id', formData.id);
-        if (rollbackError) {
-          console.error('Failed to rollback order:', rollbackError);
-          toast({
-            title: 'Warning',
-            description: 'Order rollback failed. Contact admin.',
-            variant: 'destructive',
-          });
+      const { data: userData } = await supabase.auth.getUser();
+      const userEmail = userData?.user?.email || '';
+
+      try {
+        if (orderUpdated) {
+          await supabase
+            .from('orders')
+            .update({
+              ...originalOrder,
+              updated_at: new Date().toISOString(),
+              updated_by: userEmail,
+            })
+            .eq('id', formData.id);
         }
 
-        for (const device of originalDevices) {
-          if (device.id) {
-            const { error: restoreError } = await supabase
-              .from('devices')
-              .update({ ...device, updated_at: new Date().toISOString(), updated_by: userEmail })
-              .eq('id', device.id);
-            if (restoreError) {
-              console.error('Failed to restore device:', restoreError);
-              toast({
-                title: 'Critical Error',
-                description: 'Device restore failed. Contact admin.',
-                variant: 'destructive',
-              });
-              break;
-            }
-          }
+        if (devicesDeleted && !devicesInserted) {
+          console.warn('Devices were deleted but not re-inserted. Manual intervention may be needed.');
+          toast({ title: 'Warning', description: 'Devices rollback incomplete. Check database.', variant: 'destructive' });
         }
+      } catch (rollbackError) {
+        console.error('Rollback failed:', rollbackError);
+        toast({ title: 'Rollback Error', description: 'Partial update occurred. Contact admin.', variant: 'destructive' });
       }
 
       toast({
         title: 'Error',
-        description: 'Failed to update order. Changes rolled back.',
+        description: `Failed to update order: ${error instanceof Error ? error.message : 'Unknown error'}`,
         variant: 'destructive',
       });
     } finally {
@@ -325,90 +272,146 @@ const EditOrderForm: React.FC<EditOrderFormProps> = ({ order, onSave, onCancel }
   };
 
   return (
-    <div className='space-y-4 relative'>
+    <div className='space-y-6 relative w-full mx-auto p-12 bg-white rounded-lg shadow-lg max-w-none'>
       <Button
         variant="ghost"
         size="sm"
-        className="absolute right-0 top-0 rounded-full p-1 hover:bg-muted z-10"
+        className="absolute right-0 top-0 rounded-full p-2 hover:bg-muted z-10"
         onClick={onCancel}
         disabled={loading}
       >
         <X className="h-4 w-4" />
       </Button>
-      <div className='grid grid-cols-1 md:grid-cols-2 gap-3'>
+      <div className='grid grid-cols-1 lg:grid-cols-2 gap-8'>
         <Card>
           <CardHeader>
-            <CardTitle className='text-lg'>Order Information</CardTitle>
+            <CardTitle className='text-xl'>Order Information</CardTitle>
           </CardHeader>
-          <CardContent className='space-y-2'>
+          <CardContent className='space-y-4'>
             <div>
-              <Label className='text-xs text-gray-500'>Sales Order</Label>
+              <Label className='text-sm text-gray-500'>Order Type *</Label>
+              <Select
+                value={formData.order_type || ''}
+                onValueChange={(value) => setFormData(prev => ({ ...prev, order_type: value }))}
+              >
+                <SelectTrigger className='text-base'>
+                  <SelectValue placeholder='Select order type' />
+                </SelectTrigger>
+                <SelectContent className='z-[1000] bg-white shadow-lg border min-w-[150px]'>
+                  {orderTypes.map(type => (
+                    <SelectItem key={type} value={type} className='text-base'>{type}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label className='text-sm text-gray-500'>Asset Type</Label>
+              <Select
+                value={formData.asset_type || ''}
+                onValueChange={(value) => setFormData(prev => ({ ...prev, asset_type: value }))}
+              >
+                <SelectTrigger className='text-base'>
+                  <SelectValue placeholder='Select asset type' />
+                </SelectTrigger>
+                <SelectContent className='z-[1000] bg-white shadow-lg border min-w-[150px]'>
+                  {['Tablet', 'TV'].map(type => (
+                    <SelectItem key={type} value={type} className='text-base'>{type}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label className='text-sm text-gray-500'>Model</Label>
+              <Select
+                value={formData.model || ''}
+                onValueChange={(value) => setFormData(prev => ({ ...prev, model: value }))}
+                disabled={!formData.asset_type}
+              >
+                <SelectTrigger className='text-base'>
+                  <SelectValue placeholder='Select model' />
+                </SelectTrigger>
+                <SelectContent className='z-[1000] bg-white shadow-lg border min-w-[150px]'>
+                  {(formData.asset_type === 'Tablet' ? tabletModels : formData.asset_type === 'TV' ? tvModels : []).map(model => (
+                    <SelectItem key={model} value={model} className='text-base'>{model}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label className='text-sm text-gray-500'>Configuration</Label>
+              <Select
+                value={formData.configuration || ''}
+                onValueChange={(value) => setFormData(prev => ({ ...prev, configuration: value }))}
+                disabled={!formData.asset_type}
+              >
+                <SelectTrigger className='text-base'>
+                  <SelectValue placeholder='Select configuration' />
+                </SelectTrigger>
+                <SelectContent className='z-[1000] bg-white shadow-lg border min-w-[150px]'>
+                  {(formData.asset_type === 'Tablet' ? configurations : formData.asset_type === 'TV' ? tvConfigurations : []).map(config => (
+                    <SelectItem key={config} value={config} className='text-base'>{config}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label className='text-sm text-gray-500'>Product</Label>
+              <Select
+                value={formData.product || ''}
+                onValueChange={(value) => setFormData(prev => ({ ...prev, product: value }))}
+              >
+                <SelectTrigger className='text-base'>
+                  <SelectValue placeholder='Select product' />
+                </SelectTrigger>
+                <SelectContent className='z-[1000] bg-white shadow-lg border min-w-[150px]'>
+                  {products.map(product => (
+                    <SelectItem key={product} value={product} className='text-base'>{product}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label className='text-sm text-gray-500'>Sales Order</Label>
               <Input
                 value={formData.sales_order || ''}
                 onChange={(e) => setFormData(prev => ({ ...prev, sales_order: e.target.value }))}
-                className='text-sm'
+                className='text-base'
               />
             </div>
             <div>
-              <Label className='text-xs text-gray-500'>Deal ID</Label>
+              <Label className='text-sm text-gray-500'>Deal ID</Label>
               <Input
                 value={formData.deal_id || ''}
                 onChange={(e) => setFormData(prev => ({ ...prev, deal_id: e.target.value }))}
-                className='text-sm'
+                className='text-base'
               />
             </div>
             <div>
-              <Label className='text-xs text-gray-500'>School Name *</Label>
+              <Label className='text-sm text-gray-500'>School Name *</Label>
               <Input
                 value={formData.school_name || ''}
                 onChange={(e) => setFormData(prev => ({ ...prev, school_name: e.target.value }))}
                 required
-                className='text-sm'
+                className='text-base'
               />
             </div>
             <div>
-              <Label className='text-xs text-gray-500'>Nucleus ID</Label>
+              <Label className='text-sm text-gray-500'>Nucleus ID</Label>
               <Input
                 value={formData.nucleus_id || ''}
                 onChange={(e) => setFormData(prev => ({ ...prev, nucleus_id: e.target.value }))}
-                className='text-sm'
+                className='text-base'
               />
             </div>
           </CardContent>
         </Card>
         <Card>
           <CardHeader>
-            <CardTitle className='text-lg'>Product Details</CardTitle>
+            <CardTitle className='text-xl'>Logistics Details</CardTitle>
           </CardHeader>
-          <CardContent className='space-y-2'>
+          <CardContent className='space-y-4'>
             <div>
-              <Label className='text-xs text-gray-500'>Order Type</Label>
-              <Badge variant={formData.order_type === 'Inward' ? 'default' : 'secondary'} className='text-sm'>
-                {formData.order_type}
-              </Badge>
-            </div>
-            <div>
-              <Label className='text-xs text-gray-500'>Asset Type</Label>
-              <p className='text-sm'>{formData.asset_type}</p>
-            </div>
-            <div>
-              <Label className='text-xs text-gray-500'>Model</Label>
-              <p className='text-sm'>{formData.model}</p>
-            </div>
-            {(formData.asset_type === 'Tablet' || formData.asset_type === 'TV') && (
-              <>
-                <div>
-                  <Label className='text-xs text-gray-500'>Product</Label>
-                  <p className='text-sm'>{formData.product || 'N/A'}</p>
-                </div>
-                <div>
-                  <Label className='text-xs text-gray-500'>Configuration</Label>
-                  <p className='text-sm'>{formData.configuration || 'N/A'}</p>
-                </div>
-              </>
-            )}
-            <div>
-              <Label className='text-xs text-gray-500'>Quantity</Label>
+              <Label className='text-sm text-gray-500'>Quantity</Label>
               <div className='flex items-center gap-2'>
                 <Button
                   type='button'
@@ -417,14 +420,14 @@ const EditOrderForm: React.FC<EditOrderFormProps> = ({ order, onSave, onCancel }
                   onClick={() => handleQuantityChange(formData.quantity - 1)}
                   disabled={formData.quantity <= 1}
                 >
-                  <Minus className='h-3 w-3' />
+                  <Minus className='h-4 w-4' />
                 </Button>
                 <Input
                   type='number'
                   value={formData.quantity}
                   onChange={(e) => handleQuantityChange(parseInt(e.target.value) || 1)}
                   min='1'
-                  className='text-center text-sm'
+                  className='text-center text-base w-24'
                 />
                 <Button
                   type='button'
@@ -432,182 +435,99 @@ const EditOrderForm: React.FC<EditOrderFormProps> = ({ order, onSave, onCancel }
                   size='sm'
                   onClick={() => handleQuantityChange(formData.quantity + 1)}
                 >
-                  <Plus className='h-3 w-3' />
+                  <Plus className='h-4 w-4' />
                 </Button>
               </div>
             </div>
             <div>
-              <Label className='text-xs text-gray-500'>Warehouse</Label>
+              <Label className='text-sm text-gray-500'>Warehouse</Label>
               <Select
                 value={formData.warehouse}
                 onValueChange={(value) => setFormData(prev => ({ ...prev, warehouse: value }))}
               >
-                <SelectTrigger className='text-sm'>
+                <SelectTrigger className='text-base'>
                   <SelectValue placeholder='Select warehouse' />
                 </SelectTrigger>
-                <SelectContent className='z-[1000] bg-white shadow-lg border min-w-[120px]'>
+                <SelectContent className='z-[1000] bg-white shadow-lg border min-w-[150px]'>
                   {locations.map(location => (
-                    <SelectItem key={location} value={location} className='text-sm'>{location}</SelectItem>
+                    <SelectItem key={location} value={location} className='text-base'>{location}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             </div>
             <div>
-              <Label className='text-xs text-gray-500'>Order Date</Label>
-              <p className='text-sm'>{formatDate(formData.order_date)}</p>
+              <Label className='text-sm text-gray-500'>Material Type</Label>
+              <Badge variant={formData.material_type === 'Inward' ? 'default' : 'secondary'} className='text-base'>
+                {formData.material_type || 'N/A'}
+              </Badge>
+            </div>
+            <div>
+              <Label className='text-sm text-gray-500'>Order Date</Label>
+              <p className='text-base'>{formatDate(formData.order_date)}</p>
             </div>
           </CardContent>
         </Card>
       </div>
 
-      <Card>
+      <Card className='mt-8'>
         <CardHeader>
-          <CardTitle className='text-lg'>Serial Numbers & Asset Statuses ({(formData.serial_numbers || []).length})</CardTitle>
+          <CardTitle className='text-xl'>Serial Numbers & Asset Statuses ({filledCount} / {formData.quantity})</CardTitle>
         </CardHeader>
-        <CardContent className='space-y-3 relative'>
-          <div className='flex gap-2'>
-            <Input
-              placeholder='Enter serial number'
-              value={newSerialNumber}
-              onChange={(e) => setNewSerialNumber(e.target.value)}
-              onKeyPress={(e) => {
-                if (e.key === 'Enter') {
-                  e.preventDefault();
-                  addSerialNumber(newSerialNumber, newAssetStatus);
-                }
-              }}
-              className='text-sm'
-            />
-            <Select
-              key={`new-asset-status-${newAssetStatus}`}
-              value={newAssetStatus}
-              onValueChange={setNewAssetStatus}
-            >
-              <SelectTrigger className='text-sm w-32'>
-                <SelectValue placeholder='Asset Status' />
-              </SelectTrigger>
-              <SelectContent className='z-[1000] bg-white shadow-lg border min-w-[120px]'>
-                {assetStatuses.map(status => (
-                  <SelectItem key={status} value={status} className='text-sm'>{status}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <Button
-              onClick={() => addSerialNumber(newSerialNumber, newAssetStatus)}
-              variant='outline'
-              size='sm'
-            >
-              Add
-            </Button>
-            <Button
-              onClick={() => {
-                setCurrentSerialIndex(null);
-                setShowScanner(true);
-              }}
-              variant='outline'
-              size='sm'
-            >
-              <Camera className='w-3 h-3' />
-            </Button>
-          </div>
-
-          {(formData.serial_numbers || []).length > 0 && (
-            <div className='space-y-2'>
-              <Label className='text-xs text-gray-500'>Added Serial Numbers & Asset Statuses ({(formData.serial_numbers || []).length})</Label>
-              <div className='flex flex-wrap gap-2'>
-                {(formData.serial_numbers || []).map((serial, index) => (
-                  <div key={index} className='flex items-center gap-1 bg-muted p-1 rounded'>
-                    <Input
-                      value={serial || ''}
-                      onChange={(e) => updateSerialNumber(index, e.target.value)}
-                      className='font-mono text-xs w-40'
-                      placeholder={`Serial ${index + 1}`}
-                    />
-                    <Select
-                      key={`asset-status-${index}-${formData.asset_statuses?.[index] || 'Fresh'}`}
-                      value={formData.asset_statuses?.[index] || 'Fresh'}
-                      onValueChange={(value) => updateAssetStatus(index, value)}
-                    >
-                      <SelectTrigger className='text-sm w-24'>
-                        <SelectValue placeholder='Asset Status' />
-                      </SelectTrigger>
-                      <SelectContent className='z-[1000] bg-white shadow-lg border min-w-[120px]'>
-                        {assetStatuses.map(status => (
-                          <SelectItem key={status} value={status} className='text-sm'>{status}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <Button
-                      variant='outline'
-                      size='sm'
-                      onClick={() => {
-                        setCurrentSerialIndex(index);
-                        setShowScanner(true);
-                      }}
-                    >
-                      <Camera className='w-3 h-3' />
-                    </Button>
-                    <Button
-                      variant='ghost'
-                      size='sm'
-                      onClick={() => removeSerialNumber(index)}
-                    >
-                      <X className='w-3 h-3' />
-                    </Button>
-                  </div>
-                ))}
-                {Array.from({ length: Math.max(0, formData.quantity - (formData.serial_numbers?.length || 0)) }, (_, i) => (
-                  <div key={`empty-${i}`} className='flex items-center gap-1 bg-muted p-1 rounded'>
-                    <Input
-                      value=''
-                      onChange={(e) => updateSerialNumber((formData.serial_numbers?.length || 0) + i, e.target.value)}
-                      className='font-mono text-xs w-40'
-                      placeholder={`Serial ${((formData.serial_numbers?.length || 0) + i + 1)}`}
-                    />
-                    <Select
-                      key={`empty-asset-status-${i}-${formData.asset_statuses?.[(formData.serial_numbers?.length || 0) + i] || 'Fresh'}`}
-                      value={formData.asset_statuses?.[(formData.serial_numbers?.length || 0) + i] || 'Fresh'}
-                      onValueChange={(value) => updateAssetStatus((formData.serial_numbers?.length || 0) + i, value)}
-                    >
-                      <SelectTrigger className='text-sm w-24'>
-                        <SelectValue placeholder='Asset Status' />
-                      </SelectTrigger>
-                      <SelectContent className='z-[1000] bg-white shadow-lg border min-w-[120px]'>
-                        {assetStatuses.map(status => (
-                          <SelectItem key={status} value={status} className='text-sm'>{status}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <Button
-                      variant='outline'
-                      size='sm'
-                      onClick={() => {
-                        setCurrentSerialIndex((formData.serial_numbers?.length || 0) + i);
-                        setShowScanner(true);
-                      }}
-                    >
-                      <Camera className='w-3 h-3' />
-                    </Button>
-                    <Button
-                      variant='ghost'
-                      size='sm'
-                      onClick={() => removeSerialNumber((formData.serial_numbers?.length || 0) + i)}
-                    >
-                      <X className='w-3 h-3' />
-                    </Button>
-                  </div>
-                ))}
-              </div>
+        <CardContent className='space-y-3 pt-6'>
+          <Label className='text-sm text-gray-500'>Update serial numbers individually (partial updates allowed)</Label>
+          {serialNumbers.map((serial, index) => (
+            <div key={index} className='flex items-center gap-3 bg-muted p-3 rounded-lg'>
+              <Input
+                value={serial || ''}
+                onChange={(e) => updateSerialNumber(index, e.target.value)}
+                className='font-mono text-base w-96 flex-1'
+                placeholder={`Serial ${index + 1} (optional - can update later)`}
+              />
+              <Select
+                key={`asset-status-${index}-${formData.asset_statuses?.[index] || 'Fresh'}`}
+                value={formData.asset_statuses?.[index] || 'Fresh'}
+                onValueChange={(value) => updateAssetStatus(index, value)}
+              >
+                <SelectTrigger className='text-base w-48'>
+                  <SelectValue placeholder='Asset Status' />
+                </SelectTrigger>
+                <SelectContent className='z-[1000] bg-white shadow-lg border min-w-[140px]'>
+                  {assetStatuses.map(status => (
+                    <SelectItem key={status} value={status} className='text-base'>{status}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Button
+                variant='outline'
+                size='sm'
+                onClick={() => {
+                  setCurrentSerialIndex(index);
+                  setShowScanner(true);
+                }}
+              >
+                <Camera className='w-4 h-4' />
+              </Button>
+              <Button
+                variant='ghost'
+                size='sm'
+                onClick={() => removeSerialNumber(index)}
+                disabled={formData.quantity <= 1}
+              >
+                <X className='w-4 h-4' />
+              </Button>
             </div>
+          ))}
+          {filledCount < formData.quantity && (
+            <p className='text-sm text-yellow-600'>Info: {formData.quantity - filledCount} serial(s) remaining. You can save now and update later.</p>
           )}
         </CardContent>
       </Card>
 
-      <div className='flex justify-end gap-2'>
-        <Button variant='outline' onClick={onCancel} disabled={loading} size='sm'>
+      <div className='flex justify-end gap-3 mt-8'>
+        <Button variant='outline' onClick={onCancel} disabled={loading} size='lg' className='px-8'>
           Cancel
         </Button>
-        <Button onClick={handleSave} disabled={loading} size='sm'>
+        <Button onClick={handleSave} disabled={loading} size='lg' className='px-8'>
           {loading ? 'Saving...' : 'Save Changes'}
         </Button>
       </div>

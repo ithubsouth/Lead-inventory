@@ -50,8 +50,8 @@ const CreateOrderForm: React.FC<CreateOrderFormProps> = ({
   openScanner,
 }) => {
   const [showImportDialog, setShowImportDialog] = useState(false);
-  const [Tablets, setTabletsToggle] = useState(false);
-  const [TVs, setTVsToggle] = useState(false);
+  const [tabletsToggle, setTabletsToggle] = useState(false);
+  const [tvsToggle, setTVsToggle] = useState(false);
 
   const toast = ({ title, description, variant }: { title: string; description: string; variant?: 'destructive' }) => {
     console.log(`Toast: ${title} - ${description}${variant ? ` (Variant: ${variant})` : ''}`);
@@ -91,10 +91,9 @@ const CreateOrderForm: React.FC<CreateOrderFormProps> = ({
 
   const generateId = () => Math.random().toString(36).substr(2, 9);
 
-  // Generate sales order with format "SO-<digit>-<random-string>"
   const generateSalesOrder = () => {
-    const digit = Math.floor(Math.random() * 10); // Random single digit 0-9
-    const randomString = Math.random().toString(36).substr(2, 5); // 5-character random string
+    const digit = Math.floor(Math.random() * 10);
+    const randomString = Math.random().toString(36).substr(2, 5);
     return `SO-${digit}-${randomString}`;
   };
 
@@ -182,18 +181,18 @@ const CreateOrderForm: React.FC<CreateOrderFormProps> = ({
       toast({ title: 'Error', description: 'School Name is required', variant: 'destructive' });
       return false;
     }
-    if (!Tablets && !TVs) {
+    if (!tabletsToggle && !tvsToggle) {
       toast({ title: 'Error', description: 'Please select at least one of Tablets or TVs', variant: 'destructive' });
       return false;
     }
-    const validTablets = Tablets ? tablets.filter(t => t.model && t.location && t.quantity > 0) : [];
-    const validTVs = TVs ? tvs.filter(t => t.model && t.location && t.quantity > 0) : [];
+    const validTablets = tabletsToggle ? tablets.filter(t => t.model && t.location && t.quantity > 0) : [];
+    const validTVs = tvsToggle ? tvs.filter(t => t.model && t.location && t.quantity > 0) : [];
 
-    if (Tablets && !validTablets.length && !validTVs.length) {
+    if (tabletsToggle && !validTablets.length && !validTVs.length) {
       toast({ title: 'Error', description: 'Please add at least one tablet with model, location, and quantity', variant: 'destructive' });
       return false;
     }
-    if (TVs && !validTVs.length && !validTablets.length) {
+    if (tvsToggle && !validTVs.length && !validTablets.length) {
       toast({ title: 'Error', description: 'Please add at least one TV with model, location, and quantity', variant: 'destructive' });
       return false;
     }
@@ -229,16 +228,15 @@ const CreateOrderForm: React.FC<CreateOrderFormProps> = ({
 
     setLoading(true);
     try {
-      // Get the authenticated user's email
       const { data: userData, error: userError } = await supabase.auth.getUser();
       if (userError || !userData?.user?.email) {
         throw new Error('Failed to retrieve authenticated user email');
       }
-      const userEmail = userData.user.email; // Get the user's email
+      const userEmail = userData.user.email;
 
       console.log('Creating order with:', { orderType, salesOrder, dealId, nucleusId, schoolName, tablets, tvs });
-      const validTablets = Tablets ? tablets.filter(t => t.model && t.location && t.quantity > 0) : [];
-      const validTVs = TVs ? tvs.filter(t => t.model && t.location && t.quantity > 0) : [];
+      const validTablets = tabletsToggle ? tablets.filter(t => t.model && t.location && t.quantity > 0) : [];
+      const validTVs = tvsToggle ? tvs.filter(t => t.model && t.location && t.quantity > 0) : [];
       const materialType = (orderType === 'Stock' || orderType === 'Return') ? 'Inward' : 'Outward';
 
       for (const tablet of validTablets) {
@@ -264,16 +262,15 @@ const CreateOrderForm: React.FC<CreateOrderFormProps> = ({
             is_deleted: false,
             configuration: tablet.configuration || null,
             product: tablet.product || null,
-            created_by: userEmail, // Use email for created_by
-            updated_by: userEmail, // Use email for updated_by
+            created_by: userEmail,
+            updated_by: userEmail,
           })
           .select()
           .single();
         if (orderError) throw new Error(`Order insertion failed: ${orderError.message}`);
 
-        // Create device records for each quantity, using empty string if no serial is provided
         for (let i = 0; i < tablet.quantity; i++) {
-          const serialNumber = tabletSerials[i] || ""; // Use empty string if no serial is provided
+          const serialNumber = tabletSerials[i] || "";
           const assetStatus = tablet.assetStatuses[i] || 'Fresh';
           const { error: deviceError } = await supabase
             .from('devices')
@@ -295,8 +292,8 @@ const CreateOrderForm: React.FC<CreateOrderFormProps> = ({
               configuration: tablet.configuration || null,
               product: tablet.product || null,
               asset_status: assetStatus,
-              created_by: userEmail, // Use email for created_by
-              updated_by: userEmail, // Use email for updated_by
+              created_by: userEmail,
+              updated_by: userEmail,
             });
           if (deviceError) throw new Error(`Device insertion failed: ${deviceError.message}`);
         }
@@ -325,16 +322,15 @@ const CreateOrderForm: React.FC<CreateOrderFormProps> = ({
             is_deleted: false,
             configuration: tv.configuration || null,
             product: tv.product || null,
-            created_by: userEmail, // Use email for created_by
-            updated_by: userEmail, // Use email for updated_by
+            created_by: userEmail,
+            updated_by: userEmail,
           })
           .select()
           .single();
         if (orderError) throw new Error(`Order insertion failed: ${orderError.message}`);
 
-        // Create device records for each quantity, using empty string if no serial is provided
         for (let i = 0; i < tv.quantity; i++) {
-          const serialNumber = tvSerials[i] || ""; // Use empty string if no serial is provided
+          const serialNumber = tvSerials[i] || "";
           const assetStatus = tv.assetStatuses[i] || 'Fresh';
           const { error: deviceError } = await supabase
             .from('devices')
@@ -356,8 +352,8 @@ const CreateOrderForm: React.FC<CreateOrderFormProps> = ({
               configuration: tv.configuration || null,
               product: tv.product || null,
               asset_status: assetStatus,
-              created_by: userEmail, // Use email for created_by
-              updated_by: userEmail, // Use email for updated_by
+              created_by: userEmail,
+              updated_by: userEmail,
             });
           if (deviceError) throw new Error(`Device insertion failed: ${deviceError.message}`);
         }
@@ -576,7 +572,7 @@ Stock,TV,Hyundai TV - 43",1,Bangalore,SO002,DEAL002,Another School,NUC002,,Andro
             <label style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
               <input
                 type="checkbox"
-                checked={Tablets}
+                checked={tabletsToggle}
                 onChange={(e) => setTabletsToggle(e.target.checked)}
                 style={{ width: '16px', height: '16px' }}
               />
@@ -585,7 +581,7 @@ Stock,TV,Hyundai TV - 43",1,Bangalore,SO002,DEAL002,Another School,NUC002,,Andro
             <label style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
               <input
                 type="checkbox"
-                checked={TVs}
+                checked={tvsToggle}
                 onChange={(e) => setTVsToggle(e.target.checked)}
                 style={{ width: '16px', height: '16px' }}
               />
@@ -595,7 +591,7 @@ Stock,TV,Hyundai TV - 43",1,Bangalore,SO002,DEAL002,Another School,NUC002,,Andro
         </div>
       </div>
 
-      {Tablets && (
+      {tabletsToggle && (
         <div style={{ border: '1px solid #e2e8f0', borderRadius: '8px', background: '#fff', padding: '16px' }}>
           <div style={{ padding: '8px 0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <h3 style={{ fontSize: '16px', fontWeight: '500' }}>Tablets</h3>
@@ -773,7 +769,7 @@ Stock,TV,Hyundai TV - 43",1,Bangalore,SO002,DEAL002,Another School,NUC002,,Andro
         </div>
       )}
 
-      {TVs && (
+      {tvsToggle && (
         <div style={{ border: '1px solid #e2e8f0', borderRadius: '8px', background: '#fff', padding: '16px' }}>
           <div style={{ padding: '8px 0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <h3 style={{ fontSize: '16px', fontWeight: '500' }}>TVs</h3>
