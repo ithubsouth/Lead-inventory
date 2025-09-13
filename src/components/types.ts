@@ -18,6 +18,8 @@ export interface Order {
   created_at: string;
   updated_at: string;
   is_deleted: boolean;
+  created_by: string | null;
+  updated_by: string | null;
   editHistory?: EditHistoryEntry[];
   status?: 'Success' | 'Failed' | 'Pending';
   statusDetails?: string;
@@ -40,6 +42,8 @@ export interface Device {
   order_id: string;
   created_at: string;
   updated_at: string;
+  created_by: string | null;
+  updated_by: string | null;
   is_deleted: boolean;
 }
 

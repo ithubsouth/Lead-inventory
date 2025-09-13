@@ -65,7 +65,6 @@ const EditOrderForm: React.FC<EditOrderFormProps> = ({ order, onSave, onCancel }
   const filledCount = serialNumbers.filter(sn => sn.trim()).length;
 
   useEffect(() => {
-    // Ensure model and configuration options are filtered based on asset_type
     if (formData.asset_type && !['Tablet', 'TV'].includes(formData.asset_type)) {
       setFormData(prev => ({
         ...prev,
@@ -148,9 +147,30 @@ const EditOrderForm: React.FC<EditOrderFormProps> = ({ order, onSave, onCancel }
         description: `Asset statuses length does not match quantity. Some may be missing.`,
         variant: 'default',
       });
-      return true; // Allow save anyway
+      return true;
     }
     return true;
+  };
+
+  const logHistory = async (tableName: string, recordId: string, fieldName: string, oldData: string, newData: string, userEmail: string, salesOrder: string | null, operation: string) => {
+    const { error } = await supabase
+      .from('history')
+      .insert({
+        record_id: recordId,
+        sales_order: salesOrder,
+        table_name: tableName,
+        field_name: fieldName,
+        old_data: oldData,
+        new_data: newData,
+        operation: operation, // Added to resolve NOT NULL constraint
+        updated_by: userEmail,
+        updated_at: new Date().toISOString(),
+      });
+
+    if (error) {
+      console.error(`Failed to log history for ${tableName}.${fieldName}:`, error.message);
+      throw new Error(`History logging failed: ${error.message}`);
+    }
   };
 
   const handleSave = async () => {
@@ -171,6 +191,87 @@ const EditOrderForm: React.FC<EditOrderFormProps> = ({ order, onSave, onCancel }
       const allSerials = formData.serial_numbers || Array(formData.quantity).fill('');
       const allAssetStatuses = formData.asset_statuses || Array(formData.quantity).fill('Fresh');
 
+      // Compare and log changes for orders table
+      const fieldsToCompare = [
+        'order_type',
+        'asset_type',
+        'model',
+        'configuration',
+        'product',
+        'sales_order',
+        'deal_id',
+        'school_name',
+        'nucleus_id',
+        'quantity',
+        'warehouse',
+      ];
+
+      const historyEntries: { tableName: string; recordId: string; fieldName: string; oldData: string; newData: string; operation: string }[] = [];
+
+      for (const field of fieldsToCompare) {
+        const oldValue = originalOrder[field as keyof Order] ?? '';
+        const newValue = formData[field as keyof Order] ?? '';
+        if (oldValue !== newValue) {
+          historyEntries.push({
+            tableName: 'orders',
+            recordId: formData.id,
+            fieldName: field,
+            oldData: String(oldValue),
+            newData: String(newValue),
+            operation: 'UPDATE',
+          });
+        }
+      }
+
+      // Compare serial_numbers and asset_statuses
+      const originalSerials = originalOrder.serial_numbers || Array(originalOrder.quantity).fill('');
+      const originalStatuses = originalOrder.asset_statuses || Array(originalOrder.quantity).fill('Fresh');
+      const maxLength = Math.max(originalSerials.length, allSerials.length, originalStatuses.length, allAssetStatuses.length);
+
+      for (let i = 0; i < maxLength; i++) {
+        const oldSerial = originalSerials[i] || '';
+        const newSerial = allSerials[i] || '';
+        const oldStatus = originalStatuses[i] || 'Fresh';
+        const newStatus = allAssetStatuses[i] || 'Fresh';
+
+        if (oldSerial !== newSerial) {
+          historyEntries.push({
+            tableName: 'devices',
+            recordId: formData.id,
+            fieldName: `serial_number_${i + 1}`,
+            oldData: oldSerial,
+            newData: newSerial,
+            operation: 'UPDATE',
+          });
+        }
+
+        if (oldStatus !== newStatus) {
+          historyEntries.push({
+            tableName: 'devices',
+            recordId: formData.id,
+            fieldName: `asset_status_${i + 1}`,
+            oldData: oldStatus,
+            newData: newStatus,
+            operation: 'UPDATE',
+          });
+        }
+      }
+
+      // Log all history entries
+      for (const entry of historyEntries) {
+        await logHistory(
+          entry.tableName,
+          entry.recordId,
+          entry.fieldName,
+          entry.oldData,
+          entry.newData,
+          userEmail,
+          formData.sales_order || originalOrder.sales_order || null,
+          entry.operation
+        );
+      }
+
+      // Update orders table
       const { error: orderUpdateError } = await supabase
         .from('orders')
         .update({
@@ -195,6 +296,7 @@ const EditOrderForm: React.FC<EditOrderFormProps> = ({ order, onSave, onCancel }
       if (orderUpdateError) throw new Error(`Order update failed: ${orderUpdateError.message}`);
       orderUpdated = true;
 
+      // Delete existing devices
       const { error: deleteError } = await supabase
         .from('devices')
         .delete()
@@ -203,6 +305,7 @@ const EditOrderForm: React.FC<EditOrderFormProps> = ({ order, onSave, onCancel }
       if (deleteError) throw new Error(`Failed to delete existing devices: ${deleteError.message}`);
       devicesDeleted = true;
 
+      // Insert new devices
       const newDevices = Array.from({ length: formData.quantity }, (_, i) => ({
         asset_type: formData.asset_type,
         model: formData.model,
@@ -233,7 +336,7 @@ const EditOrderForm: React.FC<EditOrderFormProps> = ({ order, onSave, onCancel }
       devicesInserted = true;
 
       onSave(formData);
-      toast({ title: 'Success', description: 'Order and devices updated successfully. Partial serial updates are saved.' });
+      toast({ title: 'Success', description: 'Order and devices updated successfully. Changes logged in history.' });
     } catch (error) {
       console.error('Error during save:', error);
 
