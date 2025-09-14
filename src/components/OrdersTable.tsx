@@ -14,6 +14,14 @@ interface OrdersTableProps {
   setSelectedAssetType: (value: string) => void;
   selectedModel: string;
   setSelectedModel: (value: string) => void;
+  selectedConfiguration: string;
+  setSelectedConfiguration: (value: string) => void;
+  selectedOrderType: string;
+  setSelectedOrderType: (value: string) => void;
+  selectedProduct: string;
+  setSelectedProduct: (value: string) => void;
+  selectedStatus: string;
+  setSelectedStatus: (value: string) => void;
   fromDate: string;
   setFromDate: (value: string) => void;
   toDate: string;
@@ -38,6 +46,14 @@ const OrdersTable: React.FC<OrdersTableProps> = ({
   setSelectedAssetType,
   selectedModel,
   setSelectedModel,
+  selectedConfiguration,
+  setSelectedConfiguration,
+  selectedOrderType,
+  setSelectedOrderType,
+  selectedProduct,
+  setSelectedProduct,
+  selectedStatus,
+  setSelectedStatus,
   fromDate,
   setFromDate,
   toDate,
@@ -107,6 +123,10 @@ const OrdersTable: React.FC<OrdersTableProps> = ({
       selectedWarehouse,
       selectedAssetType,
       selectedModel,
+      selectedConfiguration,
+      selectedOrderType,
+      selectedProduct,
+      selectedStatus,
       fromDate,
       toDate,
       showDeleted,
@@ -131,7 +151,20 @@ const OrdersTable: React.FC<OrdersTableProps> = ({
       status: o.status || '',
       updated_by: o.updated_by || '',
     })));
-  }, [orders, selectedWarehouse, selectedAssetType, selectedModel, fromDate, toDate, showDeleted, searchQuery]);
+  }, [
+    orders,
+    selectedWarehouse,
+    selectedAssetType,
+    selectedModel,
+    selectedConfiguration,
+    selectedOrderType,
+    selectedProduct,
+    selectedStatus,
+    fromDate,
+    toDate,
+    showDeleted,
+    searchQuery,
+  ]);
 
   // Dynamically generate dropdown options from orders table
   const warehouseOptions = ['All', ...[...new Set(orders.map(o => o.warehouse || ''))].filter(w => w).sort()];
@@ -141,12 +174,24 @@ const OrdersTable: React.FC<OrdersTableProps> = ({
       ? orders.map(o => o.model || '')
       : orders.filter(o => o.asset_type === selectedAssetType).map(o => o.model || '')
   )].filter(m => m).sort()];
+  const configurationOptions = ['All', ...[...new Set(
+    selectedModel === 'All'
+      ? orders.map(o => o.configuration || '')
+      : orders.filter(o => o.model === selectedModel).map(o => o.configuration || '')
+  )].filter(c => c).sort()];
+  const orderTypeOptions = ['All', ...[...new Set(orders.map(o => o.order_type || ''))].filter(o => o).sort()];
+  const productOptions = ['All', ...[...new Set(orders.map(o => o.product || ''))].filter(p => p).sort()];
+  const statusOptions = ['All', ...[...new Set(orders.map(o => o.status || ''))].filter(s => s).sort()];
 
   const filteredOrders = orders.filter((order) => {
     const matchesDeleted = showDeleted ? order.is_deleted : !order.is_deleted;
     const matchesWarehouse = selectedWarehouse === 'All' || (order.warehouse || '') === selectedWarehouse;
     const matchesAssetType = selectedAssetType === 'All' || (order.asset_type || '') === selectedAssetType;
     const matchesModel = selectedModel === 'All' || (order.model || '') === selectedModel;
+    const matchesConfiguration = selectedConfiguration === 'All' || (order.configuration || '') === selectedConfiguration;
+    const matchesOrderType = selectedOrderType === 'All' || (order.order_type || '') === selectedOrderType;
+    const matchesProduct = selectedProduct === 'All' || (order.product || '') === selectedProduct;
+    const matchesStatus = selectedStatus === 'All' || (order.status || '') === selectedStatus;
     const matchesDateRange =
       (!fromDate || !order.order_date || new Date(order.order_date) >= new Date(fromDate)) &&
       (!toDate || !order.order_date || new Date(order.order_date) <= new Date(toDate));
@@ -160,7 +205,18 @@ const OrdersTable: React.FC<OrdersTableProps> = ({
         ].some((field) => field.toLowerCase().includes(searchQuery.toLowerCase()))
       : true;
 
-    return matchesDeleted && matchesWarehouse && matchesAssetType && matchesModel && matchesDateRange && matchesSearch;
+    return (
+      matchesDeleted &&
+      matchesWarehouse &&
+      matchesAssetType &&
+      matchesModel &&
+      matchesConfiguration &&
+      matchesOrderType &&
+      matchesProduct &&
+      matchesStatus &&
+      matchesDateRange &&
+      matchesSearch
+    );
   });
 
   // Sort filteredOrders by order_date (descending) and sales_order (ascending)
@@ -451,8 +507,8 @@ const OrdersTable: React.FC<OrdersTableProps> = ({
               {showDeleted ? 'Show Active' : 'Show Deleted'}
             </button>
           </div>
-          <div style={{ display: 'flex', gap: '4px', marginTop: '4px', maxWidth: '1200px' }}>
-            <div style={{ flex: 1 }}>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', marginTop: '4px', maxWidth: '1200px' }}>
+            <div style={{ flex: '1 1 150px' }}>
               <label htmlFor="warehouseFilter" style={{ fontSize: '12px', color: '#6b7280', display: 'block', marginBottom: '2px', whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' }}>Warehouse</label>
               <select
                 id="warehouseFilter"
@@ -467,7 +523,7 @@ const OrdersTable: React.FC<OrdersTableProps> = ({
                 ))}
               </select>
             </div>
-            <div style={{ flex: 1 }}>
+            <div style={{ flex: '1 1 150px' }}>
               <label htmlFor="assetTypeFilter" style={{ fontSize: '12px', color: '#6b7280', display: 'block', marginBottom: '2px', whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' }}>Asset Type</label>
               <select
                 id="assetTypeFilter"
@@ -475,6 +531,7 @@ const OrdersTable: React.FC<OrdersTableProps> = ({
                 onChange={(e) => {
                   setSelectedAssetType(e.target.value);
                   setSelectedModel('All');
+                  setSelectedConfiguration('All');
                 }}
                 style={{ fontSize: '12px', width: '100%', border: '1px solid #d1d5db', borderRadius: '4px', padding: '6px', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}
               >
@@ -485,17 +542,80 @@ const OrdersTable: React.FC<OrdersTableProps> = ({
                 ))}
               </select>
             </div>
-            <div style={{ flex: 1 }}>
+            <div style={{ flex: '1 1 150px' }}>
               <label htmlFor="modelFilter" style={{ fontSize: '12px', color: '#6b7280', display: 'block', marginBottom: '2px', whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' }}>Model</label>
               <select
                 id="modelFilter"
                 value={selectedModel}
-                onChange={(e) => setSelectedModel(e.target.value)}
+                onChange={(e) => {
+                  setSelectedModel(e.target.value);
+                  setSelectedConfiguration('All');
+                }}
                 style={{ fontSize: '12px', width: '100%', border: '1px solid #d1d5db', borderRadius: '4px', padding: '6px', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}
               >
                 {modelOptions.map(model => (
                   <option key={model} value={model} style={{ fontSize: '12px' }}>
                     {model}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div style={{ flex: '1 1 150px' }}>
+              <label htmlFor="configurationFilter" style={{ fontSize: '12px', color: '#6b7280', display: 'block', marginBottom: '2px', whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' }}>Configuration</label>
+              <select
+                id="configurationFilter"
+                value={selectedConfiguration}
+                onChange={(e) => setSelectedConfiguration(e.target.value)}
+                style={{ fontSize: '12px', width: '100%', border: '1px solid #d1d5db', borderRadius: '4px', padding: '6px', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}
+              >
+                {configurationOptions.map(configuration => (
+                  <option key={configuration} value={configuration} style={{ fontSize: '12px' }}>
+                    {configuration}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div style={{ flex: '1 1 150px' }}>
+              <label htmlFor="orderTypeFilter" style={{ fontSize: '12px', color: '#6b7280', display: 'block', marginBottom: '2px', whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' }}>Order Type</label>
+              <select
+                id="orderTypeFilter"
+                value={selectedOrderType}
+                onChange={(e) => setSelectedOrderType(e.target.value)}
+                style={{ fontSize: '12px', width: '100%', border: '1px solid #d1d5db', borderRadius: '4px', padding: '6px', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}
+              >
+                {orderTypeOptions.map(orderType => (
+                  <option key={orderType} value={orderType} style={{ fontSize: '12px' }}>
+                    {orderType}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div style={{ flex: '1 1 150px' }}>
+              <label htmlFor="productFilter" style={{ fontSize: '12px', color: '#6b7280', display: 'block', marginBottom: '2px', whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' }}>Product</label>
+              <select
+                id="productFilter"
+                value={selectedProduct}
+                onChange={(e) => setSelectedProduct(e.target.value)}
+                style={{ fontSize: '12px', width: '100%', border: '1px solid #d1d5db', borderRadius: '4px', padding: '6px', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}
+              >
+                {productOptions.map(product => (
+                  <option key={product} value={product} style={{ fontSize: '12px' }}>
+                    {product}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div style={{ flex: '1 1 150px' }}>
+              <label htmlFor="statusFilter" style={{ fontSize: '12px', color: '#6b7280', display: 'block', marginBottom: '2px', whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' }}>Status</label>
+              <select
+                id="statusFilter"
+                value={selectedStatus}
+                onChange={(e) => setSelectedStatus(e.target.value)}
+                style={{ fontSize: '12px', width: '100%', border: '1px solid #d1d5db', borderRadius: '4px', padding: '6px', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}
+              >
+                {statusOptions.map(status => (
+                  <option key={status} value={status} style={{ fontSize: '12px' }}>
+                    {status}
                   </option>
                 ))}
               </select>

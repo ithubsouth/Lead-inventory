@@ -431,30 +431,30 @@ const InventoryManagement = () => {
             />
           </TabsContent>
           <TabsContent value='view' className='space-y-4'>
-            <OrdersTable
-              orders={orders}
-              setOrders={setOrders}
-              selectedWarehouse={selectedWarehouse}
-              setSelectedWarehouse={setSelectedWarehouse}
-              selectedAssetType={selectedAssetType}
-              setSelectedAssetType={setSelectedAssetType}
-              selectedModel={selectedModel}
-              setSelectedModel={setSelectedModel}
-              fromDate={fromDate}
-              setFromDate={setFromDate}
-              toDate={toDate}
-              setToDate={setToDate}
-              showDeleted={showDeleted}
-              setShowDeleted={setShowDeleted}
-              searchQuery={searchQuery}
-              setSearchQuery={setSearchQuery}
-              loading={loading}
-              setLoading={setLoading}
-              loadOrders={loadOrders}
-              loadDevices={loadDevices}
-              loadOrderSummary={loadOrderSummary}
-            />
-          </TabsContent>
+  <OrdersTable
+    orders={orders}
+    setOrders={setOrders}
+    selectedWarehouse={selectedWarehouse}
+    setSelectedWarehouse={setSelectedWarehouse}
+    selectedAssetType={selectedAssetType}
+    setSelectedAssetType={setSelectedAssetType}
+    selectedModel={selectedModel}
+    setSelectedModel={setSelectedModel}
+    selectedConfiguration={selectedConfiguration}
+    setSelectedConfiguration={setSelectedConfiguration}
+    selectedOrderType={selectedOrderType}
+    setSelectedOrderType={setSelectedOrderType}
+    selectedProduct={selectedProduct}
+    setSelectedProduct={setSelectedProduct}
+    selectedStatus={selectedStatus}
+    setSelectedStatus={setSelectedStatus}
+    loading={loading}
+    setLoading={setLoading}
+    loadOrders={loadOrders}
+    loadDevices={loadDevices}
+    loadOrderSummary={loadOrderSummary}
+  />
+</TabsContent>
           <TabsContent value='order' className='space-y-4'>
             <OrderSummaryTable
               orderSummary={orderSummary}
