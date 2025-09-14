@@ -110,7 +110,7 @@ const CreateOrderForm: React.FC<CreateOrderFormProps> = ({
       location: '',
       serialNumbers: [''],
       assetStatuses: ['Fresh'],
-      assetGroups: ['NFA'], // Initialize with NFA
+      assetGroups: ['NFA'],
     };
     setTablets([...tablets, newTablet]);
   };
@@ -125,7 +125,7 @@ const CreateOrderForm: React.FC<CreateOrderFormProps> = ({
       location: '',
       serialNumbers: [''],
       assetStatuses: ['Fresh'],
-      assetGroups: ['NFA'], // Initialize with NFA
+      assetGroups: ['NFA'],
     };
     setTvs([...tvs, newTV]);
   };
@@ -311,6 +311,8 @@ const CreateOrderForm: React.FC<CreateOrderFormProps> = ({
             is_deleted: false,
             configuration: tablet.configuration || null,
             product: tablet.product || null,
+            sd_card_size: tablet.sdCardSize || null,
+            profile_id: tablet.profileId || null,
             created_by: userEmail,
             updated_by: userEmail,
           })
@@ -331,6 +333,8 @@ const CreateOrderForm: React.FC<CreateOrderFormProps> = ({
           { tableName: 'orders', recordId: orderData.id, fieldName: 'material_type', newData: materialType },
           { tableName: 'orders', recordId: orderData.id, fieldName: 'configuration', newData: tablet.configuration || '' },
           { tableName: 'orders', recordId: orderData.id, fieldName: 'product', newData: tablet.product || '' },
+          { tableName: 'orders', recordId: orderData.id, fieldName: 'sd_card_size', newData: tablet.sdCardSize || '' },
+          { tableName: 'orders', recordId: orderData.id, fieldName: 'profile_id', newData: tablet.profileId || '' },
         ];
 
         for (let i = 0; i < tablet.quantity; i++) {
@@ -340,7 +344,9 @@ const CreateOrderForm: React.FC<CreateOrderFormProps> = ({
           historyEntries.push(
             { tableName: 'devices', recordId: orderData.id, fieldName: `serial_number_${i + 1}`, newData: serialNumber },
             { tableName: 'devices', recordId: orderData.id, fieldName: `asset_status_${i + 1}`, newData: assetStatus },
-            { tableName: 'devices', recordId: orderData.id, fieldName: `asset_group_${i + 1}`, newData: assetGroup }
+            { tableName: 'devices', recordId: orderData.id, fieldName: `asset_group_${i + 1}`, newData: assetGroup },
+            { tableName: 'devices', recordId: orderData.id, fieldName: `sd_card_size_${i + 1}`, newData: tablet.sdCardSize || '' },
+            { tableName: 'devices', recordId: orderData.id, fieldName: `profile_id_${i + 1}`, newData: tablet.profileId || '' }
           );
 
           const { error: deviceError } = await supabase
@@ -362,6 +368,8 @@ const CreateOrderForm: React.FC<CreateOrderFormProps> = ({
               is_deleted: false,
               configuration: tablet.configuration || null,
               product: tablet.product || null,
+              sd_card_size: tablet.sdCardSize || null,
+              profile_id: tablet.profileId || null,
               asset_status: assetStatus,
               asset_group: assetGroup,
               created_by: userEmail,
@@ -493,10 +501,10 @@ const CreateOrderForm: React.FC<CreateOrderFormProps> = ({
       const lines = text.split('\n').filter(line => line.trim());
       const headers = lines[0].split(',').map(h => h.trim());
 
-      if (headers.length < 14) {
+      if (headers.length < 16) {
         toast({
           title: 'Invalid CSV Format',
-          description: 'CSV must have at least 14 columns: order_type,asset_type,model,quantity,warehouse,sales_order,deal_id,school_name,nucleus_id,serial_numbers,configuration,product,asset_statuses,asset_groups',
+          description: 'CSV must have at least 16 columns: order_type,asset_type,model,quantity,warehouse,sales_order,deal_id,school_name,nucleus_id,serial_numbers,configuration,product,asset_statuses,asset_groups,sd_card_size,profile_id',
           variant: 'destructive',
         });
         return;
@@ -508,6 +516,8 @@ const CreateOrderForm: React.FC<CreateOrderFormProps> = ({
         const assetStatuses = values[12] ? values[12].split(';').map(s => s.trim()).filter(s => s) : Array(parseInt(values[3]) || 1).fill('Fresh');
         const assetGroups = values[13] ? values[13].split(';').map(s => s.trim()).filter(s => s) : Array(parseInt(values[3]) || 1).fill('NFA');
         const configuration = values[10] || '';
+        const sdCardSize = values[14] || '';
+        const profileId = values[15] || '';
 
         if (values[1] === 'TV' && configuration && !tvConfigurations.includes(configuration)) {
           toast({
@@ -540,6 +550,14 @@ const CreateOrderForm: React.FC<CreateOrderFormProps> = ({
           });
           return null;
         }
+        if (values[1] === 'Tablet' && sdCardSize && !sdCardSizes.includes(sdCardSize)) {
+          toast({
+            title: 'Invalid SD Card Size',
+            description: `SD Card Size "${sdCardSize}" is not valid for Tablets. Valid options are: ${sdCardSizes.join(', ')}`,
+            variant: 'destructive',
+          });
+          return null;
+        }
 
         return {
           order_type: values[0],
@@ -556,6 +574,8 @@ const CreateOrderForm: React.FC<CreateOrderFormProps> = ({
           product: values[11] || '',
           asset_statuses: assetStatuses,
           asset_groups: assetGroups,
+          sd_card_size: sdCardSize,
+          profile_id: profileId,
         };
       }).filter((data): data is NonNullable<typeof importedData[0]> => data !== null);
 
@@ -572,8 +592,8 @@ const CreateOrderForm: React.FC<CreateOrderFormProps> = ({
             serialNumbers: data.serial_numbers,
             assetStatuses: data.asset_statuses,
             assetGroups: data.asset_groups,
-            sdCardSize: '',
-            profileId: '',
+            sdCardSize: data.sd_card_size,
+            profileId: data.profile_id,
           };
           setTablets((prev: TabletItem[]) => [...prev, newTablet]);
           setTabletsToggle(true);
@@ -613,9 +633,9 @@ const CreateOrderForm: React.FC<CreateOrderFormProps> = ({
   };
 
   const downloadCSVTemplate = () => {
-    const template = `order_type,asset_type,model,quantity,warehouse,sales_order,deal_id,school_name,nucleus_id,serial_numbers,configuration,product,asset_statuses,asset_groups
-Hardware,Tablet,Lenovo TB301FU,2,Trichy,SO001,DEAL001,Example School,NUC001,"","2G+32 GB (Android-10)",Lead,"Fresh;Fresh","NFA;NFA"
-Stock,TV,Hyundai TV - 43",1,Bangalore,SO002,DEAL002,Another School,NUC002,,Android TV,BoardAce,Fresh,NFA`;
+    const template = `order_type,asset_type,model,quantity,warehouse,sales_order,deal_id,school_name,nucleus_id,serial_numbers,configuration,product,asset_statuses,asset_groups,sd_card_size,profile_id
+Hardware,Tablet,Lenovo TB301FU,2,Trichy,SO001,DEAL001,Example School,NUC001,"","2G+32 GB (Android-10)",Lead,"Fresh;Fresh","NFA;NFA","64 GB","PROF001"
+Stock,TV,Hyundai TV - 43",1,Bangalore,SO002,DEAL002,Another School,NUC002,,Android TV,BoardAce,Fresh,NFA,,`;
     const blob = new Blob([template], { type: 'text/csv' });
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -1114,7 +1134,7 @@ Stock,TV,Hyundai TV - 43",1,Bangalore,SO002,DEAL002,Another School,NUC002,,Andro
               <div style={{ fontSize: '12px', color: '#6b7280' }}>
                 Upload a CSV file with the following format:
                 <br />
-                order_type,asset_type,model,quantity,warehouse,sales_order,deal_id,school_name,nucleus_id,serial_numbers,configuration,product,asset_statuses,asset_groups
+                order_type,asset_type,model,quantity,warehouse,sales_order,deal_id,school_name,nucleus_id,serial_numbers,configuration,product,asset_statuses,asset_groups,sd_card_size,profile_id
               </div>
               <input
                 type="file"
