@@ -119,12 +119,17 @@ const OrdersTable: React.FC<OrdersTableProps> = ({
       order_type: o.order_type || '',
       asset_type: o.asset_type || '',
       model: o.model || '',
+      configuration: o.configuration || '',
       quantity: o.quantity || 0,
+      sd_card_size: o.sd_card_size || '',
+      profile_id: o.profile_id || '',
+      product: o.product || '',
       warehouse: o.warehouse || '',
       school_name: o.school_name || '',
       deal_id: o.deal_id || '',
       nucleus_id: o.nucleus_id || '',
       status: o.status || '',
+      updated_by: o.updated_by || '',
     })));
   }, [orders, selectedWarehouse, selectedAssetType, selectedModel, fromDate, toDate, showDeleted, searchQuery]);
 
@@ -151,6 +156,7 @@ const OrdersTable: React.FC<OrdersTableProps> = ({
           order.deal_id || '',
           order.school_name || '',
           order.nucleus_id || '',
+          order.profile_id || '',
         ].some((field) => field.toLowerCase().includes(searchQuery.toLowerCase()))
       : true;
 
@@ -327,18 +333,23 @@ const OrdersTable: React.FC<OrdersTableProps> = ({
     }
     const headers = [
       'id',
-      'order_date',
+      'sales_order',
       'order_type',
+      'warehouse',
+      'deal_id',
+      'nucleus_id',
+      'school_name',
       'asset_type',
       'model',
+      'configuration',
       'quantity',
-      'warehouse',
-      'sales_order',
-      'deal_id',
-      'school_name',
-      'nucleus_id',
-      'serial_numbers',
+      'sd_card_size',
+      'profile_id',
+      'product',
       'status',
+      'order_date',
+      'updated_by',
+      'serial_numbers',
       'is_deleted',
     ];
     const csvContent = [
@@ -383,15 +394,20 @@ const OrdersTable: React.FC<OrdersTableProps> = ({
   const columnWidths = {
     sales_order: '150px',
     order_type: '120px',
-    asset_type: '100px',
-    model: '150px',
-    quantity: '80px',
     warehouse: '120px',
-    school_name: '150px',
     deal_id: '120px',
     nucleus_id: '120px',
-    order_date: '150px',
+    school_name: '150px',
+    asset_type: '100px',
+    model: '150px',
+    configuration: '150px',
+    quantity: '80px',
+    sd_card_size: '100px',
+    profile_id: '120px',
+    product: '150px',
     status: '100px',
+    order_date: '150px',
+    updated_by: '120px',
     actions: '120px',
   };
 
@@ -411,7 +427,7 @@ const OrdersTable: React.FC<OrdersTableProps> = ({
                   id="search"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="Search by Sales Order, Deal ID, School, or Nucleus ID"
+                  placeholder="Search by Sales Order, Deal ID, School, Nucleus ID, or Profile ID"
                   style={{ paddingLeft: '28px', fontSize: '12px', width: '100%', border: '1px solid #d1d5db', borderRadius: '4px', padding: '6px' }}
                 />
               </div>
@@ -501,27 +517,32 @@ const OrdersTable: React.FC<OrdersTableProps> = ({
               ref={tableContainerRef}
               tabIndex={0}
             >
-              <table style={{ width: '100%', minWidth: '1400px', borderCollapse: 'collapse' }}>
+              <table style={{ width: '100%', minWidth: '2000px', borderCollapse: 'collapse' }}>
                 <thead>
                   <tr>
                     <th style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', textAlign: 'left', position: 'sticky', top: 0, background: '#fff', zIndex: 20, width: columnWidths.sales_order }}>Sales Order</th>
                     <th style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', textAlign: 'left', position: 'sticky', top: 0, background: '#fff', zIndex: 20, width: columnWidths.order_type }}>Order Type</th>
-                    <th style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', textAlign: 'left', position: 'sticky', top: 0, background: '#fff', zIndex: 20, width: columnWidths.asset_type }}>Asset Type</th>
-                    <th style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', textAlign: 'left', position: 'sticky', top: 0, background: '#fff', zIndex: 20, width: columnWidths.model }}>Model</th>
-                    <th style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', textAlign: 'left', position: 'sticky', top: 0, background: '#fff', zIndex: 20, width: columnWidths.quantity }}>Quantity</th>
                     <th style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', textAlign: 'left', position: 'sticky', top: 0, background: '#fff', zIndex: 20, width: columnWidths.warehouse }}>Warehouse</th>
-                    <th style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', textAlign: 'left', position: 'sticky', top: 0, background: '#fff', zIndex: 20, width: columnWidths.school_name }}>School Name</th>
                     <th style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', textAlign: 'left', position: 'sticky', top: 0, background: '#fff', zIndex: 20, width: columnWidths.deal_id }}>Deal ID</th>
                     <th style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', textAlign: 'left', position: 'sticky', top: 0, background: '#fff', zIndex: 20, width: columnWidths.nucleus_id }}>Nucleus ID</th>
-                    <th style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', textAlign: 'left', position: 'sticky', top: 0, background: '#fff', zIndex: 20, width: columnWidths.order_date }}>Order Date</th>
+                    <th style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', textAlign: 'left', position: 'sticky', top: 0, background: '#fff', zIndex: 20, width: columnWidths.school_name }}>School Name</th>
+                    <th style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', textAlign: 'left', position: 'sticky', top: 0, background: '#fff', zIndex: 20, width: columnWidths.asset_type }}>Asset Type</th>
+                    <th style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', textAlign: 'left', position: 'sticky', top: 0, background: '#fff', zIndex: 20, width: columnWidths.model }}>Model</th>
+                    <th style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', textAlign: 'left', position: 'sticky', top: 0, background: '#fff', zIndex: 20, width: columnWidths.configuration }}>Configuration</th>
+                    <th style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', textAlign: 'left', position: 'sticky', top: 0, background: '#fff', zIndex: 20, width: columnWidths.quantity }}>Quantity</th>
+                    <th style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', textAlign: 'left', position: 'sticky', top: 0, background: '#fff', zIndex: 20, width: columnWidths.sd_card_size }}>SD Card Size</th>
+                    <th style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', textAlign: 'left', position: 'sticky', top: 0, background: '#fff', zIndex: 20, width: columnWidths.profile_id }}>Profile ID</th>
+                    <th style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', textAlign: 'left', position: 'sticky', top: 0, background: '#fff', zIndex: 20, width: columnWidths.product }}>Product</th>
                     <th style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', textAlign: 'left', position: 'sticky', top: 0, background: '#fff', zIndex: 20, width: columnWidths.status }}>Status</th>
+                    <th style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', textAlign: 'left', position: 'sticky', top: 0, background: '#fff', zIndex: 20, width: columnWidths.order_date }}>Order Date</th>
+                    <th style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', textAlign: 'left', position: 'sticky', top: 0, background: '#fff', zIndex: 20, width: columnWidths.updated_by }}>Updated By</th>
                     <th style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', textAlign: 'left', position: 'sticky', top: 0, background: '#fff', zIndex: 20, width: columnWidths.actions }}>Actions</th>
                   </tr>
                 </thead>
                 <tbody>
                   {paginatedOrders.length === 0 ? (
                     <tr>
-                      <td colSpan={12} style={{ textAlign: 'center', fontSize: '12px', padding: '8px' }}>
+                      <td colSpan={17} style={{ textAlign: 'center', fontSize: '12px', padding: '8px' }}>
                         No orders found with current filters. Try adjusting the filters or check loadOrders.
                       </td>
                     </tr>
@@ -529,27 +550,18 @@ const OrdersTable: React.FC<OrdersTableProps> = ({
                     paginatedOrders.map((order) => (
                       <tr key={order.id}>
                         <td style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', width: columnWidths.sales_order }}>{order.sales_order || ''}</td>
-                        <td style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', width: columnWidths.order_type }}>
-                          <span
-                            style={{
-                              padding: '2px 8px',
-                              borderRadius: '4px',
-                              background: order.order_type === 'Inward' ? '#3b82f6' : '#6b7280',
-                              color: '#fff',
-                              fontSize: '12px',
-                            }}
-                          >
-                            {order.order_type || ''}
-                          </span>
-                        </td>
-                        <td style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', width: columnWidths.asset_type }}>{order.asset_type || ''}</td>
-                        <td style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', width: columnWidths.model }}>{order.model || ''}</td>
-                        <td style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', width: columnWidths.quantity }}>{order.quantity || 0}</td>
+                        <td style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', width: columnWidths.order_type }}>{order.order_type || ''}</td>
                         <td style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', width: columnWidths.warehouse }}>{order.warehouse || ''}</td>
-                        <td style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', width: columnWidths.school_name }}>{order.school_name || ''}</td>
                         <td style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', width: columnWidths.deal_id }}>{order.deal_id || ''}</td>
                         <td style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', width: columnWidths.nucleus_id }}>{order.nucleus_id || ''}</td>
-                        <td style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', width: columnWidths.order_date }}>{formatDate(order.order_date) || ''}</td>
+                        <td style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', width: columnWidths.school_name }}>{order.school_name || ''}</td>
+                        <td style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', width: columnWidths.asset_type }}>{order.asset_type || ''}</td>
+                        <td style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', width: columnWidths.model }}>{order.model || ''}</td>
+                        <td style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', width: columnWidths.configuration }}>{order.configuration || ''}</td>
+                        <td style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', width: columnWidths.quantity }}>{order.quantity || 0}</td>
+                        <td style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', width: columnWidths.sd_card_size }}>{order.sd_card_size || ''}</td>
+                        <td style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', width: columnWidths.profile_id }}>{order.profile_id || ''}</td>
+                        <td style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', width: columnWidths.product }}>{order.product || ''}</td>
                         <td style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', width: columnWidths.status }}>
                           <span
                             style={{
@@ -567,6 +579,8 @@ const OrdersTable: React.FC<OrdersTableProps> = ({
                             {order.status || ''}
                           </span>
                         </td>
+                        <td style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', width: columnWidths.order_date }}>{formatDate(order.order_date) || ''}</td>
+                        <td style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', width: columnWidths.updated_by }}>{order.updated_by || ''}</td>
                         <td style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', width: columnWidths.actions }}>
                           <div style={{ display: 'flex', gap: '4px' }}>
                             <button
@@ -645,15 +659,20 @@ const OrdersTable: React.FC<OrdersTableProps> = ({
                   <div style={{ fontSize: '12px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
                     <p><strong>Sales Order:</strong> {viewingOrder.sales_order || ''}</p>
                     <p><strong>Order Type:</strong> {viewingOrder.order_type || ''}</p>
-                    <p><strong>Asset Type:</strong> {viewingOrder.asset_type || ''}</p>
-                    <p><strong>Model:</strong> {viewingOrder.model || ''}</p>
-                    <p><strong>Quantity:</strong> {viewingOrder.quantity || 0}</p>
                     <p><strong>Warehouse:</strong> {viewingOrder.warehouse || ''}</p>
-                    <p><strong>School Name:</strong> {viewingOrder.school_name || ''}</p>
                     <p><strong>Deal ID:</strong> {viewingOrder.deal_id || ''}</p>
                     <p><strong>Nucleus ID:</strong> {viewingOrder.nucleus_id || ''}</p>
-                    <p><strong>Order Date:</strong> {formatDate(viewingOrder.order_date) || ''}</p>
+                    <p><strong>School Name:</strong> {viewingOrder.school_name || ''}</p>
+                    <p><strong>Asset Type:</strong> {viewingOrder.asset_type || ''}</p>
+                    <p><strong>Model:</strong> {viewingOrder.model || ''}</p>
+                    <p><strong>Configuration:</strong> {viewingOrder.configuration || ''}</p>
+                    <p><strong>Quantity:</strong> {viewingOrder.quantity || 0}</p>
+                    <p><strong>SD Card Size:</strong> {viewingOrder.sd_card_size || ''}</p>
+                    <p><strong>Profile ID:</strong> {viewingOrder.profile_id || ''}</p>
+                    <p><strong>Product:</strong> {viewingOrder.product || ''}</p>
                     <p><strong>Status:</strong> {viewingOrder.status || ''}</p>
+                    <p><strong>Order Date:</strong> {formatDate(viewingOrder.order_date) || ''}</p>
+                    <p><strong>Updated By:</strong> {viewingOrder.updated_by || ''}</p>
                     <p><strong>Serial Numbers:</strong></p>
                     <ul style={{ listStyleType: 'disc', paddingLeft: '20px' }}>
                       {(viewingOrder.serial_numbers || []).map((serial, index) => (
