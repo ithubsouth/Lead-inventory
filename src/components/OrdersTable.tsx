@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { Search, Eye, Edit, Trash2, RotateCcw, Download } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { Search, Eye, Edit, Trash2, RotateCcw, Download, Calendar } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import EditOrderForm from './EditOrderForm';
 import { Order } from './types';
@@ -59,14 +59,45 @@ const OrdersTable: React.FC<OrdersTableProps> = ({
   const [showViewDialog, setShowViewDialog] = useState(false);
   const [showEditDialog, setShowEditDialog] = useState(false);
   const [showStatusDialog, setShowStatusDialog] = useState(false);
+  const [showDatePickerDialog, setShowDatePickerDialog] = useState(false);
   const [statusDialogOrder, setStatusDialogOrder] = useState<Order | null>(null);
   const [statusError, setStatusError] = useState<string>('');
+  const tableContainerRef = useRef<HTMLDivElement>(null);
 
   // Mock toast for error/success messages
   const toast = ({ title, description, variant }: { title: string; description: string; variant?: 'destructive' }) => {
     console.log(`Toast: ${title} - ${description}${variant ? ` (Variant: ${variant})` : ''}`);
     alert(`${title}: ${description}`);
   };
+
+  // Handle keyboard and mouse scroll for horizontal scrolling
+  useEffect(() => {
+    const container = tableContainerRef.current;
+    if (!container) return;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'ArrowLeft') {
+        container.scrollBy({ left: -50, behavior: 'smooth' });
+      } else if (e.key === 'ArrowRight') {
+        container.scrollBy({ left: 50, behavior: 'smooth' });
+      }
+    };
+
+    const handleWheel = (e: WheelEvent) => {
+      if (e.deltaY !== 0) {
+        container.scrollBy({ left: e.deltaY * 2, behavior: 'smooth' });
+        e.preventDefault();
+      }
+    };
+
+    container.addEventListener('keydown', handleKeyDown);
+    container.addEventListener('wheel', handleWheel);
+
+    return () => {
+      container.removeEventListener('keydown', handleKeyDown);
+      container.removeEventListener('wheel', handleWheel);
+    };
+  }, []);
 
   useEffect(() => {
     console.log('OrdersTable props:', {
@@ -76,77 +107,76 @@ const OrdersTable: React.FC<OrdersTableProps> = ({
       selectedWarehouse,
       selectedAssetType,
       selectedModel,
+      fromDate,
+      toDate,
       showDeleted,
+      searchQuery,
     });
     console.log('Raw orders (first 5):', orders.slice(0, 5).map(o => ({
       id: o.id,
       order_date: o.order_date,
-      sales_order: o.sales_order || 'N/A',
+      sales_order: o.sales_order || '',
+      order_type: o.order_type || '',
+      asset_type: o.asset_type || '',
+      model: o.model || '',
+      quantity: o.quantity || 0,
+      warehouse: o.warehouse || '',
+      school_name: o.school_name || '',
+      deal_id: o.deal_id || '',
+      nucleus_id: o.nucleus_id || '',
+      status: o.status || '',
     })));
-  }, [orders, selectedWarehouse, selectedAssetType, selectedModel, showDeleted]);
+  }, [orders, selectedWarehouse, selectedAssetType, selectedModel, fromDate, toDate, showDeleted, searchQuery]);
 
-  const warehouseOptions = ['All', 'Trichy', 'Bangalore', 'Hyderabad', 'Kolkata', 'Bhiwandi', 'Ghaziabad', 'Zirakpur', 'Indore', 'Jaipur'];
-  const assetTypeOptions = ['All', 'Tablet', 'TV'];
-  const modelOptions = [
-    'All',
-    'Lenovo TB301XU',
-    'Lenovo TB301FU',
-    'Lenovo TB-8505F',
-    'Lenovo TB-7306F',
-    'Lenovo TB-7306X',
-    'Lenovo TB-7305X',
-    'IRA T811',
-    'Hyundai TV - 39"',
-    'Hyundai TV - 43"',
-    'Hyundai TV - 50"',
-    'Hyundai TV - 55"',
-    'Hyundai TV - 65"',
-    'Xentec TV - 39"',
-    'Xentec TV - 43"',
-  ];
+  // Dynamically generate dropdown options from orders table
+  const warehouseOptions = ['All', ...[...new Set(orders.map(o => o.warehouse || ''))].filter(w => w).sort()];
+  const assetTypeOptions = ['All', ...[...new Set(orders.map(o => o.asset_type || ''))].filter(a => a).sort()];
+  const modelOptions = ['All', ...[...new Set(
+    selectedAssetType === 'All'
+      ? orders.map(o => o.model || '')
+      : orders.filter(o => o.asset_type === selectedAssetType).map(o => o.model || '')
+  )].filter(m => m).sort()];
 
   const filteredOrders = orders.filter((order) => {
     const matchesDeleted = showDeleted ? order.is_deleted : !order.is_deleted;
-    const matchesWarehouse = selectedWarehouse === 'All' || order.warehouse === selectedWarehouse;
-    const matchesAssetType = selectedAssetType === 'All' || order.asset_type === selectedAssetType;
-    const matchesModel = selectedModel === 'All' || order.model === selectedModel;
+    const matchesWarehouse = selectedWarehouse === 'All' || (order.warehouse || '') === selectedWarehouse;
+    const matchesAssetType = selectedAssetType === 'All' || (order.asset_type || '') === selectedAssetType;
+    const matchesModel = selectedModel === 'All' || (order.model || '') === selectedModel;
     const matchesDateRange =
-      (!fromDate || new Date(order.order_date) >= new Date(fromDate)) &&
-      (!toDate || new Date(order.order_date) <= new Date(toDate));
+      (!fromDate || !order.order_date || new Date(order.order_date) >= new Date(fromDate)) &&
+      (!toDate || !order.order_date || new Date(order.order_date) <= new Date(toDate));
     const matchesSearch = searchQuery
       ? [
-          order.sales_order,
-          order.deal_id,
-          order.school_name,
-          order.nucleus_id,
-        ].some((field) => field?.toLowerCase().includes(searchQuery.toLowerCase()))
+          order.sales_order || '',
+          order.deal_id || '',
+          order.school_name || '',
+          order.nucleus_id || '',
+        ].some((field) => field.toLowerCase().includes(searchQuery.toLowerCase()))
       : true;
 
     return matchesDeleted && matchesWarehouse && matchesAssetType && matchesModel && matchesDateRange && matchesSearch;
   });
 
-  // Sort filteredOrders by order_date (descending) and sales_order (ascending) for same dates
+  // Sort filteredOrders by order_date (descending) and sales_order (ascending)
   const sortedOrders = [...filteredOrders].sort((a, b) => {
-    const dateA = new Date(a.order_date);
-    const dateB = new Date(b.order_date);
-    const timeA = isNaN(dateA.getTime()) ? -Infinity : dateA.getTime();
-    const timeB = isNaN(dateB.getTime()) ? -Infinity : dateB.getTime();
+    const dateA = a.order_date ? new Date(a.order_date).getTime() : -Infinity;
+    const dateB = b.order_date ? new Date(b.order_date).getTime() : -Infinity;
 
-    if (timeA !== timeB) {
-      return timeB - timeA; // Sort by order_date descending
+    if (dateA !== dateB) {
+      return dateB - dateA;
     }
 
-    const salesOrderA = a.sales_order || 'N/A';
-    const salesOrderB = b.sales_order || 'N/A';
-    return salesOrderA.localeCompare(salesOrderB); // Sort by sales_order ascending
+    const salesOrderA = a.sales_order || '';
+    const salesOrderB = b.sales_order || '';
+    return salesOrderA.localeCompare(salesOrderB);
   });
 
   // Debug sorting and check for invalid dates
   useEffect(() => {
-    const invalidDates = filteredOrders.filter(o => isNaN(new Date(o.order_date).getTime())).map(o => ({
+    const invalidDates = filteredOrders.filter(o => o.order_date && isNaN(new Date(o.order_date).getTime())).map(o => ({
       id: o.id,
       order_date: o.order_date,
-      sales_order: o.sales_order || 'N/A',
+      sales_order: o.sales_order || '',
     }));
     if (invalidDates.length > 0) {
       console.warn('Invalid order_date values detected:', invalidDates);
@@ -155,12 +185,12 @@ const OrdersTable: React.FC<OrdersTableProps> = ({
     console.log('Filtered orders (first 5):', filteredOrders.slice(0, 5).map(o => ({
       id: o.id,
       order_date: o.order_date,
-      sales_order: o.sales_order || 'N/A',
+      sales_order: o.sales_order || '',
     })));
     console.log('Sorted orders (first 5):', sortedOrders.slice(0, 5).map(o => ({
       id: o.id,
       order_date: o.order_date,
-      sales_order: o.sales_order || 'N/A',
+      sales_order: o.sales_order || '',
     })));
     console.log('Filtered and sorted orders summary:', {
       filteredLength: filteredOrders.length,
@@ -186,7 +216,7 @@ const OrdersTable: React.FC<OrdersTableProps> = ({
         .sort((a, b) => a.originalIndex - b.originalIndex)
         .map((order, index) => ({
           ...order,
-          orderCount: `${index + 1}/${orders.length}`, // Internal orderCount
+          orderCount: `${index + 1}/${orders.length}`,
         }))
     )
     .sort((a, b) => a.originalIndex - b.originalIndex);
@@ -207,9 +237,15 @@ const OrdersTable: React.FC<OrdersTableProps> = ({
     console.log('Paginated orders (first 5):', paginatedOrders.slice(0, 5).map(o => ({
       id: o.id,
       order_date: o.order_date,
-      sales_order: o.sales_order || 'N/A',
+      sales_order: o.sales_order || '',
       orderCount: o.orderCount,
     })));
+    console.log('Pagination info:', {
+      currentOrdersPage,
+      ordersPerPage,
+      sortedOrdersLength: ordersWithCounts.length,
+      totalOrdersPages: Math.ceil(ordersWithCounts.length / ordersPerPage),
+    });
   }, [paginatedOrders]);
 
   const totalOrdersPages = Math.ceil(ordersWithCounts.length / ordersPerPage);
@@ -339,16 +375,35 @@ const OrdersTable: React.FC<OrdersTableProps> = ({
     loadOrderSummary();
   };
 
+  const handleDateRangeSubmit = () => {
+    setShowDatePickerDialog(false);
+  };
+
+  // Define column widths to ensure header and body alignment
+  const columnWidths = {
+    sales_order: '150px',
+    order_type: '120px',
+    asset_type: '100px',
+    model: '150px',
+    quantity: '80px',
+    warehouse: '120px',
+    school_name: '150px',
+    deal_id: '120px',
+    nucleus_id: '120px',
+    order_date: '150px',
+    status: '100px',
+    actions: '120px',
+  };
+
   if (loading) {
     return <div style={{ fontSize: '12px' }}>Loading orders...</div>;
   }
 
   return (
-    <div style={{ border: '1px solid #e2e8f0', borderRadius: '8px', background: '#fff', padding: '16px' }}>
-      <div style={{ padding: '8px 0' }}></div>
-      <div style={{ padding: '16px' }}>
-        <div style={{ marginBottom: '16px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+    <div style={{ border: '1px solid #e2e8f0', borderRadius: '8px', background: '#fff', padding: '8px', minHeight: '200px', overflowY: 'auto', maxHeight: '600px' }}>
+      <div style={{ padding: '8px' }}>
+        <div style={{ marginBottom: '8px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
             <div style={{ flex: 1, maxWidth: '1200px' }}>
               <div style={{ position: 'relative' }}>
                 <Search style={{ position: 'absolute', left: '8px', top: '8px', width: '12px', height: '12px', color: '#6b7280' }} />
@@ -357,31 +412,37 @@ const OrdersTable: React.FC<OrdersTableProps> = ({
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   placeholder="Search by Sales Order, Deal ID, School, or Nucleus ID"
-                  style={{ paddingLeft: '28px', fontSize: '12px', width: '100%', border: '1px solid #d1d5db', borderRadius: '4px', padding: '8px' }}
+                  style={{ paddingLeft: '28px', fontSize: '12px', width: '100%', border: '1px solid #d1d5db', borderRadius: '4px', padding: '6px' }}
                 />
               </div>
             </div>
             <button
-              onClick={() => downloadCSV(sortedOrders, 'orders_export.csv')}
-              style={{ border: '1px solid #d1d5db', borderRadius: '4px', padding: '4px 8px', fontSize: '12px', display: 'flex', alignItems: 'center' }}
+              onClick={() => downloadCSV(ordersWithCounts, 'orders_export.csv')}
+              style={{ border: '1px solid #d1d5db', borderRadius: '4px', padding: '4px 6px', fontSize: '12px', display: 'flex', alignItems: 'center' }}
             >
               <Download style={{ width: '12px', height: '12px' }} />
             </button>
             <button
+              onClick={() => setShowDatePickerDialog(true)}
+              style={{ border: '1px solid #d1d5db', borderRadius: '4px', padding: '4px 6px', fontSize: '12px', display: 'flex', alignItems: 'center' }}
+            >
+              <Calendar style={{ width: '12px', height: '12px' }} />
+            </button>
+            <button
               onClick={() => setShowDeleted(!showDeleted)}
-              style={{ border: '1px solid #d1d5db', borderRadius: '4px', padding: '4px 8px', fontSize: '12px' }}
+              style={{ border: '1px solid #d1d5db', borderRadius: '4px', padding: '4px 6px', fontSize: '12px' }}
             >
               {showDeleted ? 'Show Active' : 'Show Deleted'}
             </button>
           </div>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginTop: '8px' }}>
-            <div style={{ flex: 1, minWidth: '150px' }}>
-              <label htmlFor="warehouseFilter" style={{ fontSize: '12px', color: '#6b7280', display: 'block', marginBottom: '4px' }}>Warehouse</label>
+          <div style={{ display: 'flex', gap: '4px', marginTop: '4px', maxWidth: '1200px' }}>
+            <div style={{ flex: 1 }}>
+              <label htmlFor="warehouseFilter" style={{ fontSize: '12px', color: '#6b7280', display: 'block', marginBottom: '2px', whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' }}>Warehouse</label>
               <select
                 id="warehouseFilter"
                 value={selectedWarehouse}
                 onChange={(e) => setSelectedWarehouse(e.target.value)}
-                style={{ fontSize: '12px', width: '100%', border: '1px solid #d1d5db', borderRadius: '4px', padding: '8px' }}
+                style={{ fontSize: '12px', width: '100%', border: '1px solid #d1d5db', borderRadius: '4px', padding: '6px', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}
               >
                 {warehouseOptions.map(warehouse => (
                   <option key={warehouse} value={warehouse} style={{ fontSize: '12px' }}>
@@ -390,13 +451,16 @@ const OrdersTable: React.FC<OrdersTableProps> = ({
                 ))}
               </select>
             </div>
-            <div style={{ flex: 1, minWidth: '150px' }}>
-              <label htmlFor="assetTypeFilter" style={{ fontSize: '12px', color: '#6b7280', display: 'block', marginBottom: '4px' }}>Asset Type</label>
+            <div style={{ flex: 1 }}>
+              <label htmlFor="assetTypeFilter" style={{ fontSize: '12px', color: '#6b7280', display: 'block', marginBottom: '2px', whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' }}>Asset Type</label>
               <select
                 id="assetTypeFilter"
                 value={selectedAssetType}
-                onChange={(e) => setSelectedAssetType(e.target.value)}
-                style={{ fontSize: '12px', width: '100%', border: '1px solid #d1d5db', borderRadius: '4px', padding: '8px' }}
+                onChange={(e) => {
+                  setSelectedAssetType(e.target.value);
+                  setSelectedModel('All');
+                }}
+                style={{ fontSize: '12px', width: '100%', border: '1px solid #d1d5db', borderRadius: '4px', padding: '6px', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}
               >
                 {assetTypeOptions.map(assetType => (
                   <option key={assetType} value={assetType} style={{ fontSize: '12px' }}>
@@ -405,13 +469,13 @@ const OrdersTable: React.FC<OrdersTableProps> = ({
                 ))}
               </select>
             </div>
-            <div style={{ flex: 1, minWidth: '150px' }}>
-              <label htmlFor="modelFilter" style={{ fontSize: '12px', color: '#6b7280', display: 'block', marginBottom: '4px' }}>Model</label>
+            <div style={{ flex: 1 }}>
+              <label htmlFor="modelFilter" style={{ fontSize: '12px', color: '#6b7280', display: 'block', marginBottom: '2px', whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' }}>Model</label>
               <select
                 id="modelFilter"
                 value={selectedModel}
                 onChange={(e) => setSelectedModel(e.target.value)}
-                style={{ fontSize: '12px', width: '100%', border: '1px solid #d1d5db', borderRadius: '4px', padding: '8px' }}
+                style={{ fontSize: '12px', width: '100%', border: '1px solid #d1d5db', borderRadius: '4px', padding: '6px', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}
               >
                 {modelOptions.map(model => (
                   <option key={model} value={model} style={{ fontSize: '12px' }}>
@@ -420,26 +484,6 @@ const OrdersTable: React.FC<OrdersTableProps> = ({
                 ))}
               </select>
             </div>
-            <div style={{ flex: 1, minWidth: '150px' }}>
-              <label htmlFor="fromDate" style={{ fontSize: '12px', color: '#6b7280', display: 'block', marginBottom: '4px' }}>From Date</label>
-              <input
-                type="date"
-                id="fromDate"
-                value={fromDate}
-                onChange={(e) => setFromDate(e.target.value)}
-                style={{ fontSize: '12px', width: '100%', border: '1px solid #d1d5db', borderRadius: '4px', padding: '8px' }}
-              />
-            </div>
-            <div style={{ flex: 1, minWidth: '150px' }}>
-              <label htmlFor="toDate" style={{ fontSize: '12px', color: '#6b7280', display: 'block', marginBottom: '4px' }}>To Date</label>
-              <input
-                type="date"
-                id="toDate"
-                value={toDate}
-                onChange={(e) => setToDate(e.target.value)}
-                style={{ fontSize: '12px', width: '100%', border: '1px solid #d1d5db', borderRadius: '4px', padding: '8px' }}
-              />
-            </div>
           </div>
         </div>
 
@@ -447,119 +491,130 @@ const OrdersTable: React.FC<OrdersTableProps> = ({
           <div style={{ fontSize: '12px' }}>No orders available. Create an order or check your database.</div>
         ) : (
           <>
-            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-              <thead>
-                <tr>
-                  <th style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', textAlign: 'left' }}>Sales Order</th>
-                  <th style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', textAlign: 'left' }}>Order Type</th>
-                  <th style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', textAlign: 'left' }}>Asset Type</th>
-                  <th style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', textAlign: 'left' }}>Model</th>
-                  <th style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', textAlign: 'left' }}>Quantity</th>
-                  <th style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', textAlign: 'left' }}>Warehouse</th>
-                  <th style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', textAlign: 'left' }}>School Name</th>
-                  <th style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', textAlign: 'left' }}>Deal ID</th>
-                  <th style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', textAlign: 'left' }}>Nucleus ID</th>
-                  <th style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', textAlign: 'left' }}>Order Date</th>
-                  <th style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', textAlign: 'left' }}>Status</th>
-                  <th style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', textAlign: 'left' }}>Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {paginatedOrders.length === 0 ? (
+            <div
+              style={{
+                overflowX: 'auto',
+                overflowY: 'auto',
+                maxHeight: '400px',
+                position: 'relative',
+              }}
+              ref={tableContainerRef}
+              tabIndex={0}
+            >
+              <table style={{ width: '100%', minWidth: '1400px', borderCollapse: 'collapse' }}>
+                <thead>
                   <tr>
-                    <td colSpan={12} style={{ textAlign: 'center', fontSize: '12px', padding: '8px' }}>
-                      No orders found with current filters. Try adjusting the filters or check loadOrders.
-                    </td>
+                    <th style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', textAlign: 'left', position: 'sticky', top: 0, background: '#fff', zIndex: 20, width: columnWidths.sales_order }}>Sales Order</th>
+                    <th style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', textAlign: 'left', position: 'sticky', top: 0, background: '#fff', zIndex: 20, width: columnWidths.order_type }}>Order Type</th>
+                    <th style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', textAlign: 'left', position: 'sticky', top: 0, background: '#fff', zIndex: 20, width: columnWidths.asset_type }}>Asset Type</th>
+                    <th style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', textAlign: 'left', position: 'sticky', top: 0, background: '#fff', zIndex: 20, width: columnWidths.model }}>Model</th>
+                    <th style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', textAlign: 'left', position: 'sticky', top: 0, background: '#fff', zIndex: 20, width: columnWidths.quantity }}>Quantity</th>
+                    <th style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', textAlign: 'left', position: 'sticky', top: 0, background: '#fff', zIndex: 20, width: columnWidths.warehouse }}>Warehouse</th>
+                    <th style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', textAlign: 'left', position: 'sticky', top: 0, background: '#fff', zIndex: 20, width: columnWidths.school_name }}>School Name</th>
+                    <th style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', textAlign: 'left', position: 'sticky', top: 0, background: '#fff', zIndex: 20, width: columnWidths.deal_id }}>Deal ID</th>
+                    <th style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', textAlign: 'left', position: 'sticky', top: 0, background: '#fff', zIndex: 20, width: columnWidths.nucleus_id }}>Nucleus ID</th>
+                    <th style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', textAlign: 'left', position: 'sticky', top: 0, background: '#fff', zIndex: 20, width: columnWidths.order_date }}>Order Date</th>
+                    <th style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', textAlign: 'left', position: 'sticky', top: 0, background: '#fff', zIndex: 20, width: columnWidths.status }}>Status</th>
+                    <th style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', textAlign: 'left', position: 'sticky', top: 0, background: '#fff', zIndex: 20, width: columnWidths.actions }}>Actions</th>
                   </tr>
-                ) : (
-                  paginatedOrders.map((order) => (
-                    <tr key={order.id}>
-                      <td style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db' }}>{order.sales_order || 'N/A'}</td>
-                      <td style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db' }}>
-                        <span
-                          style={{
-                            padding: '2px 8px',
-                            borderRadius: '4px',
-                            background: order.order_type === 'Inward' ? '#3b82f6' : '#6b7280',
-                            color: '#fff',
-                            fontSize: '12px',
-                          }}
-                        >
-                          {order.order_type}
-                        </span>
-                      </td>
-                      <td style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db' }}>{order.asset_type}</td>
-                      <td style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db' }}>{order.model}</td>
-                      <td style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db' }}>{order.quantity}</td>
-                      <td style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db' }}>{order.warehouse}</td>
-                      <td style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db' }}>{order.school_name}</td>
-                      <td style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db' }}>{order.deal_id || 'N/A'}</td>
-                      <td style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db' }}>{order.nucleus_id || 'N/A'}</td>
-                      <td style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db' }}>{formatDate(order.order_date)}</td>
-                      <td style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db' }}>
-                        <span
-                          style={{
-                            padding: '2px 8px',
-                            borderRadius: '4px',
-                            background:
-                              order.status === 'Success' ? '#3b82f6' :
-                              order.status === 'Failed' ? '#ef4444' : '#6b7280',
-                            color: '#fff',
-                            cursor: 'pointer',
-                            fontSize: '12px',
-                          }}
-                          onClick={() => handleStatusClick(order)}
-                        >
-                          {order.status}
-                        </span>
-                      </td>
-                      <td style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db' }}>
-                        <div style={{ display: 'flex', gap: '4px' }}>
-                          <button
-                            onClick={() => {
-                              setViewingOrder(order);
-                              setShowViewDialog(true);
-                            }}
-                            style={{ border: '1px solid #d1d5db', borderRadius: '4px', padding: '4px', fontSize: '12px' }}
-                          >
-                            <Eye style={{ width: '12px', height: '12px' }} />
-                          </button>
-                          {!order.is_deleted && (
-                            <>
-                              <button
-                                onClick={() => {
-                                  setEditingOrder(order);
-                                  setShowEditDialog(true);
-                                }}
-                                style={{ border: '1px solid #d1d5db', borderRadius: '4px', padding: '4px', fontSize: '12px' }}
-                              >
-                                <Edit style={{ width: '12px', height: '12px' }} />
-                              </button>
-                              <button
-                                onClick={() => softDeleteOrder(order.id)}
-                                style={{ border: '1px solid #d1d5db', borderRadius: '4px', padding: '4px', fontSize: '12px' }}
-                              >
-                                <Trash2 style={{ width: '12px', height: '12px' }} />
-                              </button>
-                            </>
-                          )}
-                          {order.is_deleted && (
-                            <button
-                              onClick={() => restoreOrder(order.id)}
-                              style={{ border: '1px solid #d1d5db', borderRadius: '4px', padding: '4px', fontSize: '12px' }}
-                            >
-                              <RotateCcw style={{ width: '12px', height: '12px' }} />
-                            </button>
-                          )}
-                        </div>
+                </thead>
+                <tbody>
+                  {paginatedOrders.length === 0 ? (
+                    <tr>
+                      <td colSpan={12} style={{ textAlign: 'center', fontSize: '12px', padding: '8px' }}>
+                        No orders found with current filters. Try adjusting the filters or check loadOrders.
                       </td>
                     </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
+                  ) : (
+                    paginatedOrders.map((order) => (
+                      <tr key={order.id}>
+                        <td style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', width: columnWidths.sales_order }}>{order.sales_order || ''}</td>
+                        <td style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', width: columnWidths.order_type }}>
+                          <span
+                            style={{
+                              padding: '2px 8px',
+                              borderRadius: '4px',
+                              background: order.order_type === 'Inward' ? '#3b82f6' : '#6b7280',
+                              color: '#fff',
+                              fontSize: '12px',
+                            }}
+                          >
+                            {order.order_type || ''}
+                          </span>
+                        </td>
+                        <td style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', width: columnWidths.asset_type }}>{order.asset_type || ''}</td>
+                        <td style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', width: columnWidths.model }}>{order.model || ''}</td>
+                        <td style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', width: columnWidths.quantity }}>{order.quantity || 0}</td>
+                        <td style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', width: columnWidths.warehouse }}>{order.warehouse || ''}</td>
+                        <td style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', width: columnWidths.school_name }}>{order.school_name || ''}</td>
+                        <td style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', width: columnWidths.deal_id }}>{order.deal_id || ''}</td>
+                        <td style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', width: columnWidths.nucleus_id }}>{order.nucleus_id || ''}</td>
+                        <td style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', width: columnWidths.order_date }}>{formatDate(order.order_date) || ''}</td>
+                        <td style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', width: columnWidths.status }}>
+                          <span
+                            style={{
+                              padding: '2px 8px',
+                              borderRadius: '4px',
+                              background:
+                                order.status === 'Success' ? '#3b82f6' :
+                                order.status === 'Failed' ? '#ef4444' : '#6b7280',
+                              color: '#fff',
+                              cursor: order.status === 'Pending' || order.status === 'Failed' ? 'pointer' : 'default',
+                              fontSize: '12px',
+                            }}
+                            onClick={() => handleStatusClick(order)}
+                          >
+                            {order.status || ''}
+                          </span>
+                        </td>
+                        <td style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', width: columnWidths.actions }}>
+                          <div style={{ display: 'flex', gap: '4px' }}>
+                            <button
+                              onClick={() => {
+                                setViewingOrder(order);
+                                setShowViewDialog(true);
+                              }}
+                              style={{ border: '1px solid #d1d5db', borderRadius: '4px', padding: '4px', fontSize: '12px' }}
+                            >
+                              <Eye style={{ width: '12px', height: '12px' }} />
+                            </button>
+                            {!order.is_deleted && (
+                              <>
+                                <button
+                                  onClick={() => {
+                                    setEditingOrder(order);
+                                    setShowEditDialog(true);
+                                  }}
+                                  style={{ border: '1px solid #d1d5db', borderRadius: '4px', padding: '4px', fontSize: '12px' }}
+                                >
+                                  <Edit style={{ width: '12px', height: '12px' }} />
+                                </button>
+                                <button
+                                  onClick={() => softDeleteOrder(order.id)}
+                                  style={{ border: '1px solid #d1d5db', borderRadius: '4px', padding: '4px', fontSize: '12px' }}
+                                >
+                                  <Trash2 style={{ width: '12px', height: '12px' }} />
+                                </button>
+                              </>
+                            )}
+                            {order.is_deleted && (
+                              <button
+                                onClick={() => restoreOrder(order.id)}
+                                style={{ border: '1px solid #d1d5db', borderRadius: '4px', padding: '4px', fontSize: '12px' }}
+                              >
+                                <RotateCcw style={{ width: '12px', height: '12px' }} />
+                              </button>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
 
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '8px', fontSize: '12px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '4px', fontSize: '12px' }}>
               <div>
                 Showing {(currentOrdersPage - 1) * ordersPerPage + 1} to{' '}
                 {Math.min(currentOrdersPage * ordersPerPage, ordersWithCounts.length)} of{' '}
@@ -582,91 +637,132 @@ const OrdersTable: React.FC<OrdersTableProps> = ({
                 </button>
               </div>
             </div>
-          </>
-        )}
 
-        {showViewDialog && (
-          <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
-            <div style={{ background: '#fff', borderRadius: '8px', maxHeight: '80vh', overflowY: 'auto', padding: '16px', maxWidth: '600px', width: '100%' }}>
-              <h2 style={{ fontSize: '16px', marginBottom: '16px' }}>Order Details</h2>
-              {viewingOrder && (
-                <div style={{ fontSize: '12px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                  <p><strong>Sales Order:</strong> {viewingOrder.sales_order || 'N/A'}</p>
-                  <p><strong>Order Type:</strong> {viewingOrder.order_type}</p>
-                  <p><strong>Asset Type:</strong> {viewingOrder.asset_type}</p>
-                  <p><strong>Model:</strong> {viewingOrder.model}</p>
-                  <p><strong>Quantity:</strong> {viewingOrder.quantity}</p>
-                  <p><strong>Warehouse:</strong> {viewingOrder.warehouse}</p>
-                  <p><strong>School Name:</strong> {viewingOrder.school_name}</p>
-                  <p><strong>Deal ID:</strong> {viewingOrder.deal_id || 'N/A'}</p>
-                  <p><strong>Nucleus ID:</strong> {viewingOrder.nucleus_id || 'N/A'}</p>
-                  <p><strong>Order Date:</strong> {formatDate(viewingOrder.order_date)}</p>
-                  <p><strong>Status:</strong> {viewingOrder.status}</p>
-                  <p><strong>Serial Numbers:</strong></p>
-                  <ul style={{ listStyleType: 'disc', paddingLeft: '20px' }}>
-                    {(viewingOrder.serial_numbers || []).map((serial, index) => (
-                      <li key={index} style={{ color: duplicateSerials.has(serial) ? '#ef4444' : 'inherit' }}>
-                        {serial || `Missing Serial ${index + 1}`}
-                      </li>
-                    ))}
-                  </ul>
-                  {viewingOrder.editHistory && viewingOrder.editHistory.length > 0 && (
-                    <>
-                      <p><strong>Edit History:</strong></p>
-                      <ul style={{ listStyleType: 'disc', paddingLeft: '20px' }}>
-                        {[...viewingOrder.editHistory]
-                          .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
-                          .map((entry, index) => (
-                            <li key={index}>
-                              {formatDate(entry.timestamp)}: {entry.changes}
-                            </li>
-                          ))}
-                      </ul>
-                    </>
-                  )}
+            {showViewDialog && viewingOrder && (
+              <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
+                <div style={{ background: '#fff', borderRadius: '8px', maxHeight: '80vh', overflowY: 'auto', padding: '8px', maxWidth: '600px', width: '100%' }}>
+                  <h2 style={{ fontSize: '14px', marginBottom: '8px' }}>Order Details</h2>
+                  <div style={{ fontSize: '12px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                    <p><strong>Sales Order:</strong> {viewingOrder.sales_order || ''}</p>
+                    <p><strong>Order Type:</strong> {viewingOrder.order_type || ''}</p>
+                    <p><strong>Asset Type:</strong> {viewingOrder.asset_type || ''}</p>
+                    <p><strong>Model:</strong> {viewingOrder.model || ''}</p>
+                    <p><strong>Quantity:</strong> {viewingOrder.quantity || 0}</p>
+                    <p><strong>Warehouse:</strong> {viewingOrder.warehouse || ''}</p>
+                    <p><strong>School Name:</strong> {viewingOrder.school_name || ''}</p>
+                    <p><strong>Deal ID:</strong> {viewingOrder.deal_id || ''}</p>
+                    <p><strong>Nucleus ID:</strong> {viewingOrder.nucleus_id || ''}</p>
+                    <p><strong>Order Date:</strong> {formatDate(viewingOrder.order_date) || ''}</p>
+                    <p><strong>Status:</strong> {viewingOrder.status || ''}</p>
+                    <p><strong>Serial Numbers:</strong></p>
+                    <ul style={{ listStyleType: 'disc', paddingLeft: '20px' }}>
+                      {(viewingOrder.serial_numbers || []).map((serial, index) => (
+                        <li key={index} style={{ color: duplicateSerials.has(serial) ? '#ef4444' : 'inherit', fontSize: '12px' }}>
+                          {serial || `Missing Serial ${index + 1}`}
+                        </li>
+                      ))}
+                    </ul>
+                    {viewingOrder.editHistory && viewingOrder.editHistory.length > 0 && (
+                      <>
+                        <p><strong>Edit History:</strong></p>
+                        <ul style={{ listStyleType: 'disc', paddingLeft: '20px' }}>
+                          {[...viewingOrder.editHistory]
+                            .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+                            .map((entry, index) => (
+                              <li key={index} style={{ fontSize: '12px' }}>
+                                {formatDate(entry.timestamp)}: {entry.changes}
+                              </li>
+                            ))}
+                        </ul>
+                      </>
+                    )}
+                    <p><strong>Deleted:</strong> {viewingOrder.is_deleted ? 'Yes' : 'No'}</p>
+                  </div>
+                  <button
+                    onClick={() => setShowViewDialog(false)}
+                    style={{ border: '1px solid #d1d5db', borderRadius: '4px', padding: '4px 8px', fontSize: '12px', marginTop: '8px' }}
+                  >
+                    Close
+                  </button>
                 </div>
-              )}
-              <button
-                onClick={() => setShowViewDialog(false)}
-                style={{ border: '1px solid #d1d5db', borderRadius: '4px', padding: '4px 8px', fontSize: '12px', marginTop: '16px' }}
-              >
-                Close
-              </button>
-            </div>
-          </div>
-        )}
+              </div>
+            )}
 
-{showEditDialog && (
-  <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
-    <div style={{ background: '#fff', borderRadius: '8px', height: '80vh', width: '80vw', overflowY: 'auto', padding: '16px' }}>
-      <h2 style={{ fontSize: '16px', marginBottom: '16px' }}>Edit Order</h2>
-      {editingOrder && (
-        <EditOrderForm
-          order={editingOrder}
-          onSave={handleEditSave}
-          onCancel={() => {
-            setShowEditDialog(false);
-            setEditingOrder(null);
-          }}
-        />
-      )}
-    </div>
-  </div>
-)}
+            {showEditDialog && editingOrder && (
+              <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
+                <div style={{ background: '#fff', borderRadius: '8px', maxHeight: '80vh', overflowY: 'auto', padding: '8px', maxWidth: '80vw', width: '100%' }}>
+                  <h2 style={{ fontSize: '14px', marginBottom: '8px' }}>Edit Order</h2>
+                  <EditOrderForm
+                    order={editingOrder}
+                    onSave={handleEditSave}
+                    onCancel={() => {
+                      setShowEditDialog(false);
+                      setEditingOrder(null);
+                    }}
+                  />
+                </div>
+              </div>
+            )}
 
-        {showStatusDialog && (
-          <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
-            <div style={{ background: '#fff', borderRadius: '8px', padding: '16px', maxWidth: '600px', width: '100%' }}>
-              <h2 style={{ fontSize: '16px', marginBottom: '16px' }}>Order Status Details</h2>
-              <p style={{ fontSize: '12px' }}>{statusError}</p>
-              <button
-                onClick={() => setShowStatusDialog(false)}
-                style={{ border: '1px solid #d1d5db', borderRadius: '4px', padding: '4px 8px', fontSize: '12px', marginTop: '16px' }}
-              >
-                Close
-              </button>
-            </div>
-          </div>
+            {showStatusDialog && statusDialogOrder && (
+              <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
+                <div style={{ background: '#fff', borderRadius: '8px', padding: '8px', maxWidth: '600px', width: '100%' }}>
+                  <h2 style={{ fontSize: '14px', marginBottom: '8px' }}>Order Status Details</h2>
+                  <p style={{ fontSize: '12px' }}>{statusError}</p>
+                  <button
+                    onClick={() => setShowStatusDialog(false)}
+                    style={{ border: '1px solid #d1d5db', borderRadius: '4px', padding: '4px 8px', fontSize: '12px', marginTop: '8px' }}
+                  >
+                    Close
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {showDatePickerDialog && (
+              <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
+                <div style={{ background: '#fff', borderRadius: '8px', padding: '8px', maxWidth: '400px', width: '100%' }}>
+                  <h2 style={{ fontSize: '14px', marginBottom: '8px' }}>Select Date Range</h2>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                    <div>
+                      <label htmlFor="fromDate" style={{ fontSize: '12px', color: '#6b7280', display: 'block', marginBottom: '2px' }}>From Date</label>
+                      <input
+                        type="date"
+                        id="fromDate"
+                        value={fromDate}
+                        onChange={(e) => setFromDate(e.target.value)}
+                        style={{ fontSize: '12px', width: '100%', border: '1px solid #d1d5db', borderRadius: '4px', padding: '6px' }}
+                      />
+                    </div>
+                    <div>
+                      <label htmlFor="toDate" style={{ fontSize: '12px', color: '#6b7280', display: 'block', marginBottom: '2px' }}>To Date</label>
+                      <input
+                        type="date"
+                        id="toDate"
+                        value={toDate}
+                        onChange={(e) => setToDate(e.target.value)}
+                        style={{ fontSize: '12px', width: '100%', border: '1px solid #d1d5db', borderRadius: '4px', padding: '6px' }}
+                      />
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', gap: '4px', marginTop: '8px' }}>
+                    <button
+                      onClick={handleDateRangeSubmit}
+                      style={{ border: '1px solid #d1d5db', borderRadius: '4px', padding: '4px 8px', fontSize: '12px', background: '#3b82f6', color: '#fff' }}
+                    >
+                      Apply
+                    </button>
+                    <button
+                      onClick={() => setShowDatePickerDialog(false)}
+                      style={{ border: '1px solid #d1d5db', borderRadius: '4px', padding: '4px 8px', fontSize: '12px' }}
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+          </>
         )}
       </div>
     </div>

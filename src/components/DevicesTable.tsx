@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Search, Download, Eye, Calendar } from 'lucide-react';
 import { Device } from './types';
 import { formatDate } from './utils';
@@ -19,6 +19,10 @@ interface DevicesTableProps {
   setSelectedProduct: (value: string) => void;
   selectedStatus: string;
   setSelectedStatus: (value: string) => void;
+  selectedOrderType: string;
+  setSelectedOrderType: (value: string) => void;
+  selectedAssetGroup: string;
+  setSelectedAssetGroup: (value: string) => void;
   fromDate: string;
   setFromDate: (value: string) => void;
   toDate: string;
@@ -45,6 +49,10 @@ const DevicesTable: React.FC<DevicesTableProps> = ({
   setSelectedProduct,
   selectedStatus,
   setSelectedStatus,
+  selectedOrderType,
+  setSelectedOrderType,
+  selectedAssetGroup,
+  setSelectedAssetGroup,
   fromDate,
   setFromDate,
   toDate,
@@ -59,11 +67,41 @@ const DevicesTable: React.FC<DevicesTableProps> = ({
   const [viewingDevice, setViewingDevice] = useState<Device | null>(null);
   const [showViewDialog, setShowViewDialog] = useState(false);
   const [showDatePickerDialog, setShowDatePickerDialog] = useState(false);
+  const tableContainerRef = useRef<HTMLDivElement>(null);
 
   const toast = ({ title, description, variant }: { title: string; description: string; variant?: 'destructive' }) => {
     console.log(`Toast: ${title} - ${description}${variant ? ` (Variant: ${variant})` : ''}`);
     alert(`${title}: ${description}`);
   };
+
+  // Handle keyboard and mouse scroll for horizontal scrolling
+  useEffect(() => {
+    const container = tableContainerRef.current;
+    if (!container) return;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'ArrowLeft') {
+        container.scrollBy({ left: -50, behavior: 'smooth' });
+      } else if (e.key === 'ArrowRight') {
+        container.scrollBy({ left: 50, behavior: 'smooth' });
+      }
+    };
+
+    const handleWheel = (e: WheelEvent) => {
+      if (e.deltaY !== 0) {
+        container.scrollBy({ left: e.deltaY * 2, behavior: 'smooth' });
+        e.preventDefault();
+      }
+    };
+
+    container.addEventListener('keydown', handleKeyDown);
+    container.addEventListener('wheel', handleWheel);
+
+    return () => {
+      container.removeEventListener('keydown', handleKeyDown);
+      container.removeEventListener('wheel', handleWheel);
+    };
+  }, []);
 
   if (!devices) {
     return <div style={{ fontSize: '12px' }}>Loading devices... Please wait.</div>;
@@ -81,6 +119,8 @@ const DevicesTable: React.FC<DevicesTableProps> = ({
       selectedConfiguration,
       selectedProduct,
       selectedStatus,
+      selectedOrderType,
+      selectedAssetGroup,
       fromDate,
       toDate,
       showDeleted,
@@ -88,40 +128,41 @@ const DevicesTable: React.FC<DevicesTableProps> = ({
     });
     console.log('Raw devices (first 5):', devices.slice(0, 5).map(d => ({
       id: d.id,
-      warehouse: d.warehouse || 'N/A',
-      asset_type: d.asset_type || 'N/A',
-      model: d.model || 'N/A',
-      configuration: d.configuration || 'N/A',
-      asset_status: d.asset_status || 'N/A',
-      product: d.product || 'N/A',
-      status: d.status || 'N/A',
-      created_at: d.created_at || 'N/A',
+      sales_order: d.sales_order || '',
+      order_type: d.order_type || '',
+      warehouse: d.warehouse || '',
+      deal_id: d.deal_id || '',
+      nucleus_id: d.nucleus_id || '',
+      school_name: d.school_name || '',
+      asset_type: d.asset_type || '',
+      model: d.model || '',
+      configuration: d.configuration || '',
+      serial_number: d.serial_number || '',
+      sd_card_size: d.sd_card_size || '',
+      profile_id: d.profile_id || '',
+      product: d.product || '',
+      asset_status: d.asset_status || '',
+      asset_group: d.asset_group || '',
+      status: d.status || '',
+      created_at: d.created_at || '',
+      updated_by: d.updated_by || '',
     })));
-  }, [devices, selectedWarehouse, selectedAssetType, selectedModel, selectedAssetStatus, selectedConfiguration, selectedProduct, selectedStatus, fromDate, toDate, showDeleted, searchQuery]);
+  }, [devices, selectedWarehouse, selectedAssetType, selectedModel, selectedAssetStatus, selectedConfiguration, selectedProduct, selectedStatus, selectedOrderType, selectedAssetGroup, fromDate, toDate, showDeleted, searchQuery]);
 
-  const warehouseOptions = ['All', 'Trichy', 'Bangalore', 'Hyderabad', 'Kolkata', 'Bhiwandi', 'Ghaziabad', 'Zirakpur', 'Indore', 'Jaipur'];
-  const assetTypeOptions = ['All', 'Tablet', 'TV'];
-  const tabletModels = ['Lenovo TB301XU', 'Lenovo TB301FU', 'Lenovo TB-8505F', 'Lenovo TB-7306F', 'Lenovo TB-7306X', 'Lenovo TB-7305X', 'IRA T811'];
-  const tvModels = ['Hyundai TV - 39"', 'Hyundai TV - 43"', 'Hyundai TV - 50"', 'Hyundai TV - 55"', 'Hyundai TV - 65"', 'Xentec TV - 39"', 'Xentec TV - 43"'];
-  const allModels = [...new Set(devices.map(d => d.model || ''))].filter(m => m);
-  const modelOptions = selectedAssetType === 'All'
-    ? ['All', ...allModels]
-    : ['All', ...(selectedAssetType === 'Tablet' ? tabletModels : tvModels).filter(model => allModels.includes(model))];
-  const assetStatusOptions = ['All', 'Fresh', 'Refurb', 'Scrap'];
-  const configurationOptions = [
-    'All',
-    '1G+8 GB (Android-7)',
-    '1G+16 GB (Android-9)',
-    '1G+32 GB (Android-9)',
-    '2G+16 GB (Android-9)',
-    '2G+32 GB (Android-9)',
-    '2G+32 GB (Android-10)',
-    '3G+32 GB (Android-10)',
-    '3G+32 GB (Android-13)',
-    '4G+64 GB (Android-13)',
-  ];
-  const productOptions = ['All', 'Lead', 'Propel', 'Pinnacle', 'Techbook', 'BoardAce'];
-  const statusOptions = ['All', 'Stock', 'Assigned'];
+  // Dynamically generate dropdown options from devices table
+  const warehouseOptions = ['All', ...[...new Set(devices.map(d => d.warehouse || ''))].filter(w => w).sort()];
+  const assetTypeOptions = ['All', ...[...new Set(devices.map(d => d.asset_type || ''))].filter(a => a).sort()];
+  const modelOptions = ['All', ...[...new Set(
+    selectedAssetType === 'All'
+      ? devices.map(d => d.model || '')
+      : devices.filter(d => d.asset_type === selectedAssetType).map(d => d.model || '')
+  )].filter(m => m).sort()];
+  const configurationOptions = ['All', ...[...new Set(devices.map(d => d.configuration || ''))].filter(c => c).sort()];
+  const orderTypeOptions = ['All', ...[...new Set(devices.map(d => d.order_type || ''))].filter(o => o).sort()];
+  const productOptions = ['All', ...[...new Set(devices.map(d => d.product || ''))].filter(p => p).sort()];
+  const assetStatusOptions = ['All', ...[...new Set(devices.map(d => d.asset_status || ''))].filter(s => s).sort()];
+  const assetGroupOptions = ['All', ...[...new Set(devices.map(d => d.asset_group || ''))].filter(g => g).sort()];
+  const statusOptions = ['All', ...[...new Set(devices.map(d => d.status || ''))].filter(s => s).sort()];
 
   const filteredDevices = devices.filter((device) => {
     const matchesDeleted = showDeleted ? device.is_deleted : !device.is_deleted;
@@ -132,6 +173,8 @@ const DevicesTable: React.FC<DevicesTableProps> = ({
     const matchesConfiguration = selectedConfiguration === 'All' || (device.configuration || '') === selectedConfiguration;
     const matchesProduct = selectedProduct === 'All' || (device.product || '') === selectedProduct;
     const matchesStatus = selectedStatus === 'All' || (device.status || '') === selectedStatus;
+    const matchesOrderType = selectedOrderType === 'All' || (device.order_type || '') === selectedOrderType;
+    const matchesAssetGroup = selectedAssetGroup === 'All' || (device.asset_group || '') === selectedAssetGroup;
     const matchesDate =
       (!fromDate || !toDate) ||
       !device.created_at ||
@@ -149,10 +192,15 @@ const DevicesTable: React.FC<DevicesTableProps> = ({
           device.asset_status || '',
           device.product || '',
           device.status || '',
+          device.order_type || '',
+          device.asset_group || '',
+          device.sd_card_size || '',
+          device.profile_id || '',
+          device.updated_by || '',
         ].some((field) => field.toLowerCase().includes(searchQuery.toLowerCase()))
       : true;
 
-    return matchesDeleted && matchesWarehouse && matchesAssetType && matchesModel && matchesAssetStatus && matchesConfiguration && matchesProduct && matchesStatus && matchesDate && matchesSearch;
+    return matchesDeleted && matchesWarehouse && matchesAssetType && matchesModel && matchesAssetStatus && matchesConfiguration && matchesProduct && matchesStatus && matchesOrderType && matchesAssetGroup && matchesDate && matchesSearch;
   });
 
   const sortedDevices = [...filteredDevices].sort((a, b) => {
@@ -161,15 +209,20 @@ const DevicesTable: React.FC<DevicesTableProps> = ({
     if (dateA !== dateB) {
       return dateB - dateA;
     }
-    const warehouseA = a.warehouse || '';
-    const warehouseB = b.warehouse || '';
-    if (warehouseA !== warehouseB) {
-      return warehouseA.localeCompare(warehouseB);
-    }
     const salesOrderA = a.sales_order || '';
     const salesOrderB = b.sales_order || '';
     if (salesOrderA !== salesOrderB) {
       return salesOrderA.localeCompare(salesOrderB);
+    }
+    const orderTypeA = a.order_type || '';
+    const orderTypeB = b.order_type || '';
+    if (orderTypeA !== orderTypeB) {
+      return orderTypeA.localeCompare(orderTypeB);
+    }
+    const warehouseA = a.warehouse || '';
+    const warehouseB = b.warehouse || '';
+    if (warehouseA !== warehouseB) {
+      return warehouseA.localeCompare(warehouseB);
     }
     const assetTypeA = a.asset_type || '';
     const assetTypeB = b.asset_type || '';
@@ -199,36 +252,69 @@ const DevicesTable: React.FC<DevicesTableProps> = ({
   useEffect(() => {
     const invalidDates = filteredDevices.filter(d => d.created_at && isNaN(new Date(d.created_at).getTime())).map(d => ({
       id: d.id,
-      warehouse: d.warehouse || 'N/A',
-      asset_type: d.asset_type || 'N/A',
-      model: d.model || 'N/A',
-      configuration: d.configuration || 'N/A',
-      asset_status: d.asset_status || 'N/A',
-      status: d.status || 'N/A',
+      sales_order: d.sales_order || '',
+      order_type: d.order_type || '',
+      warehouse: d.warehouse || '',
+      deal_id: d.deal_id || '',
+      nucleus_id: d.nucleus_id || '',
+      school_name: d.school_name || '',
+      asset_type: d.asset_type || '',
+      model: d.model || '',
+      configuration: d.configuration || '',
+      serial_number: d.serial_number || '',
+      sd_card_size: d.sd_card_size || '',
+      profile_id: d.profile_id || '',
+      product: d.product || '',
+      asset_status: d.asset_status || '',
+      asset_group: d.asset_group || '',
+      status: d.status || '',
+      created_at: d.created_at || '',
+      updated_by: d.updated_by || '',
     }));
     if (invalidDates.length > 0) {
       console.warn('Invalid created_at values detected:', invalidDates);
     }
     console.log('Filtered devices (first 5):', filteredDevices.slice(0, 5).map(d => ({
       id: d.id,
-      warehouse: d.warehouse || 'N/A',
-      asset_type: d.asset_type || 'N/A',
-      model: d.model || 'N/A',
-      configuration: d.configuration || 'N/A',
-      asset_status: d.asset_status || 'N/A',
-      status: d.status || 'N/A',
-      created_at: d.created_at || 'N/A',
+      sales_order: d.sales_order || '',
+      order_type: d.order_type || '',
+      warehouse: d.warehouse || '',
+      deal_id: d.deal_id || '',
+      nucleus_id: d.nucleus_id || '',
+      school_name: d.school_name || '',
+      asset_type: d.asset_type || '',
+      model: d.model || '',
+      configuration: d.configuration || '',
+      serial_number: d.serial_number || '',
+      sd_card_size: d.sd_card_size || '',
+      profile_id: d.profile_id || '',
+      product: d.product || '',
+      asset_status: d.asset_status || '',
+      asset_group: d.asset_group || '',
+      status: d.status || '',
+      created_at: d.created_at || '',
+      updated_by: d.updated_by || '',
     })));
     console.log('Sorted devices (first 5):', sortedDevices.slice(0, 5).map(d => ({
       id: d.id,
-      created_at: d.created_at || 'N/A',
-      warehouse: d.warehouse || 'N/A',
-      sales_order: d.sales_order || 'N/A',
-      asset_type: d.asset_type || 'N/A',
-      model: d.model || 'N/A',
-      product: d.product || 'N/A',
-      asset_status: d.asset_status || 'N/A',
-      status: d.status || 'N/A',
+      sales_order: d.sales_order || '',
+      order_type: d.order_type || '',
+      warehouse: d.warehouse || '',
+      deal_id: d.deal_id || '',
+      nucleus_id: d.nucleus_id || '',
+      school_name: d.school_name || '',
+      asset_type: d.asset_type || '',
+      model: d.model || '',
+      configuration: d.configuration || '',
+      serial_number: d.serial_number || '',
+      sd_card_size: d.sd_card_size || '',
+      profile_id: d.profile_id || '',
+      product: d.product || '',
+      asset_status: d.asset_status || '',
+      asset_group: d.asset_group || '',
+      status: d.status || '',
+      created_at: d.created_at || '',
+      updated_by: d.updated_by || '',
     })));
     console.log('Filtered and sorted devices summary:', {
       filteredLength: filteredDevices.length,
@@ -242,7 +328,7 @@ const DevicesTable: React.FC<DevicesTableProps> = ({
 
   useEffect(() => {
     setCurrentDevicesPage(1);
-  }, [selectedWarehouse, selectedAssetType, selectedModel, selectedAssetStatus, selectedConfiguration, selectedProduct, selectedStatus, fromDate, toDate, showDeleted, searchQuery]);
+  }, [selectedWarehouse, selectedAssetType, selectedModel, selectedAssetStatus, selectedConfiguration, selectedProduct, selectedStatus, selectedOrderType, selectedAssetGroup, fromDate, toDate, showDeleted, searchQuery]);
 
   const paginatedDevices = sortedDevices.slice(
     (currentDevicesPage - 1) * devicesPerPage,
@@ -252,14 +338,24 @@ const DevicesTable: React.FC<DevicesTableProps> = ({
   useEffect(() => {
     console.log('Paginated devices (first 5):', paginatedDevices.slice(0, 5).map(d => ({
       id: d.id,
-      created_at: d.created_at || 'N/A',
-      warehouse: d.warehouse || 'N/A',
-      sales_order: d.sales_order || 'N/A',
-      asset_type: d.asset_type || 'N/A',
-      model: d.model || 'N/A',
-      product: d.product || 'N/A',
-      asset_status: d.asset_status || 'N/A',
-      status: d.status || 'N/A',
+      sales_order: d.sales_order || '',
+      order_type: d.order_type || '',
+      warehouse: d.warehouse || '',
+      deal_id: d.deal_id || '',
+      nucleus_id: d.nucleus_id || '',
+      school_name: d.school_name || '',
+      asset_type: d.asset_type || '',
+      model: d.model || '',
+      configuration: d.configuration || '',
+      serial_number: d.serial_number || '',
+      sd_card_size: d.sd_card_size || '',
+      profile_id: d.profile_id || '',
+      product: d.product || '',
+      asset_status: d.asset_status || '',
+      asset_group: d.asset_group || '',
+      status: d.status || '',
+      created_at: d.created_at || '',
+      updated_by: d.updated_by || '',
     })));
     console.log('Pagination info:', {
       currentDevicesPage,
@@ -277,20 +373,25 @@ const DevicesTable: React.FC<DevicesTableProps> = ({
       return;
     }
     const headers = [
-      'id',
+      'sales_order',
+      'order_type',
+      'warehouse',
+      'deal_id',
+      'nucleus_id',
+      'school_name',
       'asset_type',
       'model',
       'configuration',
-      'asset_status',
-      'product',
       'serial_number',
-      'warehouse',
-      'sales_order',
-      'deal_id',
-      'school_name',
-      'nucleus_id',
+      'sd_card_size',
+      'profile_id',
+      'product',
+      'asset_status',
+      'asset_group',
       'status',
       'created_at',
+      'updated_by',
+      'id',
       'is_deleted',
     ];
     const csvContent = [
@@ -319,12 +420,34 @@ const DevicesTable: React.FC<DevicesTableProps> = ({
     setShowDatePickerDialog(false);
   };
 
+  // Define column widths to ensure header and body alignment
+  const columnWidths = {
+    sales_order: '150px',
+    order_type: '120px',
+    warehouse: '120px',
+    deal_id: '120px',
+    nucleus_id: '120px',
+    school_name: '150px',
+    asset_type: '100px',
+    model: '150px',
+    configuration: '150px',
+    serial_number: '150px',
+    sd_card_size: '100px',
+    profile_id: '120px',
+    product: '120px',
+    asset_status: '100px',
+    asset_group: '120px',
+    status: '100px',
+    created_at: '150px',
+    updated_by: '120px',
+    actions: '80px',
+  };
+
   return (
-    <div style={{ border: '1px solid #e2e8f0', borderRadius: '8px', background: '#fff', padding: '16px', minHeight: '200px' }}>
-      <div style={{ padding: '8px 0' }}></div>
-      <div style={{ padding: '16px' }}>
-        <div style={{ marginBottom: '16px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+    <div style={{ border: '1px solid #e2e8f0', borderRadius: '8px', background: '#fff', padding: '8px', minHeight: '200px' }}>
+      <div style={{ padding: '8px' }}>
+        <div style={{ marginBottom: '8px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
             <div style={{ flex: 1, maxWidth: '1200px' }}>
               <div style={{ position: 'relative' }}>
                 <Search style={{ position: 'absolute', left: '8px', top: '8px', width: '12px', height: '12px', color: '#6b7280' }} />
@@ -332,38 +455,38 @@ const DevicesTable: React.FC<DevicesTableProps> = ({
                   id="search"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="Search by Serial, Sales Order, Deal ID, School, Nucleus ID, Asset Type, Model, Configuration, Asset Status, Product, or Status"
-                  style={{ paddingLeft: '28px', fontSize: '12px', width: '100%', border: '1px solid #d1d5db', borderRadius: '4px', padding: '8px' }}
+                  placeholder="Search by Serial, Sales Order, Deal ID, School, Nucleus ID, Asset Type, Model, Configuration, Asset Status, Product, Status, Order Type, Asset Group, SD Card Size, Profile ID, Updated By"
+                  style={{ paddingLeft: '28px', fontSize: '12px', width: '100%', border: '1px solid #d1d5db', borderRadius: '4px', padding: '6px' }}
                 />
               </div>
             </div>
             <button
               onClick={() => downloadCSV(sortedDevices, 'devices_export.csv')}
-              style={{ border: '1px solid #d1d5db', borderRadius: '4px', padding: '4px 8px', fontSize: '12px', display: 'flex', alignItems: 'center' }}
+              style={{ border: '1px solid #d1d5db', borderRadius: '4px', padding: '4px 6px', fontSize: '12px', display: 'flex', alignItems: 'center' }}
             >
               <Download style={{ width: '12px', height: '12px' }} />
             </button>
             <button
               onClick={() => setShowDatePickerDialog(true)}
-              style={{ border: '1px solid #d1d5db', borderRadius: '4px', padding: '4px 8px', fontSize: '12px', display: 'flex', alignItems: 'center' }}
+              style={{ border: '1px solid #d1d5db', borderRadius: '4px', padding: '4px 6px', fontSize: '12px', display: 'flex', alignItems: 'center' }}
             >
               <Calendar style={{ width: '12px', height: '12px' }} />
             </button>
             <button
               onClick={() => setShowDeleted(!showDeleted)}
-              style={{ border: '1px solid #d1d5db', borderRadius: '4px', padding: '4px 8px', fontSize: '12px' }}
+              style={{ border: '1px solid #d1d5db', borderRadius: '4px', padding: '4px 6px', fontSize: '12px' }}
             >
               {showDeleted ? 'Show Active' : 'Show Deleted'}
             </button>
           </div>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginTop: '8px' }}>
-            <div style={{ flex: 1, minWidth: '150px' }}>
-              <label htmlFor="warehouseFilter" style={{ fontSize: '12px', color: '#6b7280', display: 'block', marginBottom: '4px' }}>Warehouse</label>
+          <div style={{ display: 'flex', gap: '4px', marginTop: '4px', maxWidth: '1200px' }}>
+            <div style={{ flex: 1 }}>
+              <label htmlFor="warehouseFilter" style={{ fontSize: '12px', color: '#6b7280', display: 'block', marginBottom: '2px', whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' }}>Warehouse</label>
               <select
                 id="warehouseFilter"
                 value={selectedWarehouse}
                 onChange={(e) => setSelectedWarehouse(e.target.value)}
-                style={{ fontSize: '12px', width: '100%', border: '1px solid #d1d5db', borderRadius: '4px', padding: '8px' }}
+                style={{ fontSize: '12px', width: '100%', border: '1px solid #d1d5db', borderRadius: '4px', padding: '6px', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}
               >
                 {warehouseOptions.map(warehouse => (
                   <option key={warehouse} value={warehouse} style={{ fontSize: '12px' }}>
@@ -372,8 +495,8 @@ const DevicesTable: React.FC<DevicesTableProps> = ({
                 ))}
               </select>
             </div>
-            <div style={{ flex: 1, minWidth: '150px' }}>
-              <label htmlFor="assetTypeFilter" style={{ fontSize: '12px', color: '#6b7280', display: 'block', marginBottom: '4px' }}>Asset Type</label>
+            <div style={{ flex: 1 }}>
+              <label htmlFor="assetTypeFilter" style={{ fontSize: '12px', color: '#6b7280', display: 'block', marginBottom: '2px', whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' }}>Asset Type</label>
               <select
                 id="assetTypeFilter"
                 value={selectedAssetType}
@@ -381,7 +504,7 @@ const DevicesTable: React.FC<DevicesTableProps> = ({
                   setSelectedAssetType(e.target.value);
                   setSelectedModel('All');
                 }}
-                style={{ fontSize: '12px', width: '100%', border: '1px solid #d1d5db', borderRadius: '4px', padding: '8px' }}
+                style={{ fontSize: '12px', width: '100%', border: '1px solid #d1d5db', borderRadius: '4px', padding: '6px', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}
               >
                 {assetTypeOptions.map(assetType => (
                   <option key={assetType} value={assetType} style={{ fontSize: '12px' }}>
@@ -390,13 +513,13 @@ const DevicesTable: React.FC<DevicesTableProps> = ({
                 ))}
               </select>
             </div>
-            <div style={{ flex: 1, minWidth: '150px' }}>
-              <label htmlFor="modelFilter" style={{ fontSize: '12px', color: '#6b7280', display: 'block', marginBottom: '4px' }}>Model</label>
+            <div style={{ flex: 1 }}>
+              <label htmlFor="modelFilter" style={{ fontSize: '12px', color: '#6b7280', display: 'block', marginBottom: '2px', whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' }}>Model</label>
               <select
                 id="modelFilter"
                 value={selectedModel}
                 onChange={(e) => setSelectedModel(e.target.value)}
-                style={{ fontSize: '12px', width: '100%', border: '1px solid #d1d5db', borderRadius: '4px', padding: '8px' }}
+                style={{ fontSize: '12px', width: '100%', border: '1px solid #d1d5db', borderRadius: '4px', padding: '6px', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}
               >
                 {modelOptions.map(model => (
                   <option key={model} value={model} style={{ fontSize: '12px' }}>
@@ -405,28 +528,13 @@ const DevicesTable: React.FC<DevicesTableProps> = ({
                 ))}
               </select>
             </div>
-            <div style={{ flex: 1, minWidth: '150px' }}>
-              <label htmlFor="assetStatusFilter" style={{ fontSize: '12px', color: '#6b7280', display: 'block', marginBottom: '4px' }}>Asset Status</label>
-              <select
-                id="assetStatusFilter"
-                value={selectedAssetStatus}
-                onChange={(e) => setSelectedAssetStatus(e.target.value)}
-                style={{ fontSize: '12px', width: '100%', border: '1px solid #d1d5db', borderRadius: '4px', padding: '8px' }}
-              >
-                {assetStatusOptions.map(status => (
-                  <option key={status} value={status} style={{ fontSize: '12px' }}>
-                    {status}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div style={{ flex: 1, minWidth: '150px' }}>
-              <label htmlFor="configurationFilter" style={{ fontSize: '12px', color: '#6b7280', display: 'block', marginBottom: '4px' }}>Configuration</label>
+            <div style={{ flex: 1 }}>
+              <label htmlFor="configurationFilter" style={{ fontSize: '12px', color: '#6b7280', display: 'block', marginBottom: '2px', whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' }}>Configuration</label>
               <select
                 id="configurationFilter"
                 value={selectedConfiguration}
                 onChange={(e) => setSelectedConfiguration(e.target.value)}
-                style={{ fontSize: '12px', width: '100%', border: '1px solid #d1d5db', borderRadius: '4px', padding: '8px' }}
+                style={{ fontSize: '12px', width: '100%', border: '1px solid #d1d5db', borderRadius: '4px', padding: '6px', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}
               >
                 {configurationOptions.map(config => (
                   <option key={config} value={config} style={{ fontSize: '12px' }}>
@@ -435,13 +543,28 @@ const DevicesTable: React.FC<DevicesTableProps> = ({
                 ))}
               </select>
             </div>
-            <div style={{ flex: 1, minWidth: '150px' }}>
-              <label htmlFor="productFilter" style={{ fontSize: '12px', color: '#6b7280', display: 'block', marginBottom: '4px' }}>Product</label>
+            <div style={{ flex: 1 }}>
+              <label htmlFor="orderTypeFilter" style={{ fontSize: '12px', color: '#6b7280', display: 'block', marginBottom: '2px', whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' }}>Order Type</label>
+              <select
+                id="orderTypeFilter"
+                value={selectedOrderType}
+                onChange={(e) => setSelectedOrderType(e.target.value)}
+                style={{ fontSize: '12px', width: '100%', border: '1px solid #d1d5db', borderRadius: '4px', padding: '6px', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}
+              >
+                {orderTypeOptions.map(orderType => (
+                  <option key={orderType} value={orderType} style={{ fontSize: '12px' }}>
+                    {orderType}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div style={{ flex: 1 }}>
+              <label htmlFor="productFilter" style={{ fontSize: '12px', color: '#6b7280', display: 'block', marginBottom: '2px', whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' }}>Product</label>
               <select
                 id="productFilter"
                 value={selectedProduct}
                 onChange={(e) => setSelectedProduct(e.target.value)}
-                style={{ fontSize: '12px', width: '100%', border: '1px solid #d1d5db', borderRadius: '4px', padding: '8px' }}
+                style={{ fontSize: '12px', width: '100%', border: '1px solid #d1d5db', borderRadius: '4px', padding: '6px', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}
               >
                 {productOptions.map(product => (
                   <option key={product} value={product} style={{ fontSize: '12px' }}>
@@ -450,13 +573,43 @@ const DevicesTable: React.FC<DevicesTableProps> = ({
                 ))}
               </select>
             </div>
-            <div style={{ flex: 1, minWidth: '150px' }}>
-              <label htmlFor="statusFilter" style={{ fontSize: '12px', color: '#6b7280', display: 'block', marginBottom: '4px' }}>Status</label>
+            <div style={{ flex: 1 }}>
+              <label htmlFor="assetStatusFilter" style={{ fontSize: '12px', color: '#6b7280', display: 'block', marginBottom: '2px', whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' }}>Asset Status</label>
+              <select
+                id="assetStatusFilter"
+                value={selectedAssetStatus}
+                onChange={(e) => setSelectedAssetStatus(e.target.value)}
+                style={{ fontSize: '12px', width: '100%', border: '1px solid #d1d5db', borderRadius: '4px', padding: '6px', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}
+              >
+                {assetStatusOptions.map(status => (
+                  <option key={status} value={status} style={{ fontSize: '12px' }}>
+                    {status}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div style={{ flex: 1 }}>
+              <label htmlFor="assetGroupFilter" style={{ fontSize: '12px', color: '#6b7280', display: 'block', marginBottom: '2px', whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' }}>Asset Group</label>
+              <select
+                id="assetGroupFilter"
+                value={selectedAssetGroup}
+                onChange={(e) => setSelectedAssetGroup(e.target.value)}
+                style={{ fontSize: '12px', width: '100%', border: '1px solid #d1d5db', borderRadius: '4px', padding: '6px', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}
+              >
+                {assetGroupOptions.map(group => (
+                  <option key={group} value={group} style={{ fontSize: '12px' }}>
+                    {group}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div style={{ flex: 1 }}>
+              <label htmlFor="statusFilter" style={{ fontSize: '12px', color: '#6b7280', display: 'block', marginBottom: '2px', whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' }}>Status</label>
               <select
                 id="statusFilter"
                 value={selectedStatus}
                 onChange={(e) => setSelectedStatus(e.target.value)}
-                style={{ fontSize: '12px', width: '100%', border: '1px solid #d1d5db', borderRadius: '4px', padding: '8px' }}
+                style={{ fontSize: '12px', width: '100%', border: '1px solid #d1d5db', borderRadius: '4px', padding: '6px', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}
               >
                 {statusOptions.map(status => (
                   <option key={status} value={status} style={{ fontSize: '12px' }}>
@@ -472,78 +625,99 @@ const DevicesTable: React.FC<DevicesTableProps> = ({
           <div style={{ fontSize: '12px' }}>No devices available. Check your database or data loading logic.</div>
         ) : (
           <>
-            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-              <thead>
-                <tr>
-                  <th style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', textAlign: 'left' }}>Asset Type</th>
-                  <th style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', textAlign: 'left' }}>Model</th>
-                  <th style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', textAlign: 'left' }}>Configuration</th>
-                  <th style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', textAlign: 'left' }}>Asset Status</th>
-                  <th style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', textAlign: 'left' }}>Product</th>
-                  <th style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', textAlign: 'left' }}>Serial Number</th>
-                  <th style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', textAlign: 'left' }}>Warehouse</th>
-                  <th style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', textAlign: 'left' }}>Sales Order</th>
-                  <th style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', textAlign: 'left' }}>Deal ID</th>
-                  <th style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', textAlign: 'left' }}>School Name</th>
-                  <th style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', textAlign: 'left' }}>Nucleus ID</th>
-                  <th style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', textAlign: 'left' }}>Status</th>
-                  <th style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', textAlign: 'left' }}>Created At</th>
-                  <th style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', textAlign: 'left' }}>Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {paginatedDevices.length === 0 ? (
+            <div
+              style={{
+                overflowX: 'auto',
+                overflowY: 'auto',
+                maxHeight: '400px',
+                position: 'relative',
+              }}
+              ref={tableContainerRef}
+              tabIndex={0}
+            >
+              <table style={{ width: '100%', minWidth: '2000px', borderCollapse: 'collapse' }}>
+                <thead>
                   <tr>
-                    <td colSpan={14} style={{ textAlign: 'center', fontSize: '12px', padding: '8px' }}>
-                      No devices found with current filters. Try adjusting the filters or check data loading.
-                    </td>
+                    <th style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', textAlign: 'left', position: 'sticky', top: 0, background: '#fff', zIndex: 10, width: columnWidths.sales_order }}>Sales Order</th>
+                    <th style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', textAlign: 'left', position: 'sticky', top: 0, background: '#fff', zIndex: 10, width: columnWidths.order_type }}>Order Type</th>
+                    <th style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', textAlign: 'left', position: 'sticky', top: 0, background: '#fff', zIndex: 10, width: columnWidths.warehouse }}>Warehouse</th>
+                    <th style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', textAlign: 'left', position: 'sticky', top: 0, background: '#fff', zIndex: 10, width: columnWidths.deal_id }}>Deal ID</th>
+                    <th style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', textAlign: 'left', position: 'sticky', top: 0, background: '#fff', zIndex: 10, width: columnWidths.nucleus_id }}>Nucleus ID</th>
+                    <th style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', textAlign: 'left', position: 'sticky', top: 0, background: '#fff', zIndex: 10, width: columnWidths.school_name }}>School Name</th>
+                    <th style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', textAlign: 'left', position: 'sticky', top: 0, background: '#fff', zIndex: 10, width: columnWidths.asset_type }}>Asset Type</th>
+                    <th style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', textAlign: 'left', position: 'sticky', top: 0, background: '#fff', zIndex: 10, width: columnWidths.model }}>Model</th>
+                    <th style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', textAlign: 'left', position: 'sticky', top: 0, background: '#fff', zIndex: 10, width: columnWidths.configuration }}>Configuration</th>
+                    <th style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', textAlign: 'left', position: 'sticky', top: 0, background: '#fff', zIndex: 10, width: columnWidths.serial_number }}>Serial Number</th>
+                    <th style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', textAlign: 'left', position: 'sticky', top: 0, background: '#fff', zIndex: 10, width: columnWidths.sd_card_size }}>SD Card Size</th>
+                    <th style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', textAlign: 'left', position: 'sticky', top: 0, background: '#fff', zIndex: 10, width: columnWidths.profile_id }}>Profile ID</th>
+                    <th style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', textAlign: 'left', position: 'sticky', top: 0, background: '#fff', zIndex: 10, width: columnWidths.product }}>Product</th>
+                    <th style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', textAlign: 'left', position: 'sticky', top: 0, background: '#fff', zIndex: 10, width: columnWidths.asset_status }}>Asset Status</th>
+                    <th style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', textAlign: 'left', position: 'sticky', top: 0, background: '#fff', zIndex: 10, width: columnWidths.asset_group }}>Asset Group</th>
+                    <th style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', textAlign: 'left', position: 'sticky', top: 0, background: '#fff', zIndex: 10, width: columnWidths.status }}>Status</th>
+                    <th style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', textAlign: 'left', position: 'sticky', top: 0, background: '#fff', zIndex: 10, width: columnWidths.created_at }}>Created At</th>
+                    <th style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', textAlign: 'left', position: 'sticky', top: 0, background: '#fff', zIndex: 10, width: columnWidths.updated_by }}>Updated By</th>
+                    <th style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', textAlign: 'left', position: 'sticky', top: 0, background: '#fff', zIndex: 10, width: columnWidths.actions }}>Actions</th>
                   </tr>
-                ) : (
-                  paginatedDevices.map((device) => (
-                    <tr key={device.id}>
-                      <td style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db' }}>{device.asset_type || 'N/A'}</td>
-                      <td style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db' }}>{device.model || 'N/A'}</td>
-                      <td style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db' }}>{device.configuration || 'N/A'}</td>
-                      <td style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db' }}>{device.asset_status || 'N/A'}</td>
-                      <td style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db' }}>{device.product || 'N/A'}</td>
-                      <td style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db' }}>{device.serial_number || 'N/A'}</td>
-                      <td style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db' }}>{device.warehouse || 'N/A'}</td>
-                      <td style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db' }}>{device.sales_order || 'N/A'}</td>
-                      <td style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db' }}>{device.deal_id || 'N/A'}</td>
-                      <td style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db' }}>{device.school_name || 'N/A'}</td>
-                      <td style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db' }}>{device.nucleus_id || 'N/A'}</td>
-                      <td style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db' }}>
-                        <span
-                          style={{
-                            padding: '2px 8px',
-                            borderRadius: '4px',
-                            background: device.status === 'Stock' ? '#3b82f6' : '#6b7280',
-                            color: '#fff',
-                            fontSize: '12px',
-                          }}
-                        >
-                          {device.status || 'N/A'}
-                        </span>
-                      </td>
-                      <td style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db' }}>{formatDate(device.created_at) || 'N/A'}</td>
-                      <td style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db' }}>
-                        <button
-                          onClick={() => {
-                            setViewingDevice(device);
-                            setShowViewDialog(true);
-                          }}
-                          style={{ border: '1px solid #d1d5db', borderRadius: '4px', padding: '4px', fontSize: '12px' }}
-                        >
-                          <Eye style={{ width: '12px', height: '12px' }} />
-                        </button>
+                </thead>
+                <tbody>
+                  {paginatedDevices.length === 0 ? (
+                    <tr>
+                      <td colSpan={19} style={{ textAlign: 'center', fontSize: '12px', padding: '8px' }}>
+                        No devices found with current filters. Try adjusting the filters or check data loading.
                       </td>
                     </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
+                  ) : (
+                    paginatedDevices.map((device) => (
+                      <tr key={device.id}>
+                        <td style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', width: columnWidths.sales_order }}>{device.sales_order || ''}</td>
+                        <td style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', width: columnWidths.order_type }}>{device.order_type || ''}</td>
+                        <td style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', width: columnWidths.warehouse }}>{device.warehouse || ''}</td>
+                        <td style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', width: columnWidths.deal_id }}>{device.deal_id || ''}</td>
+                        <td style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', width: columnWidths.nucleus_id }}>{device.nucleus_id || ''}</td>
+                        <td style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', width: columnWidths.school_name }}>{device.school_name || ''}</td>
+                        <td style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', width: columnWidths.asset_type }}>{device.asset_type || ''}</td>
+                        <td style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', width: columnWidths.model }}>{device.model || ''}</td>
+                        <td style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', width: columnWidths.configuration }}>{device.configuration || ''}</td>
+                        <td style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', width: columnWidths.serial_number }}>{device.serial_number || ''}</td>
+                        <td style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', width: columnWidths.sd_card_size }}>{device.sd_card_size || ''}</td>
+                        <td style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', width: columnWidths.profile_id }}>{device.profile_id || ''}</td>
+                        <td style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', width: columnWidths.product }}>{device.product || ''}</td>
+                        <td style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', width: columnWidths.asset_status }}>{device.asset_status || ''}</td>
+                        <td style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', width: columnWidths.asset_group }}>{device.asset_group || ''}</td>
+                        <td style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', width: columnWidths.status }}>
+                          <span
+                            style={{
+                              padding: '2px 8px',
+                              borderRadius: '4px',
+                              background: device.status === 'Stock' ? '#3b82f6' : '#6b7280',
+                              color: '#fff',
+                              fontSize: '12px',
+                            }}
+                          >
+                            {device.status || ''}
+                          </span>
+                        </td>
+                        <td style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', width: columnWidths.created_at }}>{formatDate(device.created_at) || ''}</td>
+                        <td style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', width: columnWidths.updated_by }}>{device.updated_by || ''}</td>
+                        <td style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', width: columnWidths.actions }}>
+                          <button
+                            onClick={() => {
+                              setViewingDevice(device);
+                              setShowViewDialog(true);
+                            }}
+                            style={{ border: '1px solid #d1d5db', borderRadius: '4px', padding: '4px', fontSize: '12px' }}
+                          >
+                            <Eye style={{ width: '12px', height: '12px' }} />
+                          </button>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
 
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '8px', fontSize: '12px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '4px', fontSize: '12px' }}>
               <div>
                 Showing {(currentDevicesPage - 1) * devicesPerPage + 1} to{' '}
                 {Math.min(currentDevicesPage * devicesPerPage, sortedDevices.length)} of{' '}
@@ -569,28 +743,33 @@ const DevicesTable: React.FC<DevicesTableProps> = ({
 
             {showViewDialog && viewingDevice && (
               <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
-                <div style={{ background: '#fff', borderRadius: '8px', maxHeight: '80vh', overflowY: 'auto', padding: '16px', maxWidth: '600px', width: '100%' }}>
-                  <h2 style={{ fontSize: '16px', marginBottom: '16px' }}>Device Details</h2>
-                  <div style={{ fontSize: '12px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                <div style={{ background: '#fff', borderRadius: '8px', maxHeight: '80vh', overflowY: 'auto', padding: '8px', maxWidth: '600px', width: '100%' }}>
+                  <h2 style={{ fontSize: '14px', marginBottom: '8px' }}>Device Details</h2>
+                  <div style={{ fontSize: '12px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
                     <p><strong>ID:</strong> {viewingDevice.id}</p>
-                    <p><strong>Asset Type:</strong> {viewingDevice.asset_type || 'N/A'}</p>
-                    <p><strong>Model:</strong> {viewingDevice.model || 'N/A'}</p>
-                    <p><strong>Configuration:</strong> {viewingDevice.configuration || 'N/A'}</p>
-                    <p><strong>Asset Status:</strong> {viewingDevice.asset_status || 'N/A'}</p>
-                    <p><strong>Product:</strong> {viewingDevice.product || 'N/A'}</p>
-                    <p><strong>Serial Number:</strong> {viewingDevice.serial_number || 'N/A'}</p>
-                    <p><strong>Warehouse:</strong> {viewingDevice.warehouse || 'N/A'}</p>
-                    <p><strong>Sales Order:</strong> {viewingDevice.sales_order || 'N/A'}</p>
-                    <p><strong>Deal ID:</strong> {viewingDevice.deal_id || 'N/A'}</p>
-                    <p><strong>School Name:</strong> {viewingDevice.school_name || 'N/A'}</p>
-                    <p><strong>Nucleus ID:</strong> {viewingDevice.nucleus_id || 'N/A'}</p>
-                    <p><strong>Status:</strong> {viewingDevice.status || 'N/A'}</p>
-                    <p><strong>Created At:</strong> {formatDate(viewingDevice.created_at) || 'N/A'}</p>
+                    <p><strong>Sales Order:</strong> {viewingDevice.sales_order || ''}</p>
+                    <p><strong>Order Type:</strong> {viewingDevice.order_type || ''}</p>
+                    <p><strong>Warehouse:</strong> {viewingDevice.warehouse || ''}</p>
+                    <p><strong>Deal ID:</strong> {viewingDevice.deal_id || ''}</p>
+                    <p><strong>Nucleus ID:</strong> {viewingDevice.nucleus_id || ''}</p>
+                    <p><strong>School Name:</strong> {viewingDevice.school_name || ''}</p>
+                    <p><strong>Asset Type:</strong> {viewingDevice.asset_type || ''}</p>
+                    <p><strong>Model:</strong> {viewingDevice.model || ''}</p>
+                    <p><strong>Configuration:</strong> {viewingDevice.configuration || ''}</p>
+                    <p><strong>Serial Number:</strong> {viewingDevice.serial_number || ''}</p>
+                    <p><strong>SD Card Size:</strong> {viewingDevice.sd_card_size || ''}</p>
+                    <p><strong>Profile ID:</strong> {viewingDevice.profile_id || ''}</p>
+                    <p><strong>Product:</strong> {viewingDevice.product || ''}</p>
+                    <p><strong>Asset Status:</strong> {viewingDevice.asset_status || ''}</p>
+                    <p><strong>Asset Group:</strong> {viewingDevice.asset_group || ''}</p>
+                    <p><strong>Status:</strong> {viewingDevice.status || ''}</p>
+                    <p><strong>Created At:</strong> {formatDate(viewingDevice.created_at) || ''}</p>
+                    <p><strong>Updated By:</strong> {viewingDevice.updated_by || ''}</p>
                     <p><strong>Deleted:</strong> {viewingDevice.is_deleted ? 'Yes' : 'No'}</p>
                   </div>
                   <button
                     onClick={() => setShowViewDialog(false)}
-                    style={{ border: '1px solid #d1d5db', borderRadius: '4px', padding: '4px 8px', fontSize: '12px', marginTop: '16px' }}
+                    style={{ border: '1px solid #d1d5db', borderRadius: '4px', padding: '4px 8px', fontSize: '12px', marginTop: '8px' }}
                   >
                     Close
                   </button>
@@ -600,31 +779,31 @@ const DevicesTable: React.FC<DevicesTableProps> = ({
 
             {showDatePickerDialog && (
               <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
-                <div style={{ background: '#fff', borderRadius: '8px', padding: '16px', maxWidth: '400px', width: '100%' }}>
-                  <h2 style={{ fontSize: '16px', marginBottom: '16px' }}>Select Date Range</h2>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                <div style={{ background: '#fff', borderRadius: '8px', padding: '8px', maxWidth: '400px', width: '100%' }}>
+                  <h2 style={{ fontSize: '14px', marginBottom: '8px' }}>Select Date Range</h2>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                     <div>
-                      <label htmlFor="fromDate" style={{ fontSize: '12px', color: '#6b7280', display: 'block', marginBottom: '4px' }}>From Date</label>
+                      <label htmlFor="fromDate" style={{ fontSize: '12px', color: '#6b7280', display: 'block', marginBottom: '2px' }}>From Date</label>
                       <input
                         type="date"
                         id="fromDate"
                         value={fromDate}
                         onChange={(e) => setFromDate(e.target.value)}
-                        style={{ fontSize: '12px', width: '100%', border: '1px solid #d1d5db', borderRadius: '4px', padding: '8px' }}
+                        style={{ fontSize: '12px', width: '100%', border: '1px solid #d1d5db', borderRadius: '4px', padding: '6px' }}
                       />
                     </div>
                     <div>
-                      <label htmlFor="toDate" style={{ fontSize: '12px', color: '#6b7280', display: 'block', marginBottom: '4px' }}>To Date</label>
+                      <label htmlFor="toDate" style={{ fontSize: '12px', color: '#6b7280', display: 'block', marginBottom: '2px' }}>To Date</label>
                       <input
                         type="date"
                         id="toDate"
                         value={toDate}
                         onChange={(e) => setToDate(e.target.value)}
-                        style={{ fontSize: '12px', width: '100%', border: '1px solid #d1d5db', borderRadius: '4px', padding: '8px' }}
+                        style={{ fontSize: '12px', width: '100%', border: '1px solid #d1d5db', borderRadius: '4px', padding: '6px' }}
                       />
                     </div>
                   </div>
-                  <div style={{ display: 'flex', gap: '8px', marginTop: '16px' }}>
+                  <div style={{ display: 'flex', gap: '4px', marginTop: '8px' }}>
                     <button
                       onClick={handleDateRangeSubmit}
                       style={{ border: '1px solid #d1d5db', borderRadius: '4px', padding: '4px 8px', fontSize: '12px', background: '#3b82f6', color: '#fff' }}

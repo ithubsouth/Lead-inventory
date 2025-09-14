@@ -25,6 +25,8 @@ const InventoryManagement = () => {
   const [selectedConfiguration, setSelectedConfiguration] = useState<string>('All');
   const [selectedProduct, setSelectedProduct] = useState<string>('All');
   const [selectedStatus, setSelectedStatus] = useState<string>('All');
+  const [selectedOrderType, setSelectedOrderType] = useState<string>('All');
+  const [selectedAssetGroup, setSelectedAssetGroup] = useState<string>('All');
   const [fromDate, setFromDate] = useState<string>('');
   const [toDate, setToDate] = useState<string>('');
   const [showDeleted, setShowDeleted] = useState<boolean>(false);
@@ -92,7 +94,7 @@ const InventoryManagement = () => {
 
       const orderGroups = new Map<string, Order[]>();
       allOrders.forEach((order: any) => {
-        const salesOrder = order.sales_order || 'No Sales Order';
+        const salesOrder = order.sales_order || '';
         const groupKey = `${salesOrder}-${order.asset_type}-${order.model}-${order.warehouse}`;
         if (!orderGroups.has(groupKey)) {
           orderGroups.set(groupKey, []);
@@ -106,7 +108,7 @@ const InventoryManagement = () => {
       });
 
       const ordersWithStatus = allOrders.map((order: any) => {
-        const salesOrder = order.sales_order || 'No Sales Order';
+        const salesOrder = order.sales_order || '';
         const groupKey = `${salesOrder}-${order.asset_type}-${order.model}-${order.warehouse}`;
         const groupOrders = orderGroups.get(groupKey) || [];
         const orderSerials = (order.serial_numbers || []).map((sn: string) => sn.trim().toUpperCase()).filter((sn: string) => sn);
@@ -167,7 +169,7 @@ const InventoryManagement = () => {
       setOrders(ordersWithStatus);
     } catch (error) {
       console.error('Error loading orders:', error);
-      toast({ title: 'Error', description: 'Failed to load orders', variant: 'destructive' });
+      toast({ title: 'Error', description: 'Failed to load orders. Please try again.', variant: 'destructive' });
     } finally {
       setLoading(false);
     }
@@ -184,7 +186,29 @@ const InventoryManagement = () => {
       while (hasMore) {
         const { data, error } = await supabase
           .from('devices')
-          .select('*, orders!inner(material_type)')
+          .select(`
+            id,
+            sales_order,
+            order_type,
+            warehouse,
+            deal_id,
+            nucleus_id,
+            school_name,
+            asset_type,
+            model,
+            configuration,
+            serial_number,
+            sd_card_size,
+            profile_id,
+            product,
+            asset_status,
+            asset_group,
+            created_at,
+            updated_by,
+            is_deleted,
+            order_id,
+            orders!left(material_type)
+          `)
           .order('created_at', { ascending: false })
           .range(page * batchSize, (page + 1) * batchSize - 1);
         if (error) throw error;
@@ -193,15 +217,65 @@ const InventoryManagement = () => {
         page += 1;
       }
 
-      const updatedDevices = allDevices.map((device: any) => ({
-        ...device,
-        status: device.order_id && device.orders?.material_type === 'Outward' ? 'Assigned' : 'Stock',
-      }));
+      console.log('Fetched devices (first 5):', allDevices.slice(0, 5).map(d => ({
+        id: d.id,
+        sales_order: d.sales_order || '',
+        order_type: d.order_type || '',
+        warehouse: d.warehouse || '',
+        deal_id: d.deal_id || '',
+        nucleus_id: d.nucleus_id || '',
+        school_name: d.school_name || '',
+        asset_type: d.asset_type || '',
+        model: d.model || '',
+        configuration: d.configuration || '',
+        serial_number: d.serial_number || '',
+        sd_card_size: d.sd_card_size || '',
+        profile_id: d.profile_id || '',
+        product: d.product || '',
+        asset_status: d.asset_status || '',
+        asset_group: d.asset_group || '',
+        created_at: d.created_at || '',
+        updated_by: d.updated_by || '',
+        is_deleted: d.is_deleted,
+        order_id: d.order_id || '',
+        material_type: d.orders?.material_type || '',
+      })));
 
-      setDevices(updatedDevices || []);
+      const updatedDevices = allDevices.map((device: any) => ({
+        id: device.id,
+        sales_order: device.sales_order,
+        order_type: device.order_type,
+        warehouse: device.warehouse,
+        deal_id: device.deal_id,
+        nucleus_id: device.nucleus_id,
+        school_name: device.school_name,
+        asset_type: device.asset_type,
+        model: device.model,
+        configuration: device.configuration,
+        serial_number: device.serial_number,
+        sd_card_size: device.sd_card_size,
+        profile_id: device.profile_id,
+        product: device.product,
+        asset_status: device.asset_status,
+        asset_group: device.asset_group,
+        status: device.order_id && device.orders?.material_type === 'Outward' ? 'Assigned' : 'Stock',
+        created_at: device.created_at,
+        updated_by: device.updated_by,
+        is_deleted: device.is_deleted,
+      })) as Device[];
+
+      console.log('Processed devices count:', updatedDevices.length);
+      console.log('Status summary:', {
+        stock: updatedDevices.filter(d => d.status === 'Stock').length,
+        assigned: updatedDevices.filter(d => d.status === 'Assigned').length,
+      });
+      setDevices(updatedDevices);
+      if (updatedDevices.length === 0) {
+        toast({ title: 'Warning', description: 'No devices loaded from database. Please check your data source or filters.', variant: 'destructive' });
+      }
     } catch (error) {
       console.error('Error loading devices:', error);
-      toast({ title: 'Error', description: 'Failed to load devices', variant: 'destructive' });
+      toast({ title: 'Error', description: 'Failed to load devices. Please check your database connection or schema.', variant: 'destructive' });
     } finally {
       setLoading(false);
     }
@@ -262,7 +336,7 @@ const InventoryManagement = () => {
       setOrderSummary(Array.from(summaryMap.values()));
     } catch (error) {
       console.error('Error loading order summary:', error);
-      toast({ title: 'Error', description: 'Failed to load order summary', variant: 'destructive' });
+      toast({ title: 'Error', description: 'Failed to load order summary. Please try again.', variant: 'destructive' });
     } finally {
       setLoading(false);
     }
@@ -417,6 +491,10 @@ const InventoryManagement = () => {
               setSelectedProduct={setSelectedProduct}
               selectedStatus={selectedStatus}
               setSelectedStatus={setSelectedStatus}
+              selectedOrderType={selectedOrderType}
+              setSelectedOrderType={setSelectedOrderType}
+              selectedAssetGroup={selectedAssetGroup}
+              setSelectedAssetGroup={setSelectedAssetGroup}
               fromDate={fromDate}
               setFromDate={setFromDate}
               toDate={toDate}
