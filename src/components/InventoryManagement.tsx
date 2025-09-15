@@ -203,13 +203,13 @@ const InventoryManagement = () => {
             product,
             asset_status,
             asset_group,
-            created_at,
+            updated_at,
             updated_by,
             is_deleted,
             order_id,
             orders!left(material_type)
           `)
-          .order('created_at', { ascending: false })
+          .order('updated_at', { ascending: false })
           .range(page * batchSize, (page + 1) * batchSize - 1);
         if (error) throw error;
         allDevices = [...allDevices, ...data];
@@ -234,7 +234,7 @@ const InventoryManagement = () => {
         product: d.product || '',
         asset_status: d.asset_status || '',
         asset_group: d.asset_group || '',
-        created_at: d.created_at || '',
+        updated_at: d.updated_at || '',
         updated_by: d.updated_by || '',
         is_deleted: d.is_deleted,
         order_id: d.order_id || '',
@@ -259,7 +259,7 @@ const InventoryManagement = () => {
         asset_status: device.asset_status,
         asset_group: device.asset_group,
         status: device.order_id && device.orders?.material_type === 'Outward' ? 'Assigned' : 'Stock',
-        created_at: device.created_at,
+        updated_at: device.updated_at,
         updated_by: device.updated_by,
         is_deleted: device.is_deleted,
       })) as Device[];
