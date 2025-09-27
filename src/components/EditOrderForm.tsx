@@ -27,6 +27,7 @@ const EditOrderForm: React.FC<EditOrderFormProps> = ({ order, onSave, onCancel }
   const [currentSerialIndex, setCurrentSerialIndex] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [serialErrors, setSerialErrors] = useState<(string | null)[]>([]);
   const { toast } = useToast();
 
   const orderTypes = [
@@ -73,15 +74,17 @@ const EditOrderForm: React.FC<EditOrderFormProps> = ({ order, onSave, onCancel }
         toast({ title: 'Error', description: `Failed to fetch devices: ${error.message}`, variant: 'destructive' });
         return;
       }
-      setDevices(data || []);
-      setOriginalDevices(data || []);
+      const fetchedDevices = data || [];
+      setDevices(fetchedDevices);
+      setOriginalDevices(fetchedDevices);
       setFormData(prev => ({
         ...prev,
-        serial_numbers: data.map(d => d.serial_number || ''),
-        quantity: data.length || 1,
-        sd_card_size: data[0]?.sd_card_size || '',
-        profile_id: data[0]?.profile_id || '',
+        serial_numbers: fetchedDevices.map(d => d.serial_number || ''),
+        quantity: fetchedDevices.length || 1,
+        sd_card_size: fetchedDevices[0]?.sd_card_size || '',
+        profile_id: fetchedDevices[0]?.profile_id || '',
       }));
+      validateSerials(fetchedDevices);
     };
     fetchDevices();
   }, [order.id, toast]);
@@ -98,6 +101,51 @@ const EditOrderForm: React.FC<EditOrderFormProps> = ({ order, onSave, onCancel }
       }));
     }
   }, [formData.asset_type]);
+
+  // Validate serial numbers for duplicates and stock availability
+  const validateSerials = async (devicesToValidate: Device[]) => {
+    const errors = Array(devicesToValidate.length).fill(null);
+    const isInward = ['Stock', 'Return'].includes(formData.order_type);
+    const allSerials = devicesToValidate.map(d => d.serial_number?.trim() || '');
+
+    // Check for duplicates
+    for (let i = 0; i < allSerials.length; i++) {
+      const serial = allSerials[i];
+      if (serial && allSerials.filter(s => s === serial).length > 1) {
+        errors[i] = 'Duplicate';
+      }
+    }
+
+    // Validate serials against stock for outward orders
+    if (!isInward && formData.warehouse) {
+      const { data, error } = await supabase
+        .from('devices')
+        .select('serial_number, warehouse, status')
+        .in('serial_number', allSerials.filter(sn => sn))
+        .eq('is_deleted', false);
+
+      if (error) {
+        toast({ title: 'Error', description: 'Failed to validate serials', variant: 'destructive' });
+        return;
+      }
+
+      for (let i = 0; i < devicesToValidate.length; i++) {
+        const serial = allSerials[i];
+        if (serial && !errors[i]) {
+          const matchingDevice = data.find(d => d.serial_number === serial);
+          if (!matchingDevice || matchingDevice.warehouse !== formData.warehouse || matchingDevice.status !== 'Available') {
+            errors[i] = 'Not in stock';
+          }
+        }
+      }
+    }
+
+    setSerialErrors(errors);
+  };
+
+  useEffect(() => {
+    validateSerials(devices);
+  }, [devices, formData.order_type, formData.warehouse]);
 
   const removeSerialNumber = (index: number) => {
     setDevices(prev => prev.filter((_, i) => i !== index));
@@ -172,8 +220,8 @@ const EditOrderForm: React.FC<EditOrderFormProps> = ({ order, onSave, onCancel }
         deal_id: formData.deal_id || null,
         school_name: formData.school_name,
         nucleus_id: formData.nucleus_id || null,
-        status: formData.material_type === 'Inward' ? 'Available' : 'Assigned',
-        material_type: formData.material_type,
+        status: ['Stock', 'Return'].includes(formData.order_type) ? 'Available' : 'Assigned',
+        material_type: ['Stock', 'Return'].includes(formData.order_type) ? 'Inward' : 'Outward',
         configuration: formData.configuration || null,
         product: formData.product || null,
         sd_card_size: formData.asset_type === 'Tablet' ? formData.sd_card_size || '' : null,
@@ -249,6 +297,15 @@ const EditOrderForm: React.FC<EditOrderFormProps> = ({ order, onSave, onCancel }
       });
       return false;
     }
+    // Check for duplicate serials or invalid serials
+    if (serialErrors.some(error => error === 'Duplicate' || error === 'Not in stock')) {
+      toast({
+        title: 'Validation Error',
+        description: 'Please resolve duplicate serial numbers or serials not in stock before saving.',
+        variant: 'destructive',
+      });
+      return false;
+    }
     return true;
   };
 
@@ -300,7 +357,7 @@ const EditOrderForm: React.FC<EditOrderFormProps> = ({ order, onSave, onCancel }
       // Update order in the orders table
       const orderUpdates: Partial<Order> = {
         order_type: formData.order_type,
-        material_type: formData.material_type,
+        material_type: ['Stock', 'Return'].includes(formData.order_type) ? 'Inward' : 'Outward',
         asset_type: formData.asset_type,
         model: formData.model,
         quantity: formData.quantity,
@@ -346,8 +403,8 @@ const EditOrderForm: React.FC<EditOrderFormProps> = ({ order, onSave, onCancel }
       ];
 
       for (const field of fieldsToCompare) {
-        const oldValue = String(originalOrder[field] || '');
-        const newValue = String(formData[field] || '');
+        const oldValue = String(originalOrder[field as keyof Order] || '');
+        const newValue = String(formData[field as keyof Order] || '');
         if (oldValue !== newValue) {
           await logHistory('orders', formData.id, field, oldValue, newValue, userEmail, formData.sales_order, 'UPDATE');
         }
@@ -381,8 +438,8 @@ const EditOrderForm: React.FC<EditOrderFormProps> = ({ order, onSave, onCancel }
           deal_id: formData.deal_id || null,
           school_name: formData.school_name,
           nucleus_id: formData.nucleus_id || null,
-          status: formData.material_type === 'Inward' ? 'Available' : 'Assigned',
-          material_type: formData.material_type,
+          status: ['Stock', 'Return'].includes(formData.order_type) ? 'Available' : 'Assigned',
+          material_type: ['Stock', 'Return'].includes(formData.order_type) ? 'Inward' : 'Outward',
           order_id: formData.id,
           configuration: formData.configuration || null,
           product: formData.product || null,
@@ -414,8 +471,8 @@ const EditOrderForm: React.FC<EditOrderFormProps> = ({ order, onSave, onCancel }
             'profile_id',
           ];
           for (const field of deviceFields) {
-            const oldValue = String(originalDevice[field] || '');
-            const newValue = String(device[field] || '');
+            const oldValue = String(originalDevice[field as keyof Device] || '');
+            const newValue = String(device[field as keyof Device] || '');
             if (oldValue !== newValue) {
               await logHistory('devices', device.id, field, oldValue, newValue, userEmail, formData.sales_order, 'UPDATE');
             }
@@ -774,6 +831,11 @@ const EditOrderForm: React.FC<EditOrderFormProps> = ({ order, onSave, onCancel }
                   className='font-mono text-xs flex-1 bg-white border-gray-300'
                   placeholder={`Serial ${index + 1} (optional - can update later)`}
                 />
+                {serialErrors[index] && (
+                  <Badge variant="destructive" className='text-xs'>
+                    {serialErrors[index]}
+                  </Badge>
+                )}
                 <Select
                   value={device.asset_status || 'Fresh'}
                   onValueChange={(value) => updateAssetStatus(index, value)}
@@ -818,7 +880,7 @@ const EditOrderForm: React.FC<EditOrderFormProps> = ({ order, onSave, onCancel }
                   disabled={formData.quantity <= 1}
                   className='bg-white border-gray-300'
                 >
-                  <X className='w-4 w-4' />
+                  <X className='w-4 h-4' />
                 </Button>
               </div>
             ) : null;

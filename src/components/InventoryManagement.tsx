@@ -377,7 +377,10 @@ const InventoryManagement = () => {
     <div className='min-h-screen bg-background flex flex-col'>
       <div className='sticky top-0 z-20 bg-background border-b border-gray-200'>
         <div className='container mx-auto p-4 flex justify-between items-center'>
-          <h1 className='text-2xl font-bold'>Inventory Management</h1>
+          <div className='flex items-center space-x-4'>
+            <img src='/logo.png' alt='Logo' className='h-11 w-auto' />
+            <h1 className='text-2xl font-bold'>Inventory Management</h1>
+          </div>
           <div className='flex items-center space-x-4'>
             <UserProfile />
           </div>
@@ -431,30 +434,30 @@ const InventoryManagement = () => {
             />
           </TabsContent>
           <TabsContent value='view' className='space-y-4'>
-  <OrdersTable
-    orders={orders}
-    setOrders={setOrders}
-    selectedWarehouse={selectedWarehouse}
-    setSelectedWarehouse={setSelectedWarehouse}
-    selectedAssetType={selectedAssetType}
-    setSelectedAssetType={setSelectedAssetType}
-    selectedModel={selectedModel}
-    setSelectedModel={setSelectedModel}
-    selectedConfiguration={selectedConfiguration}
-    setSelectedConfiguration={setSelectedConfiguration}
-    selectedOrderType={selectedOrderType}
-    setSelectedOrderType={setSelectedOrderType}
-    selectedProduct={selectedProduct}
-    setSelectedProduct={setSelectedProduct}
-    selectedStatus={selectedStatus}
-    setSelectedStatus={setSelectedStatus}
-    loading={loading}
-    setLoading={setLoading}
-    loadOrders={loadOrders}
-    loadDevices={loadDevices}
-    loadOrderSummary={loadOrderSummary}
-  />
-</TabsContent>
+            <OrdersTable
+              orders={orders}
+              setOrders={setOrders}
+              selectedWarehouse={selectedWarehouse}
+              setSelectedWarehouse={setSelectedWarehouse}
+              selectedAssetType={selectedAssetType}
+              setSelectedAssetType={setSelectedAssetType}
+              selectedModel={selectedModel}
+              setSelectedModel={setSelectedModel}
+              selectedConfiguration={selectedConfiguration}
+              setSelectedConfiguration={setSelectedConfiguration}
+              selectedOrderType={selectedOrderType}
+              setSelectedOrderType={setSelectedOrderType}
+              selectedProduct={selectedProduct}
+              setSelectedProduct={setSelectedProduct}
+              selectedStatus={selectedStatus}
+              setSelectedStatus={setSelectedStatus}
+              loading={loading}
+              setLoading={setLoading}
+              loadOrders={loadOrders}
+              loadDevices={loadDevices}
+              loadOrderSummary={loadOrderSummary}
+            />
+          </TabsContent>
           <TabsContent value='order' className='space-y-4'>
             <OrderSummaryTable
               orderSummary={orderSummary}

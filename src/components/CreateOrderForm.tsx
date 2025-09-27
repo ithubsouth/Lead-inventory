@@ -1,8 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Plus, Minus, Trash2, Upload, Download, Camera } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { TabletItem, TVItem } from './types';
 import { generateDummyId } from './utils';
+import { Badge } from '@/components/ui/badge';
 
 interface CreateOrderFormProps {
   orderType: string;
@@ -52,6 +53,8 @@ const CreateOrderForm: React.FC<CreateOrderFormProps> = ({
   const [showImportDialog, setShowImportDialog] = useState(false);
   const [tabletsToggle, setTabletsToggle] = useState(false);
   const [tvsToggle, setTVsToggle] = useState(false);
+  const [tabletsErrors, setTabletsErrors] = useState<Record<string, (string | null)[]>>({});
+  const [tvsErrors, setTvsErrors] = useState<Record<string, (string | null)[]>>({});
 
   const toast = ({ title, description, variant }: { title: string; description: string; variant?: 'destructive' }) => {
     console.log(`Toast: ${title} - ${description}${variant ? ` (Variant: ${variant})` : ''}`);
@@ -97,6 +100,71 @@ const CreateOrderForm: React.FC<CreateOrderFormProps> = ({
     const randomString = Math.random().toString(36).substr(2, 5);
     return `SO-${digit}-${randomString}`;
   };
+
+  const validateSerials = async (items: (TabletItem | TVItem)[], type: 'tablet' | 'tv') => {
+    const errors: Record<string, (string | null)[]> = {};
+    const isInward = ['Stock', 'Return'].includes(orderType);
+
+    for (const item of items) {
+      const serialErrors: (string | null)[] = Array(item.quantity).fill(null);
+      const allSerials = item.serialNumbers.filter(sn => sn.trim());
+
+      // Check for duplicates within the form
+      for (let i = 0; i < item.serialNumbers.length; i++) {
+        const serial = item.serialNumbers[i]?.trim();
+        if (serial && allSerials.filter(s => s === serial).length > 1) {
+          serialErrors[i] = 'Duplicate within order';
+        }
+      }
+
+      // For Outward orders, check if serials exist in stock for the selected location
+      if (!isInward && item.location && allSerials.length > 0) {
+        const { data, error } = await supabase
+          .from('devices')
+          .select('serial_number, warehouse')
+          .eq('asset_type', type === 'tablet' ? 'Tablet' : 'TV')
+          .eq('status', 'Available')
+          .eq('is_deleted', false)
+          .in('serial_number', allSerials);
+
+        if (error) {
+          console.error('Error validating serials:', error);
+          toast({ title: 'Error', description: 'Failed to validate serial numbers', variant: 'destructive' });
+          continue;
+        }
+
+        for (let i = 0; i < item.serialNumbers.length; i++) {
+          const serial = item.serialNumbers[i]?.trim();
+          if (serial && !serialErrors[i]) {
+            const device = data.find(d => d.serial_number === serial);
+            if (!device) {
+              serialErrors[i] = 'Not in stock';
+            } else if (device.warehouse !== item.location) {
+              serialErrors[i] = `Not in ${item.location} stock`;
+            }
+          }
+        }
+      }
+
+      errors[item.id] = serialErrors;
+    }
+
+    return errors;
+  };
+
+  useEffect(() => {
+    const validateAll = async () => {
+      if (tabletsToggle) {
+        const tabletErrors = await validateSerials(tablets, 'tablet');
+        setTabletsErrors(tabletErrors);
+      }
+      if (tvsToggle) {
+        const tvErrors = await validateSerials(tvs, 'tv');
+        setTvsErrors(tvErrors);
+      }
+    };
+    validateAll();
+  }, [tablets, tvs, orderType, tabletsToggle, tvsToggle]);
 
   const addTablet = () => {
     const newTablet: TabletItem = {
@@ -286,11 +354,21 @@ const CreateOrderForm: React.FC<CreateOrderFormProps> = ({
 
       const validTablets = tabletsToggle ? tablets.filter(t => t.model && t.location && t.quantity > 0 && t.assetGroups?.length === t.quantity) : [];
       const validTVs = tvsToggle ? tvs.filter(t => t.model && t.location && t.quantity > 0 && t.assetGroups?.length === t.quantity) : [];
-      const materialType = (orderType === 'Stock' || orderType === 'Return') ? 'Inward' : 'Outward';
+      const materialType = ['Stock', 'Return'].includes(orderType) ? 'Inward' : 'Outward';
 
       for (const tablet of validTablets) {
         const salesOrderId = salesOrder || generateSalesOrder();
         const tabletSerials = tablet.serialNumbers.filter(sn => sn.trim());
+        const tabletErrors = tabletsErrors[tablet.id] || Array(tablet.quantity).fill(null);
+        const errorStatus = tabletErrors.some(err => err) ? tabletErrors.map((err, idx) => err ? `${tablet.serialNumbers[idx]}: ${err}` : '').filter(e => e).join('; ') : null;
+
+        if (errorStatus) {
+          toast({
+            title: 'Warning',
+            description: `Tablet order has validation issues: ${errorStatus}. Proceeding with order creation.`,
+          });
+        }
+
         const { data: orderData, error: orderError } = await supabase
           .from('orders')
           .insert({
@@ -386,6 +464,16 @@ const CreateOrderForm: React.FC<CreateOrderFormProps> = ({
       for (const tv of validTVs) {
         const salesOrderId = salesOrder || generateSalesOrder();
         const tvSerials = tv.serialNumbers.filter(sn => sn.trim());
+        const tvErrors = tvsErrors[tv.id] || Array(tv.quantity).fill(null);
+        const errorStatus = tvErrors.some(err => err) ? tvErrors.map((err, idx) => err ? `${tv.serialNumbers[idx]}: ${err}` : '').filter(e => e).join('; ') : null;
+
+        if (errorStatus) {
+          toast({
+            title: 'Warning',
+            description: `TV order has validation issues: ${errorStatus}. Proceeding with order creation.`,
+          });
+        }
+
         const { data: orderData, error: orderError } = await supabase
           .from('orders')
           .insert({
@@ -479,13 +567,19 @@ const CreateOrderForm: React.FC<CreateOrderFormProps> = ({
       setTvs([]);
       setTabletsToggle(false);
       setTVsToggle(false);
+      setTabletsErrors({});
+      setTvsErrors({});
       await loadOrders();
       await loadDevices();
       await loadOrderSummary();
       toast({ title: 'Success', description: 'Order created successfully!' });
     } catch (error) {
       console.error('Error creating order:', error);
-      toast({ title: 'Error', description: `Failed to create order: ${error instanceof Error ? error.message : 'Unknown error'}`, variant: 'destructive' });
+      toast({
+        title: 'Error',
+        description: `Failed to create order: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        variant: 'destructive',
+      });
     } finally {
       setLoading(false);
     }
@@ -496,15 +590,15 @@ const CreateOrderForm: React.FC<CreateOrderFormProps> = ({
     if (!file) return;
 
     const reader = new FileReader();
-    reader.onload = (e) => {
+    reader.onload = async (e) => {
       const text = e.target?.result as string;
       const lines = text.split('\n').filter(line => line.trim());
       const headers = lines[0].split(',').map(h => h.trim());
 
-      if (headers.length < 16) {
+      if (headers.length < 15) {
         toast({
           title: 'Invalid CSV Format',
-          description: 'CSV must have at least 16 columns: order_type,asset_type,model,quantity,warehouse,sales_order,deal_id,school_name,nucleus_id,serial_numbers,configuration,product,asset_statuses,asset_groups,sd_card_size,profile_id',
+          description: 'CSV must have at least 15 columns: order_type,asset_type,model,quantity,warehouse,sales_order,deal_id,school_name,nucleus_id,serial_numbers,configuration,product,asset_statuses,asset_groups,sd_card_size,profile_id',
           variant: 'destructive',
         });
         return;
@@ -880,6 +974,11 @@ Stock,TV,Hyundai TV - 43",1,Bangalore,SO002,DEAL002,Another School,NUC002,,Andro
                               }}
                               style={{ fontSize: '12px', width: '200px', border: '1px solid #d1d5db', borderRadius: '4px', padding: '8px' }}
                             />
+                            {tabletsErrors[tablet.id]?.[index] && (
+                              <Badge variant="destructive" style={{ fontSize: '10px', padding: '4px 8px' }}>
+                                {tabletsErrors[tablet.id][index]}
+                              </Badge>
+                            )}
                             <select
                               value={tablet.assetStatuses[index] || 'Fresh'}
                               onChange={(e) => {
@@ -1049,6 +1148,11 @@ Stock,TV,Hyundai TV - 43",1,Bangalore,SO002,DEAL002,Another School,NUC002,,Andro
                               }}
                               style={{ fontSize: '12px', width: '200px', border: '1px solid #d1d5db', borderRadius: '4px', padding: '8px' }}
                             />
+                            {tvsErrors[tv.id]?.[index] && (
+                              <Badge variant="destructive" style={{ fontSize: '10px', padding: '4px 8px' }}>
+                                {tvsErrors[tv.id][index]}
+                              </Badge>
+                            )}
                             <select
                               value={tv.assetStatuses[index] || 'Fresh'}
                               onChange={(e) => {
