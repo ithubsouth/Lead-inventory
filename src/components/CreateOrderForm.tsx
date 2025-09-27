@@ -55,6 +55,7 @@ const CreateOrderForm: React.FC<CreateOrderFormProps> = ({
   const [tvsToggle, setTVsToggle] = useState(false);
   const [tabletsErrors, setTabletsErrors] = useState<Record<string, (string | null)[]>>({});
   const [tvsErrors, setTvsErrors] = useState<Record<string, (string | null)[]>>({});
+  const [showConfirmation, setShowConfirmation] = useState(false);
 
   const toast = ({ title, description, variant }: { title: string; description: string; variant?: 'destructive' }) => {
     console.log(`Toast: ${title} - ${description}${variant ? ` (Variant: ${variant})` : ''}`);
@@ -104,6 +105,7 @@ const CreateOrderForm: React.FC<CreateOrderFormProps> = ({
   const validateSerials = async (items: (TabletItem | TVItem)[], type: 'tablet' | 'tv') => {
     const errors: Record<string, (string | null)[]> = {};
     const isInward = ['Stock', 'Return'].includes(orderType);
+    const orderLocation = items.length > 0 ? items[0].location : '';
 
     for (const item of items) {
       const serialErrors: (string | null)[] = Array(item.quantity).fill(null);
@@ -117,30 +119,48 @@ const CreateOrderForm: React.FC<CreateOrderFormProps> = ({
         }
       }
 
-      // For Outward orders, check if serials exist in stock for the selected location
-      if (!isInward && item.location && allSerials.length > 0) {
-        const { data, error } = await supabase
+      // Validate serial numbers based on Inward/Outward rules
+      if (allSerials.length > 0) {
+        const { data: deviceData, error: deviceError } = await supabase
           .from('devices')
-          .select('serial_number, warehouse')
+          .select('serial_number, warehouse, material_type, sales_order, updated_at, is_deleted')
           .eq('asset_type', type === 'tablet' ? 'Tablet' : 'TV')
-          .eq('status', 'Available')
-          .eq('is_deleted', false)
-          .in('serial_number', allSerials);
+          .in('serial_number', allSerials)
+          .order('updated_at', { ascending: false })
+          .limit(allSerials.length * 2);
 
-        if (error) {
-          console.error('Error validating serials:', error);
+        if (deviceError) {
+          console.error('Error validating serials:', deviceError);
           toast({ title: 'Error', description: 'Failed to validate serial numbers', variant: 'destructive' });
           continue;
         }
 
+        // Group by serial and get the latest entry based on updated_at
+        const latestBySerial: Record<string, any> = {};
+        deviceData.forEach(device => {
+          if (!device.is_deleted && (!latestBySerial[device.serial_number] || new Date(device.updated_at) > new Date(latestBySerial[device.serial_number].updated_at))) {
+            latestBySerial[device.serial_number] = device;
+          }
+        });
+
         for (let i = 0; i < item.serialNumbers.length; i++) {
           const serial = item.serialNumbers[i]?.trim();
           if (serial && !serialErrors[i]) {
-            const device = data.find(d => d.serial_number === serial);
-            if (!device) {
+            const latestDevice = latestBySerial[serial];
+            if (latestDevice) {
+              if (latestDevice.material_type === 'Outward') {
+                serialErrors[i] = `Currently Outward in ${latestDevice.warehouse} (SO: ${latestDevice.sales_order || 'N/A'})`;
+              } else if (latestDevice.material_type === 'Inward') {
+                if (latestDevice.warehouse !== orderLocation) {
+                  serialErrors[i] = `In ${latestDevice.warehouse} stock (SO: ${latestDevice.sales_order || 'N/A'})`;
+                } else {
+                  serialErrors[i] = null; // No error if in the same warehouse
+                }
+              } else {
+                serialErrors[i] = 'Unknown status';
+              }
+            } else {
               serialErrors[i] = 'Not in stock';
-            } else if (device.warehouse !== item.location) {
-              serialErrors[i] = `Not in ${item.location} stock`;
             }
           }
         }
@@ -342,8 +362,6 @@ const CreateOrderForm: React.FC<CreateOrderFormProps> = ({
   };
 
   const createOrder = async () => {
-    if (!validateForm()) return;
-
     setLoading(true);
     try {
       const { data: userData, error: userError } = await supabase.auth.getUser();
@@ -361,13 +379,6 @@ const CreateOrderForm: React.FC<CreateOrderFormProps> = ({
         const tabletSerials = tablet.serialNumbers.filter(sn => sn.trim());
         const tabletErrors = tabletsErrors[tablet.id] || Array(tablet.quantity).fill(null);
         const errorStatus = tabletErrors.some(err => err) ? tabletErrors.map((err, idx) => err ? `${tablet.serialNumbers[idx]}: ${err}` : '').filter(e => e).join('; ') : null;
-
-        if (errorStatus) {
-          toast({
-            title: 'Warning',
-            description: `Tablet order has validation issues: ${errorStatus}. Proceeding with order creation.`,
-          });
-        }
 
         const { data: orderData, error: orderError } = await supabase
           .from('orders')
@@ -466,13 +477,6 @@ const CreateOrderForm: React.FC<CreateOrderFormProps> = ({
         const tvSerials = tv.serialNumbers.filter(sn => sn.trim());
         const tvErrors = tvsErrors[tv.id] || Array(tv.quantity).fill(null);
         const errorStatus = tvErrors.some(err => err) ? tvErrors.map((err, idx) => err ? `${tv.serialNumbers[idx]}: ${err}` : '').filter(e => e).join('; ') : null;
-
-        if (errorStatus) {
-          toast({
-            title: 'Warning',
-            description: `TV order has validation issues: ${errorStatus}. Proceeding with order creation.`,
-          });
-        }
 
         const { data: orderData, error: orderError } = await supabase
           .from('orders')
@@ -582,6 +586,19 @@ const CreateOrderForm: React.FC<CreateOrderFormProps> = ({
       });
     } finally {
       setLoading(false);
+      setShowConfirmation(false);
+    }
+  };
+
+  const handleCreateOrder = () => {
+    setShowConfirmation(true);
+  };
+
+  const handleConfirmation = (action: 'cancel' | 'ok') => {
+    if (action === 'ok') {
+      createOrder();
+    } else {
+      setShowConfirmation(false);
     }
   };
 
@@ -729,7 +746,7 @@ const CreateOrderForm: React.FC<CreateOrderFormProps> = ({
   const downloadCSVTemplate = () => {
     const template = `order_type,asset_type,model,quantity,warehouse,sales_order,deal_id,school_name,nucleus_id,serial_numbers,configuration,product,asset_statuses,asset_groups,sd_card_size,profile_id
 Hardware,Tablet,Lenovo TB301FU,2,Trichy,SO001,DEAL001,Example School,NUC001,"","2G+32 GB (Android-10)",Lead,"Fresh;Fresh","NFA;NFA","64 GB","PROF001"
-Stock,TV,Hyundai TV - 43",1,Bangalore,SO002,DEAL002,Another School,NUC002,,Android TV,BoardAce,Fresh,NFA,,`;
+Stock,TV,Hyundai TV - 43",1,Bangalore,SO002,DEAL002,Another School,NUC002,,Android TV,Fresh,NFA,,`;
     const blob = new Blob([template], { type: 'text/csv' });
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -974,11 +991,6 @@ Stock,TV,Hyundai TV - 43",1,Bangalore,SO002,DEAL002,Another School,NUC002,,Andro
                               }}
                               style={{ fontSize: '12px', width: '200px', border: '1px solid #d1d5db', borderRadius: '4px', padding: '8px' }}
                             />
-                            {tabletsErrors[tablet.id]?.[index] && (
-                              <Badge variant="destructive" style={{ fontSize: '10px', padding: '4px 8px' }}>
-                                {tabletsErrors[tablet.id][index]}
-                              </Badge>
-                            )}
                             <select
                               value={tablet.assetStatuses[index] || 'Fresh'}
                               onChange={(e) => {
@@ -1008,9 +1020,14 @@ Stock,TV,Hyundai TV - 43",1,Bangalore,SO002,DEAL002,Another School,NUC002,,Andro
                             <button
                               onClick={() => openScanner(tablet.id, index, 'tablet')}
                               title="Scan Barcode/QR Code"
-                              style={{ border: '1px solid #d1d5db', borderRadius: '4px', padding: '4px', fontSize: '12px' }}
+                              style={{ border: '1px solid #d1d5db', borderRadius: '4px', padding: '4px', fontSize: '12px', display: 'flex', alignItems: 'center' }}
                             >
                               <Camera style={{ width: '12px', height: '12px' }} />
+                              {tabletsErrors[tablet.id]?.[index] && (
+                                <span style={{ color: '#ef4444', fontSize: '10px', marginLeft: '4px' }}>
+                                  {tabletsErrors[tablet.id][index]}
+                                </span>
+                              )}
                             </button>
                           </div>
                         ))}
@@ -1148,11 +1165,6 @@ Stock,TV,Hyundai TV - 43",1,Bangalore,SO002,DEAL002,Another School,NUC002,,Andro
                               }}
                               style={{ fontSize: '12px', width: '200px', border: '1px solid #d1d5db', borderRadius: '4px', padding: '8px' }}
                             />
-                            {tvsErrors[tv.id]?.[index] && (
-                              <Badge variant="destructive" style={{ fontSize: '10px', padding: '4px 8px' }}>
-                                {tvsErrors[tv.id][index]}
-                              </Badge>
-                            )}
                             <select
                               value={tv.assetStatuses[index] || 'Fresh'}
                               onChange={(e) => {
@@ -1182,9 +1194,14 @@ Stock,TV,Hyundai TV - 43",1,Bangalore,SO002,DEAL002,Another School,NUC002,,Andro
                             <button
                               onClick={() => openScanner(tv.id, index, 'tv')}
                               title="Scan Barcode/QR Code"
-                              style={{ border: '1px solid #d1d5db', borderRadius: '4px', padding: '4px', fontSize: '12px' }}
+                              style={{ border: '1px solid #d1d5db', borderRadius: '4px', padding: '4px', fontSize: '12px', display: 'flex', alignItems: 'center' }}
                             >
                               <Camera style={{ width: '12px', height: '12px' }} />
+                              {tvsErrors[tv.id]?.[index] && (
+                                <span style={{ color: '#ef4444', fontSize: '10px', marginLeft: '4px' }}>
+                                  {tvsErrors[tv.id][index]}
+                                </span>
+                              )}
                             </button>
                           </div>
                         ))}
@@ -1199,12 +1216,34 @@ Stock,TV,Hyundai TV - 43",1,Bangalore,SO002,DEAL002,Another School,NUC002,,Andro
       )}
 
       <button
-        onClick={createOrder}
+        onClick={handleCreateOrder}
         disabled={loading}
         style={{ border: '1px solid #d1d5db', borderRadius: '4px', padding: '8px 16px', fontSize: '14px', background: '#3b82f6', color: '#fff', opacity: loading ? 0.5 : 1, width: '100%' }}
       >
         {loading ? 'Creating...' : 'Create Order'}
       </button>
+
+      {showConfirmation && (
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
+          <div style={{ background: '#fff', borderRadius: '8px', padding: '16px', maxWidth: '400px', width: '100%', textAlign: 'center' }}>
+            <h2 style={{ fontSize: '16px', marginBottom: '16px' }}>Confirm Order Creation</h2>
+            <div style={{ marginBottom: '16px' }}>
+              <button
+                onClick={() => handleConfirmation('ok')}
+                style={{ border: '1px solid #3b82f6', borderRadius: '4px', padding: '8px 16px', fontSize: '14px', background: '#3b82f6', color: '#fff', marginRight: '8px' }}
+              >
+                OK
+              </button>
+              <button
+                onClick={() => handleConfirmation('cancel')}
+                style={{ border: '1px solid #ef4444', borderRadius: '4px', padding: '8px 16px', fontSize: '14px', background: '#ef4444', color: '#fff' }}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div style={{ border: '1px solid #e2e8f0', borderRadius: '8px', background: '#fff', padding: '16px' }}>
         <div style={{ padding: '8px 0' }}>

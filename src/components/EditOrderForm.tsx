@@ -831,11 +831,6 @@ const EditOrderForm: React.FC<EditOrderFormProps> = ({ order, onSave, onCancel }
                   className='font-mono text-xs flex-1 bg-white border-gray-300'
                   placeholder={`Serial ${index + 1} (optional - can update later)`}
                 />
-                {serialErrors[index] && (
-                  <Badge variant="destructive" className='text-xs'>
-                    {serialErrors[index]}
-                  </Badge>
-                )}
                 <Select
                   value={device.asset_status || 'Fresh'}
                   onValueChange={(value) => updateAssetStatus(index, value)}
@@ -869,9 +864,10 @@ const EditOrderForm: React.FC<EditOrderFormProps> = ({ order, onSave, onCancel }
                     setCurrentSerialIndex(index);
                     setShowScanner(true);
                   }}
-                  className='bg-white border-gray-300'
+                  className='bg-white border-gray-300 flex items-center'
                 >
                   <Camera className='w-4 h-4' />
+                  {serialErrors[index] && <Badge variant="destructive" className='text-xs ml-2'>{serialErrors[index]}</Badge>}
                 </Button>
                 <Button
                   variant='ghost'
