@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Package, BarChart3, Archive } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
 import { supabase } from '@/integrations/supabase/client';
@@ -7,6 +7,7 @@ import CreateOrderForm from './CreateOrderForm';
 import OrdersTable from './OrdersTable';
 import DevicesTable from './DevicesTable';
 import OrderSummaryTable from './OrderSummaryTable';
+import AuditTable from './AuditTable';
 import EnhancedBarcodeScanner from './EnhancedBarcodeScanner';
 import { Order, Device, OrderSummary, TabletItem, TVItem } from './types';
 import { UserProfile } from '@/components/UserProfile';
@@ -27,7 +28,7 @@ const InventoryManagement = () => {
   const [selectedStatus, setSelectedStatus] = useState<string>('All');
   const [selectedOrderType, setSelectedOrderType] = useState<string>('All');
   const [selectedAssetGroup, setSelectedAssetGroup] = useState<string>('All');
-  const [fromDate, setFromDate] = useState<string>('');
+  const [fromDate, setFromDate] = useState<DateRange | undefined>(undefined);
   const [toDate, setToDate] = useState<string>('');
   const [showDeleted, setShowDeleted] = useState<boolean>(false);
   const [searchQuery, setSearchQuery] = useState<string>('');
@@ -39,6 +40,7 @@ const InventoryManagement = () => {
   const [tablets, setTablets] = useState<TabletItem[]>([]);
   const [tvs, setTvs] = useState<TVItem[]>([]);
   const { toast } = useToast();
+  const userRole = 'admin'; // Replace with actual user role from authentication
 
   useEffect(() => {
     loadOrders();
@@ -207,7 +209,8 @@ const InventoryManagement = () => {
             updated_by,
             is_deleted,
             order_id,
-            orders!left(material_type)
+            orders!left(material_type),
+            asset_check
           `)
           .order('updated_at', { ascending: false })
           .range(page * batchSize, (page + 1) * batchSize - 1);
@@ -216,30 +219,6 @@ const InventoryManagement = () => {
         hasMore = data.length === batchSize;
         page += 1;
       }
-
-      console.log('Fetched devices (first 5):', allDevices.slice(0, 5).map(d => ({
-        id: d.id,
-        sales_order: d.sales_order || '',
-        order_type: d.order_type || '',
-        warehouse: d.warehouse || '',
-        deal_id: d.deal_id || '',
-        nucleus_id: d.nucleus_id || '',
-        school_name: d.school_name || '',
-        asset_type: d.asset_type || '',
-        model: d.model || '',
-        configuration: d.configuration || '',
-        serial_number: d.serial_number || '',
-        sd_card_size: d.sd_card_size || '',
-        profile_id: d.profile_id || '',
-        product: d.product || '',
-        asset_status: d.asset_status || '',
-        asset_group: d.asset_group || '',
-        updated_at: d.updated_at || '',
-        updated_by: d.updated_by || '',
-        is_deleted: d.is_deleted,
-        order_id: d.order_id || '',
-        material_type: d.orders?.material_type || '',
-      })));
 
       const updatedDevices = allDevices.map((device: any) => ({
         id: device.id,
@@ -262,13 +241,11 @@ const InventoryManagement = () => {
         updated_at: device.updated_at,
         updated_by: device.updated_by,
         is_deleted: device.is_deleted,
+        order_id: device.order_id,
+        material_type: device.orders?.material_type,
+        asset_check: device.asset_check || 'X Unmatched',
       })) as Device[];
 
-      console.log('Processed devices count:', updatedDevices.length);
-      console.log('Status summary:', {
-        stock: updatedDevices.filter(d => d.status === 'Stock').length,
-        assigned: updatedDevices.filter(d => d.status === 'Assigned').length,
-      });
       setDevices(updatedDevices);
       if (updatedDevices.length === 0) {
         toast({ title: 'Warning', description: 'No devices loaded from database. Please check your data source or filters.', variant: 'destructive' });
@@ -373,6 +350,55 @@ const InventoryManagement = () => {
     setShowScanner(false);
   };
 
+  const handleUpdateAssetCheck = async (deviceId: string, checkStatus: string) => {
+    try {
+      const updates = { 
+        asset_check: checkStatus
+      };
+      const { data, error } = await supabase
+        .from('devices')
+        .update(updates)
+        .eq('id', deviceId)
+        .select(); // Return the updated row
+      if (error) {
+        console.error('Update error:', error.message);
+        throw error;
+      }
+      if (data && data.length > 0) {
+        // Update only the specific device in local state, preserving others
+        setDevices(prevDevices =>
+          prevDevices.map(device =>
+            device.id === deviceId ? { ...device, ...updates, updated_at: new Date().toISOString() } : device
+          )
+        );
+      } else {
+        console.warn('No rows updated for deviceId:', deviceId);
+        toast({ title: 'Warning', description: 'No device found with the given ID.', variant: 'destructive' });
+      }
+    } catch (error: any) {
+      console.error('Error updating asset check:', error);
+      toast({ title: 'Error', description: `Failed to update asset check: ${error.message}`, variant: 'destructive' });
+    }
+  };
+
+  const handleClearAllChecks = async (ids: string[]) => {
+    try {
+      const { error } = await supabase
+        .from('devices')
+        .update({ asset_check: 'X Unmatched' })
+        .in('id', ids);
+      if (error) throw error;
+      // Update local state for all affected devices
+      setDevices(prevDevices =>
+        prevDevices.map(device =>
+          ids.includes(device.id) ? { ...device, asset_check: 'X Unmatched', updated_at: new Date().toISOString() } : device
+        )
+      );
+    } catch (error) {
+      toast({ title: 'Error', description: 'Failed to clear checks.', variant: 'destructive' });
+    }
+  };
+
   return (
     <div className='min-h-screen bg-background flex flex-col'>
       <div className='sticky top-0 z-20 bg-background border-b border-gray-200'>
@@ -388,7 +414,7 @@ const InventoryManagement = () => {
       </div>
       <div className='flex-1 container mx-auto p-4 pt-16'>
         <Tabs defaultValue='create' className='w-full'>
-          <TabsList className='grid w-full grid-cols-4 fixed top-14 left-0 right-0 bg-background z-20 border-b border-gray-200'>
+          <TabsList className='grid w-full grid-cols-5 fixed top-14 left-0 right-0 bg-background z-20 border-b border-gray-200'>
             <TabsTrigger value='create'>
               <Package className='w-3 h-3 mr-1' />
               Create Order
@@ -405,8 +431,12 @@ const InventoryManagement = () => {
               <Archive className='w-3 h-3 mr-1' />
               Devices
             </TabsTrigger>
+            <TabsTrigger value='audit'>
+              <Archive className='w-3 h-3 mr-1' />
+              Audit View
+            </TabsTrigger>
           </TabsList>
-          <TabsContent value='create' className='space-y-4'>
+          <TabsContent value='create' className='space-y-4 mt-16'>
             <CreateOrderForm
               orderType={orderType}
               setOrderType={setOrderType}
@@ -433,7 +463,7 @@ const InventoryManagement = () => {
               }}
             />
           </TabsContent>
-          <TabsContent value='view' className='space-y-4'>
+          <TabsContent value='view' className='space-y-4 mt-16'>
             <OrdersTable
               orders={orders}
               setOrders={setOrders}
@@ -458,7 +488,7 @@ const InventoryManagement = () => {
               loadOrderSummary={loadOrderSummary}
             />
           </TabsContent>
-          <TabsContent value='order' className='space-y-4'>
+          <TabsContent value='order' className='space-y-4 mt-16'>
             <OrderSummaryTable
               orderSummary={orderSummary}
               selectedWarehouse={selectedWarehouse}
@@ -477,7 +507,7 @@ const InventoryManagement = () => {
               setSearchQuery={setSearchQuery}
             />
           </TabsContent>
-          <TabsContent value='devices' className='space-y-4'>
+          <TabsContent value='devices' className='space-y-4 mt-16'>
             <DevicesTable
               devices={devices}
               selectedWarehouse={selectedWarehouse}
@@ -506,6 +536,38 @@ const InventoryManagement = () => {
               setShowDeleted={setShowDeleted}
               searchQuery={searchQuery}
               setSearchQuery={setSearchQuery}
+            />
+          </TabsContent>
+          <TabsContent value='audit' className='space-y-4 mt-16'>
+            <AuditTable
+              devices={devices}
+              selectedWarehouse={selectedWarehouse}
+              setSelectedWarehouse={setSelectedWarehouse}
+              selectedAssetType={selectedAssetType}
+              setSelectedAssetType={setSelectedAssetType}
+              selectedModel={selectedModel}
+              setSelectedModel={setSelectedModel}
+              selectedAssetStatus={selectedAssetStatus}
+              setSelectedAssetStatus={setSelectedAssetStatus}
+              selectedConfiguration={selectedConfiguration}
+              setSelectedConfiguration={setSelectedConfiguration}
+              selectedProduct={selectedProduct}
+              setSelectedProduct={setSelectedProduct}
+              selectedStatus={selectedStatus}
+              setSelectedStatus={setSelectedStatus}
+              selectedOrderType={selectedOrderType}
+              setSelectedOrderType={setSelectedOrderType}
+              selectedAssetGroup={selectedAssetGroup}
+              setSelectedAssetGroup={setSelectedAssetGroup}
+              fromDate={fromDate}
+              setFromDate={setFromDate}
+              toDate={toDate}
+              setToDate={setToDate}
+              searchQuery={searchQuery}
+              setSearchQuery={setSearchQuery}
+              onUpdateAssetCheck={handleUpdateAssetCheck}
+              onClearAllChecks={handleClearAllChecks}
+              userRole={userRole}
             />
           </TabsContent>
         </Tabs>
