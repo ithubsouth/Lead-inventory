@@ -11,6 +11,7 @@ import AuditTable from './AuditTable';
 import EnhancedBarcodeScanner from './EnhancedBarcodeScanner';
 import { Order, Device, OrderSummary, TabletItem, TVItem } from './types';
 import { UserProfile } from '@/components/UserProfile';
+import { DateRange } from 'react-day-picker';
 
 const InventoryManagement = () => {
   const [orders, setOrders] = useState<Order[]>([]);
@@ -243,7 +244,7 @@ const InventoryManagement = () => {
         is_deleted: device.is_deleted,
         order_id: device.order_id,
         material_type: device.orders?.material_type,
-        asset_check: device.asset_check || 'X Unmatched',
+        asset_check: device.asset_check || 'Unmatched',
       })) as Device[];
 
       setDevices(updatedDevices);
@@ -353,24 +354,26 @@ const InventoryManagement = () => {
   const handleUpdateAssetCheck = async (deviceId: string, checkStatus: string) => {
     try {
       const updates = { 
-        asset_check: checkStatus
+        asset_check: checkStatus,
+        updated_at: new Date().toISOString(),
+        updated_by: userRole, // Assuming userRole represents the user performing the update
       };
       const { data, error } = await supabase
         .from('devices')
         .update(updates)
         .eq('id', deviceId)
-        .select(); // Return the updated row
+        .select();
       if (error) {
         console.error('Update error:', error.message);
         throw error;
       }
       if (data && data.length > 0) {
-        // Update only the specific device in local state, preserving others
         setDevices(prevDevices =>
           prevDevices.map(device =>
-            device.id === deviceId ? { ...device, ...updates, updated_at: new Date().toISOString() } : device
+            device.id === deviceId ? { ...device, ...updates } : device
           )
         );
+        toast({ title: 'Success', description: `Asset check updated to ${checkStatus}.` });
       } else {
         console.warn('No rows updated for deviceId:', deviceId);
         toast({ title: 'Warning', description: 'No device found with the given ID.', variant: 'destructive' });
@@ -383,19 +386,29 @@ const InventoryManagement = () => {
 
   const handleClearAllChecks = async (ids: string[]) => {
     try {
+      if (ids.length === 0) {
+        toast({ title: 'Info', description: 'No devices to clear.' });
+        return;
+      }
+      const updates = {
+        asset_check: 'Unmatched',
+        updated_at: new Date().toISOString(),
+        updated_by: userRole,
+      };
       const { error } = await supabase
         .from('devices')
-        .update({ asset_check: 'X Unmatched' })
+        .update(updates)
         .in('id', ids);
       if (error) throw error;
-      // Update local state for all affected devices
       setDevices(prevDevices =>
         prevDevices.map(device =>
-          ids.includes(device.id) ? { ...device, asset_check: 'X Unmatched', updated_at: new Date().toISOString() } : device
+          ids.includes(device.id) ? { ...device, ...updates } : device
         )
       );
-    } catch (error) {
-      toast({ title: 'Error', description: 'Failed to clear checks.', variant: 'destructive' });
+      toast({ title: 'Success', description: 'All asset checks cleared successfully.' });
+    } catch (error: any) {
+      console.error('Error clearing checks:', error);
+      toast({ title: 'Error', description: `Failed to clear checks: ${error.message}`, variant: 'destructive' });
     }
   };
 
@@ -412,9 +425,9 @@ const InventoryManagement = () => {
           </div>
         </div>
       </div>
-      <div className='flex-1 container mx-auto p-4 pt-16'>
+      <div className='flex-1 container mx-auto p-4 pt-12'>
         <Tabs defaultValue='create' className='w-full'>
-          <TabsList className='grid w-full grid-cols-5 fixed top-14 left-0 right-0 bg-background z-20 border-b border-gray-200'>
+          <TabsList className='grid w-full grid-cols-5 fixed top-12 left-0 right-0 bg-background z-20 border-b border-gray-200'>
             <TabsTrigger value='create'>
               <Package className='w-3 h-3 mr-1' />
               Create Order
@@ -436,7 +449,7 @@ const InventoryManagement = () => {
               Audit View
             </TabsTrigger>
           </TabsList>
-          <TabsContent value='create' className='space-y-4 mt-16'>
+          <TabsContent value='create' className='space-y-4 mt-8'>
             <CreateOrderForm
               orderType={orderType}
               setOrderType={setOrderType}
@@ -463,7 +476,7 @@ const InventoryManagement = () => {
               }}
             />
           </TabsContent>
-          <TabsContent value='view' className='space-y-4 mt-16'>
+          <TabsContent value='view' className='space-y-4 mt-8'>
             <OrdersTable
               orders={orders}
               setOrders={setOrders}
@@ -488,7 +501,7 @@ const InventoryManagement = () => {
               loadOrderSummary={loadOrderSummary}
             />
           </TabsContent>
-          <TabsContent value='order' className='space-y-4 mt-16'>
+          <TabsContent value='order' className='space-y-4 mt-8'>
             <OrderSummaryTable
               orderSummary={orderSummary}
               selectedWarehouse={selectedWarehouse}
@@ -507,7 +520,7 @@ const InventoryManagement = () => {
               setSearchQuery={setSearchQuery}
             />
           </TabsContent>
-          <TabsContent value='devices' className='space-y-4 mt-16'>
+          <TabsContent value='devices' className='space-y-4 mt-8'>
             <DevicesTable
               devices={devices}
               selectedWarehouse={selectedWarehouse}
@@ -538,7 +551,7 @@ const InventoryManagement = () => {
               setSearchQuery={setSearchQuery}
             />
           </TabsContent>
-          <TabsContent value='audit' className='space-y-4 mt-16'>
+          <TabsContent value='audit' className='space-y-4 mt-8'>
             <AuditTable
               devices={devices}
               selectedWarehouse={selectedWarehouse}

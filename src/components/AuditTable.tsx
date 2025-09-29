@@ -7,7 +7,6 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
 import { Filter, Search } from 'lucide-react';
-import { debounce } from 'lodash';
 import { DatePickerWithRange } from './DatePickerWithRange';
 import { DateRange } from 'react-day-picker';
 import { Device } from './types';
@@ -75,58 +74,31 @@ const AuditTable: React.FC<AuditTableProps> = ({
 }) => {
   const [scannerInput, setScannerInput] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
+  const [filterCheck, setFilterCheck] = useState<'all' | 'matched' | 'unmatched'>('all');
+  const [showPopup, setShowPopup] = useState(false);
+  const [scanResult, setScanResult] = useState<string | null>(null);
   const rowsPerPage = 10;
 
-  // Debounce search input
-  const debouncedSetSearchQuery = useMemo(
-    () => debounce((value: string) => setSearchQuery(value), 300),
-    []
-  );
+  // Compute unique values
+  const uniqueValues = useMemo(() => ({
+    warehouses: ['All', ...[...new Set(devices.map((d) => d.warehouse || ''))].filter(Boolean).sort()],
+    assetTypes: ['All', ...[...new Set(devices.map((d) => d.asset_type || ''))].filter(Boolean).sort()],
+    models: ['All', ...[...new Set(devices.map((d) => d.model || ''))].filter(Boolean).sort()],
+    configurations: ['All', ...[...new Set(devices.map((d) => d.configuration || ''))].filter(Boolean).sort()],
+    products: ['All', ...[...new Set(devices.map((d) => d.product || ''))].filter(Boolean).sort()],
+    assetStatuses: ['All', ...[...new Set(devices.map((d) => d.asset_status || ''))].filter(Boolean).sort()],
+    assetGroups: ['All', ...[...new Set(devices.map((d) => d.asset_group || ''))].filter(Boolean).sort()],
+    orderTypes: ['All', ...[...new Set(devices.map((d) => d.order_type || ''))].filter(Boolean).sort()],
+  }), [devices]);
 
-  // Handle check action on button click
-  const handleCheck = () => {
-    const trimmedInput = scannerInput.trim();
-    if (!trimmedInput) {
-      // Optionally show a toast or alert for empty input
-      return;
-    }
-
-    const matchedDevice = devices.find(
-      (device) => device.serial_number === trimmedInput || device.id === trimmedInput
-    );
-
-    if (matchedDevice) {
-      onUpdateAssetCheck(matchedDevice.id, '✓ Matched');
-      setSelectedStatus('Verified');
-    } else {
-      // Handle case where no device is found
-      toast({ title: 'Not Matched', description: `Serial number ${trimmedInput} not found.`, variant: 'destructive' });
-    }
-    setScannerInput(''); // Clear input after check
-  };
-
-  // Compute unique values and memoize
-  const uniqueValues = useMemo(
-    () => ({
-      warehouses: [...new Set(devices.map((d) => d.warehouse || ''))].filter(Boolean).sort(),
-      assetTypes: [...new Set(devices.map((d) => d.asset_type || ''))].filter(Boolean).sort(),
-      models: [...new Set(devices.map((d) => d.model || ''))].filter(Boolean).sort(),
-      configurations: [...new Set(devices.map((d) => d.configuration || ''))].filter(Boolean).sort(),
-      products: [...new Set(devices.map((d) => d.product || ''))].filter(Boolean).sort(),
-      assetStatuses: [...new Set(devices.map((d) => d.asset_status || ''))].filter(Boolean).sort(),
-      assetGroups: [...new Set(devices.map((d) => d.asset_group || ''))].filter(Boolean).sort(),
-      orderTypes: [...new Set(devices.map((d) => d.order_type || ''))].filter(Boolean).sort(),
-    }),
-    [devices]
-  );
-
-  // Memoized filtered devices with latest record and "Stock" only logic
+  // Memoized filtered devices
   const filteredDevices = useMemo(() => {
     const latestDevices = new Map<string, Device>();
     devices.forEach((d) => {
-      const existing = latestDevices.get(d.serial_number || d.id);
+      const key = d.serial_number || d.id;
+      const existing = latestDevices.get(key);
       if (!existing || new Date(d.updated_at) > new Date(existing.updated_at)) {
-        latestDevices.set(d.serial_number || d.id, d);
+        latestDevices.set(key, d);
       }
     });
 
@@ -165,6 +137,10 @@ const AuditTable: React.FC<AuditTableProps> = ({
         ]
           .filter(Boolean)
           .some((field) => field.toLowerCase().includes(searchQuery.toLowerCase()));
+      const checkMatch =
+        filterCheck === 'all' ||
+        (filterCheck === 'matched' && d.asset_check === 'Matched') ||
+        (filterCheck === 'unmatched' && d.asset_check !== 'Matched');
 
       return (
         warehouseMatch &&
@@ -177,6 +153,7 @@ const AuditTable: React.FC<AuditTableProps> = ({
         orderTypeMatch &&
         dateMatch &&
         searchMatch &&
+        checkMatch &&
         !d.is_deleted
       );
     });
@@ -192,6 +169,7 @@ const AuditTable: React.FC<AuditTableProps> = ({
     selectedOrderType,
     fromDate,
     searchQuery,
+    filterCheck,
   ]);
 
   // Paginated devices
@@ -200,13 +178,13 @@ const AuditTable: React.FC<AuditTableProps> = ({
     const end = start + rowsPerPage;
     return filteredDevices.slice(start, end).map((d) => ({
       ...d,
-      asset_check: d.asset_check || 'X Unmatched',
+      asset_check: d.asset_check || 'Unmatched',
     }));
   }, [filteredDevices, currentPage]);
 
   const totalPages = Math.ceil(filteredDevices.length / rowsPerPage);
-  const matched = filteredDevices.filter((d) => d.asset_check === '✓ Matched').length;
-  const unmatched = filteredDevices.length - matched;
+  const matchedCount = filteredDevices.filter((d) => d.asset_check === 'Matched').length;
+  const unmatchedCount = filteredDevices.length - matchedCount;
 
   const clearFilters = () => {
     setSelectedWarehouse('All');
@@ -222,47 +200,135 @@ const AuditTable: React.FC<AuditTableProps> = ({
     setSearchQuery('');
     setCurrentPage(1);
     setScannerInput('');
+    setFilterCheck('all');
   };
 
-  const handleClearAllChecks = () => {
-    const idsToClear = filteredDevices.map((d) => d.id);
-    onClearAllChecks(idsToClear);
+  const handleCheck = () => {
+    const trimmedInput = scannerInput.trim();
+    if (!trimmedInput) return;
+
+    // Search in all devices, not just filtered ones, but respect warehouse filter for status
+    const matchedDevice = devices.find(
+      (device) => (device.serial_number === trimmedInput || device.id === trimmedInput) && device.status === 'Stock' && !device.is_deleted
+    );
+
+    let resultMessage = '';
+    if (matchedDevice) {
+      let checkStatus;
+      if (selectedWarehouse === 'All' || matchedDevice.warehouse === selectedWarehouse) {
+        checkStatus = 'Matched';
+      } else {
+        checkStatus = `Found in ${matchedDevice.warehouse}`;
+      }
+      onUpdateAssetCheck(matchedDevice.id, checkStatus);
+      if (checkStatus === 'Matched') {
+        setSelectedStatus('Verified');
+      }
+      resultMessage = checkStatus;
+    } else {
+      console.log(`Serial number ${trimmedInput} not found.`);
+      resultMessage = 'Not Found';
+    }
+    setScannerInput('');
+    setScanResult(resultMessage);
+  };
+
+  const exportToCSV = () => {
+    const headers = [
+      'Asset Type',
+      'Model',
+      'Configuration',
+      'Serial Number',
+      'Product',
+      'Asset Status',
+      'Asset Group',
+      'Warehouse',
+      'Asset Check',
+    ];
+    const csvRows = filteredDevices.map((d) => [
+      d.asset_type || '',
+      d.model || '',
+      d.configuration || '',
+      d.serial_number || '',
+      d.product || '',
+      d.asset_status || '',
+      d.asset_group || '',
+      d.warehouse || '',
+      d.asset_check || 'Unmatched',
+    ]);
+
+    const csvContent = [
+      headers.join(','),
+      ...csvRows.map((row) => row.map((value) => `"${value.replace(/"/g, '""')}"`).join(',')),
+    ].join('\n');
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.setAttribute('href', url);
+    link.setAttribute('download', 'audit_report.csv');
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   };
 
   const canEdit = userRole === 'admin' || userRole === 'manager';
 
+  // Debug output
+  console.log('AuditTable - devices:', devices);
+  console.log('AuditTable - filteredDevices:', filteredDevices);
+  console.log('AuditTable - paginatedDevices:', paginatedDevices);
+
+  if (!devices || devices.length === 0) {
+    return <div style={{ fontSize: '12px', padding: '8px' }}>No devices available. Please check your data source.</div>;
+  }
+
+  const isAllMatched = matchedCount === filteredDevices.length;
+
   return (
-    <Card className="shadow-card">
-      <CardHeader className="pb-2">
-        <div className="flex items-center justify-between">
-          <CardTitle className="flex items-center gap-1 text-base">
-            <Filter className="h-3 w-3 text-primary" /> Audit Filters
+    <Card style={{ border: '1px solid #e2e8f0', borderRadius: '8px', background: '#fff', padding: '8px', minHeight: '200px', overflowY: 'auto', maxHeight: '600px' }}>
+      <CardHeader style={{ paddingBottom: '2px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <CardTitle style={{ display: 'flex', alignItems: 'center', gap: '1px', fontSize: '12px' }}>
+            <Filter style={{ width: '12px', height: '12px', color: '#3b82f6' }} /> Audit Filters
           </CardTitle>
         </div>
       </CardHeader>
-      <CardContent className="pt-2">
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center gap-4">
-            <span>
-              Matched: <span className="text-green-500">{matched}</span> Unmatched:{' '}
-              <span className="text-red-500">{unmatched}</span>
-            </span>
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="relative w-64">
-              <Input
-                type="text"
-                placeholder="Scan barcode or enter serial number..."
-                value={scannerInput}
-                onChange={(e) => setScannerInput(e.target.value)}
-                className="pl-8 pr-10 h-7 text-xs"
-              />
-              <Search className="absolute right-2 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+      <CardContent style={{ paddingTop: '2px' }}>
+        <div style={{ marginBottom: '8px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+            <div style={{ flex: 1, maxWidth: '1200px' }}>
+              <div style={{ position: 'relative' }}>
+                <Search style={{ position: 'absolute', left: '8px', top: '50%', transform: 'translateY(-50%)', width: '12px', height: '12px', color: '#6b7280' }} />
+                <Input
+                  type="text"
+                  placeholder="      Enter Serial number"
+                  value={scannerInput}
+                  onChange={(e) => setScannerInput(e.target.value)}
+                  style={{ paddingLeft: '28px', fontSize: '12px', width: '100%', border: '1px solid #d1d5db', borderRadius: '4px', padding: '6px', height: '28px' }}
+                />
+              </div>
+              <div style={{ marginTop: '4px', fontSize: '12px', color: '#6b7280', display: 'flex', gap: '8px' }}>
+                <span 
+                  style={{ cursor: 'pointer' }}
+                  onClick={() => setFilterCheck(filterCheck === 'matched' ? 'all' : 'matched')}
+                >
+                  Matched: <span style={{ color: '#3b82f6' }}>{matchedCount}</span>
+                </span>
+                <span>|</span>
+                <span 
+                  style={{ cursor: 'pointer' }}
+                  onClick={() => setFilterCheck(filterCheck === 'unmatched' ? 'all' : 'unmatched')}
+                >
+                  Unmatched: <span style={{ color: '#ef4444' }}>{unmatchedCount}</span>
+                </span>
+              </div>
             </div>
             <Button
               variant="outline"
               size="sm"
-              className="text-xs h-7"
+              style={{ border: '1px solid #d1d5db', borderRadius: '4px', padding: '4px 6px', fontSize: '12px', height: '28px' }}
               onClick={handleCheck}
             >
               Check
@@ -270,338 +336,301 @@ const AuditTable: React.FC<AuditTableProps> = ({
             <Button
               variant="outline"
               size="sm"
-              className="text-xs h-7"
-              onClick={() => setSelectedStatus('')} // Placeholder for Status action
+              style={{ border: '1px solid #d1d5db', borderRadius: '4px', padding: '4px 6px', fontSize: '12px', height: '28px' }}
+              onClick={() => setShowPopup(true)}
             >
               Status
             </Button>
             <Button
               variant="outline"
               size="sm"
-              onClick={clearFilters}
-              className="hover:bg-destructive hover:text-destructive-foreground text-xs h-7"
+              style={{ border: '1px solid #d1d5db', borderRadius: '4px', padding: '4px 6px', fontSize: '12px', height: '28px', background: '#fff', color: '#ef4444' }}
+              onClick={() => onClearAllChecks(filteredDevices.map((d) => d.id))}
             >
               Clear All
             </Button>
           </div>
-        </div>
-        <div className="grid grid-cols-1 md:grid-cols-9 gap-2 mb-4">
-          <div className="space-y-1">
-            <label className="text-xs font-medium">Warehouse</label>
-            <Select value={selectedWarehouse} onValueChange={setSelectedWarehouse}>
-              <SelectTrigger className="text-xs h-7">
-                <SelectValue placeholder="All Warehouses" />
-              </SelectTrigger>
-              <SelectContent>
-                <div className="p-2">
-                  <Input
-                    type="text"
-                    placeholder="Type to search..."
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    onKeyDown={(e) => e.stopPropagation()}
-                    autoFocus
-                    className="w-full h-6 text-xs"
-                  />
-                </div>
-                <SelectItem value="All">All Warehouses</SelectItem>
-                {uniqueValues.warehouses
-                  .filter((w) => w.toLowerCase().includes(searchQuery.toLowerCase()))
-                  .map((w) => (
-                    <SelectItem key={w} value={w} className="text-xs">
-                      {w}
-                    </SelectItem>
+          <div style={{ display: 'flex', flexWrap: 'nowrap', gap: '4px', marginTop: '4px', maxWidth: '1200px', overflowX: 'auto' }}>
+            <div style={{ flex: '0 0 150px' }}>
+              <label htmlFor="warehouseFilter" style={{ fontSize: '12px', color: '#6b7280', display: 'block', marginBottom: '2px', whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' }}>Warehouse</label>
+              <Select value={selectedWarehouse} onValueChange={setSelectedWarehouse}>
+                <SelectTrigger style={{ fontSize: '12px', width: '100%', border: '1px solid #d1d5db', borderRadius: '4px', padding: '6px', whiteSpace: 'nowrap', textOverflow: 'ellipsis', height: '28px' }}>
+                  <SelectValue placeholder="All Warehouses" />
+                </SelectTrigger>
+                <SelectContent>
+                  {uniqueValues.warehouses.map((w) => (
+                    <SelectItem key={w} value={w} style={{ fontSize: '12px' }}>{w}</SelectItem>
                   ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="space-y-1">
-            <label className="text-xs font-medium">Asset Type</label>
-            <Select value={selectedAssetType} onValueChange={setSelectedAssetType}>
-              <SelectTrigger className="text-xs h-7">
-                <SelectValue placeholder="All Types" />
-              </SelectTrigger>
-              <SelectContent>
-                <div className="p-2">
-                  <Input
-                    type="text"
-                    placeholder="Type to search..."
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    onKeyDown={(e) => e.stopPropagation()}
-                    autoFocus
-                    className="w-full h-6 text-xs"
-                  />
-                </div>
-                <SelectItem value="All">All Types</SelectItem>
-                {uniqueValues.assetTypes
-                  .filter((at) => at.toLowerCase().includes(searchQuery.toLowerCase()))
-                  .map((at) => (
-                    <SelectItem key={at} value={at} className="text-xs">
-                      {at}
-                    </SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div style={{ flex: '0 0 150px' }}>
+              <label htmlFor="assetTypeFilter" style={{ fontSize: '12px', color: '#6b7280', display: 'block', marginBottom: '2px', whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' }}>Asset Type</label>
+              <Select value={selectedAssetType} onValueChange={setSelectedAssetType}>
+                <SelectTrigger style={{ fontSize: '12px', width: '100%', border: '1px solid #d1d5db', borderRadius: '4px', padding: '6px', whiteSpace: 'nowrap', textOverflow: 'ellipsis', height: '28px' }}>
+                  <SelectValue placeholder="All Types" />
+                </SelectTrigger>
+                <SelectContent>
+                  {uniqueValues.assetTypes.map((at) => (
+                    <SelectItem key={at} value={at} style={{ fontSize: '12px' }}>{at}</SelectItem>
                   ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="space-y-1">
-            <label className="text-xs font-medium">Model</label>
-            <Select value={selectedModel} onValueChange={setSelectedModel}>
-              <SelectTrigger className="text-xs h-7">
-                <SelectValue placeholder="All Models" />
-              </SelectTrigger>
-              <SelectContent>
-                <div className="p-2">
-                  <Input
-                    type="text"
-                    placeholder="Type to search..."
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    onKeyDown={(e) => e.stopPropagation()}
-                    autoFocus
-                    className="w-full h-6 text-xs"
-                  />
-                </div>
-                <SelectItem value="All">All Models</SelectItem>
-                {uniqueValues.models
-                  .filter((m) => m.toLowerCase().includes(searchQuery.toLowerCase()))
-                  .map((m) => (
-                    <SelectItem key={m} value={m} className="text-xs">
-                      {m}
-                    </SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div style={{ flex: '0 0 150px' }}>
+              <label htmlFor="modelFilter" style={{ fontSize: '12px', color: '#6b7280', display: 'block', marginBottom: '2px', whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' }}>Model</label>
+              <Select value={selectedModel} onValueChange={setSelectedModel}>
+                <SelectTrigger style={{ fontSize: '12px', width: '100%', border: '1px solid #d1d5db', borderRadius: '4px', padding: '6px', whiteSpace: 'nowrap', textOverflow: 'ellipsis', height: '28px' }}>
+                  <SelectValue placeholder="All Models" />
+                </SelectTrigger>
+                <SelectContent>
+                  {uniqueValues.models.map((m) => (
+                    <SelectItem key={m} value={m} style={{ fontSize: '12px' }}>{m}</SelectItem>
                   ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="space-y-1">
-            <label className="text-xs font-medium">Configuration</label>
-            <Select value={selectedConfiguration} onValueChange={setSelectedConfiguration}>
-              <SelectTrigger className="text-xs h-7">
-                <SelectValue placeholder="All Configurations" />
-              </SelectTrigger>
-              <SelectContent>
-                <div className="p-2">
-                  <Input
-                    type="text"
-                    placeholder="Type to search..."
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    onKeyDown={(e) => e.stopPropagation()}
-                    autoFocus
-                    className="w-full h-6 text-xs"
-                  />
-                </div>
-                <SelectItem value="All">All Configurations</SelectItem>
-                {uniqueValues.configurations
-                  .filter((c) => c.toLowerCase().includes(searchQuery.toLowerCase()))
-                  .map((c) => (
-                    <SelectItem key={c} value={c} className="text-xs">
-                      {c}
-                    </SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div style={{ flex: '0 0 150px' }}>
+              <label htmlFor="configurationFilter" style={{ fontSize: '12px', color: '#6b7280', display: 'block', marginBottom: '2px', whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' }}>Configuration</label>
+              <Select value={selectedConfiguration} onValueChange={setSelectedConfiguration}>
+                <SelectTrigger style={{ fontSize: '12px', width: '100%', border: '1px solid #d1d5db', borderRadius: '4px', padding: '6px', whiteSpace: 'nowrap', textOverflow: 'ellipsis', height: '28px' }}>
+                  <SelectValue placeholder="All Configurations" />
+                </SelectTrigger>
+                <SelectContent>
+                  {uniqueValues.configurations.map((c) => (
+                    <SelectItem key={c} value={c} style={{ fontSize: '12px' }}>{c}</SelectItem>
                   ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="space-y-1">
-            <label className="text-xs font-medium">Product</label>
-            <Select value={selectedProduct} onValueChange={setSelectedProduct}>
-              <SelectTrigger className="text-xs h-7">
-                <SelectValue placeholder="All Products" />
-              </SelectTrigger>
-              <SelectContent>
-                <div className="p-2">
-                  <Input
-                    type="text"
-                    placeholder="Type to search..."
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    onKeyDown={(e) => e.stopPropagation()}
-                    autoFocus
-                    className="w-full h-6 text-xs"
-                  />
-                </div>
-                <SelectItem value="All">All Products</SelectItem>
-                {uniqueValues.products
-                  .filter((p) => p.toLowerCase().includes(searchQuery.toLowerCase()))
-                  .map((p) => (
-                    <SelectItem key={p} value={p} className="text-xs">
-                      {p}
-                    </SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div style={{ flex: '0 0 150px' }}>
+              <label htmlFor="productFilter" style={{ fontSize: '12px', color: '#6b7280', display: 'block', marginBottom: '2px', whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' }}>Product</label>
+              <Select value={selectedProduct} onValueChange={setSelectedProduct}>
+                <SelectTrigger style={{ fontSize: '12px', width: '100%', border: '1px solid #d1d5db', borderRadius: '4px', padding: '6px', whiteSpace: 'nowrap', textOverflow: 'ellipsis', height: '28px' }}>
+                  <SelectValue placeholder="All Products" />
+                </SelectTrigger>
+                <SelectContent>
+                  {uniqueValues.products.map((p) => (
+                    <SelectItem key={p} value={p} style={{ fontSize: '12px' }}>{p}</SelectItem>
                   ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="space-y-1">
-            <label className="text-xs font-medium">Asset Status</label>
-            <Select value={selectedAssetStatus} onValueChange={setSelectedAssetStatus}>
-              <SelectTrigger className="text-xs h-7">
-                <SelectValue placeholder="All Asset Statuses" />
-              </SelectTrigger>
-              <SelectContent>
-                <div className="p-2">
-                  <Input
-                    type="text"
-                    placeholder="Type to search..."
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    onKeyDown={(e) => e.stopPropagation()}
-                    autoFocus
-                    className="w-full h-6 text-xs"
-                  />
-                </div>
-                <SelectItem value="All">All Asset Statuses</SelectItem>
-                {uniqueValues.assetStatuses
-                  .filter((as) => as.toLowerCase().includes(searchQuery.toLowerCase()))
-                  .map((as) => (
-                    <SelectItem key={as} value={as} className="text-xs">
-                      {as}
-                    </SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div style={{ flex: '0 0 150px' }}>
+              <label htmlFor="assetStatusFilter" style={{ fontSize: '12px', color: '#6b7280', display: 'block', marginBottom: '2px', whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' }}>Asset Status</label>
+              <Select value={selectedAssetStatus} onValueChange={setSelectedAssetStatus}>
+                <SelectTrigger style={{ fontSize: '12px', width: '100%', border: '1px solid #d1d5db', borderRadius: '4px', padding: '6px', whiteSpace: 'nowrap', textOverflow: 'ellipsis', height: '28px' }}>
+                  <SelectValue placeholder="All Asset Statuses" />
+                </SelectTrigger>
+                <SelectContent>
+                  {uniqueValues.assetStatuses.map((as) => (
+                    <SelectItem key={as} value={as} style={{ fontSize: '12px' }}>{as}</SelectItem>
                   ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="space-y-1">
-            <label className="text-xs font-medium">Asset Group</label>
-            <Select value={selectedAssetGroup} onValueChange={setSelectedAssetGroup}>
-              <SelectTrigger className="text-xs h-7">
-                <SelectValue placeholder="All Asset Groups" />
-              </SelectTrigger>
-              <SelectContent>
-                <div className="p-2">
-                  <Input
-                    type="text"
-                    placeholder="Type to search..."
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    onKeyDown={(e) => e.stopPropagation()}
-                    autoFocus
-                    className="w-full h-6 text-xs"
-                  />
-                </div>
-                <SelectItem value="All">All Asset Groups</SelectItem>
-                {uniqueValues.assetGroups
-                  .filter((ag) => ag.toLowerCase().includes(searchQuery.toLowerCase()))
-                  .map((ag) => (
-                    <SelectItem key={ag} value={ag} className="text-xs">
-                      {ag}
-                    </SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div style={{ flex: '0 0 150px' }}>
+              <label htmlFor="assetGroupFilter" style={{ fontSize: '12px', color: '#6b7280', display: 'block', marginBottom: '2px', whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' }}>Asset Group</label>
+              <Select value={selectedAssetGroup} onValueChange={setSelectedAssetGroup}>
+                <SelectTrigger style={{ fontSize: '12px', width: '100%', border: '1px solid #d1d5db', borderRadius: '4px', padding: '6px', whiteSpace: 'nowrap', textOverflow: 'ellipsis', height: '28px' }}>
+                  <SelectValue placeholder="All Asset Groups" />
+                </SelectTrigger>
+                <SelectContent>
+                  {uniqueValues.assetGroups.map((ag) => (
+                    <SelectItem key={ag} value={ag} style={{ fontSize: '12px' }}>{ag}</SelectItem>
                   ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="space-y-1">
-            <label className="text-xs font-medium">Order Type</label>
-            <Select value={selectedOrderType} onValueChange={setSelectedOrderType}>
-              <SelectTrigger className="text-xs h-7">
-                <SelectValue placeholder="All Order Types" />
-              </SelectTrigger>
-              <SelectContent>
-                <div className="p-2">
-                  <Input
-                    type="text"
-                    placeholder="Type to search..."
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    onKeyDown={(e) => e.stopPropagation()}
-                    autoFocus
-                    className="w-full h-6 text-xs"
-                  />
-                </div>
-                <SelectItem value="All">All Order Types</SelectItem>
-                {uniqueValues.orderTypes
-                  .filter((ot) => ot.toLowerCase().includes(searchQuery.toLowerCase()))
-                  .map((ot) => (
-                    <SelectItem key={ot} value={ot} className="text-xs">
-                      {ot}
-                    </SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div style={{ flex: '0 0 150px' }}>
+              <label htmlFor="orderTypeFilter" style={{ fontSize: '12px', color: '#6b7280', display: 'block', marginBottom: '2px', whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' }}>Order Type</label>
+              <Select value={selectedOrderType} onValueChange={setSelectedOrderType}>
+                <SelectTrigger style={{ fontSize: '12px', width: '100%', border: '1px solid #d1d5db', borderRadius: '4px', padding: '6px', whiteSpace: 'nowrap', textOverflow: 'ellipsis', height: '28px' }}>
+                  <SelectValue placeholder="All Order Types" />
+                </SelectTrigger>
+                <SelectContent>
+                  {uniqueValues.orderTypes.map((ot) => (
+                    <SelectItem key={ot} value={ot} style={{ fontSize: '12px' }}>{ot}</SelectItem>
                   ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="space-y-1">
-            <label className="text-xs font-medium">Date Range</label>
-            <DatePickerWithRange
-              date={fromDate}
-              setDate={(range) => {
-                setFromDate(range);
-                setToDate(range?.to ? range.to.toISOString().split('T')[0] : '');
-              }}
-              className="h-7"
-            />
+                </SelectContent>
+              </Select>
+            </div>
+            <div style={{ flex: '0 0 150px' }}>
+              <label htmlFor="dateRangeFilter" style={{ fontSize: '12px', color: '#6b7280', display: 'block', marginBottom: '2px', whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' }}>Date Range</label>
+              <DatePickerWithRange
+                date={fromDate}
+                setDate={(range) => {
+                  setFromDate(range);
+                  setToDate(range?.to ? range.to.toISOString().split('T')[0] : '');
+                }}
+                style={{ height: '28px' }}
+              />
+            </div>
           </div>
         </div>
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>S.No.</TableHead>
-              <TableHead>Asset Type</TableHead>
-              <TableHead>Model</TableHead>
-              <TableHead>Configuration</TableHead>
-              <TableHead>Serial Number</TableHead>
-              <TableHead>Product</TableHead>
-              <TableHead>Asset Status</TableHead>
-              <TableHead>Asset Group</TableHead>
-              <TableHead>Warehouse</TableHead>
-              <TableHead>Asset Check</TableHead>
+              <TableHead style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', textAlign: 'left', position: 'sticky', top: 0, background: '#fff', zIndex: 20 }}>S.No.</TableHead>
+              <TableHead style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', textAlign: 'left', position: 'sticky', top: 0, background: '#fff', zIndex: 20 }}>Asset Type</TableHead>
+              <TableHead style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', textAlign: 'left', position: 'sticky', top: 0, background: '#fff', zIndex: 20 }}>Model</TableHead>
+              <TableHead style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', textAlign: 'left', position: 'sticky', top: 0, background: '#fff', zIndex: 20 }}>Configuration</TableHead>
+              <TableHead style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', textAlign: 'left', position: 'sticky', top: 0, background: '#fff', zIndex: 20 }}>Serial Number</TableHead>
+              <TableHead style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', textAlign: 'left', position: 'sticky', top: 0, background: '#fff', zIndex: 20 }}>Product</TableHead>
+              <TableHead style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', textAlign: 'left', position: 'sticky', top: 0, background: '#fff', zIndex: 20 }}>Asset Status</TableHead>
+              <TableHead style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', textAlign: 'left', position: 'sticky', top: 0, background: '#fff', zIndex: 20 }}>Asset Group</TableHead>
+              <TableHead style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', textAlign: 'left', position: 'sticky', top: 0, background: '#fff', zIndex: 20 }}>Warehouse</TableHead>
+              <TableHead style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', textAlign: 'left', position: 'sticky', top: 0, background: '#fff', zIndex: 20 }}>Asset Check</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {paginatedDevices.map((d, index) => (
-              <TableRow key={d.id}>
-                <TableCell>{(currentPage - 1) * rowsPerPage + index + 1}</TableCell>
-                <TableCell>{d.asset_type}</TableCell>
-                <TableCell>{d.model}</TableCell>
-                <TableCell>{d.configuration}</TableCell>
-                <TableCell>{d.serial_number}</TableCell>
-                <TableCell>{d.product}</TableCell>
-                <TableCell>{d.asset_status}</TableCell>
-                <TableCell>{d.asset_group}</TableCell>
-                <TableCell>{d.warehouse}</TableCell>
-                <TableCell>
-                  <div className="flex items-center space-x-2">
-                    <Checkbox
-                      id={`check-${d.id}`}
-                      checked={d.asset_check === '✓ Matched'}
-                      onCheckedChange={(checked) => {
-                        onUpdateAssetCheck(d.id, checked ? '✓ Matched' : 'X Unmatched');
-                        if (checked) setSelectedStatus('Verified');
-                      }}
-                      disabled={!canEdit}
-                    />
-                    <Label
-                      htmlFor={`check-${d.id}`}
-                      className={d.asset_check === '✓ Matched' ? 'text-green-500' : 'text-red-500'}
-                    >
-                      {d.asset_check}
-                    </Label>
-                  </div>
+            {paginatedDevices.length === 0 ? (
+              <TableRow>
+                <TableCell colSpan={10} style={{ textAlign: 'center', fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db' }}>
+                  No devices found with current filters.
                 </TableCell>
               </TableRow>
-            ))}
+            ) : (
+              paginatedDevices.map((d, index) => {
+                const checkText = d.asset_check || 'Unmatched';
+                const checkColor = checkText === 'Matched' ? '#22c55e' : checkText.startsWith('Found in') ? '#f59e0b' : '#ef4444';
+                return (
+                  <TableRow key={d.id}>
+                    <TableCell style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db' }}>{(currentPage - 1) * rowsPerPage + index + 1}</TableCell>
+                    <TableCell style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db' }}>{d.asset_type}</TableCell>
+                    <TableCell style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db' }}>{d.model}</TableCell>
+                    <TableCell style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db' }}>{d.configuration}</TableCell>
+                    <TableCell style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db' }}>{d.serial_number}</TableCell>
+                    <TableCell style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db' }}>{d.product}</TableCell>
+                    <TableCell style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db' }}>{d.asset_status}</TableCell>
+                    <TableCell style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db' }}>{d.asset_group}</TableCell>
+                    <TableCell style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db' }}>{d.warehouse}</TableCell>
+                    <TableCell style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                        <Checkbox
+                          id={`check-${d.id}`}
+                          checked={checkText === 'Matched'}
+                          onCheckedChange={(checked) => {
+                            onUpdateAssetCheck(d.id, checked ? 'Matched' : 'Unmatched');
+                            if (checked) setSelectedStatus('Verified');
+                          }}
+                          disabled={!canEdit}
+                        />
+                        <Label
+                          htmlFor={`check-${d.id}`}
+                          style={{ color: checkColor, fontSize: '12px' }}
+                        >
+                          {checkText}
+                        </Label>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                );
+              })
+            )}
           </TableBody>
         </Table>
-        <div className="flex justify-between items-center mt-4">
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '4px', fontSize: '12px' }}>
           <Button
             variant="outline"
             size="sm"
-            onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
+            style={{ border: '1px solid #d1d5db', borderRadius: '4px', padding: '4px 8px', opacity: currentPage === 1 ? 0.5 : 1 }}
             disabled={currentPage === 1}
+            onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
           >
             Previous
           </Button>
-          <span>
-            Page {currentPage} of {totalPages}
-          </span>
+          <span>Page {currentPage} of {totalPages}</span>
           <Button
             variant="outline"
             size="sm"
-            onClick={() => setCurrentPage((prev) => Math.min(prev + 1, totalPages))}
+            style={{ border: '1px solid #d1d5db', borderRadius: '4px', padding: '4px 8px', opacity: currentPage === totalPages ? 0.5 : 1 }}
             disabled={currentPage === totalPages}
+            onClick={() => setCurrentPage((prev) => Math.min(prev + 1, totalPages))}
           >
             Next
           </Button>
         </div>
       </CardContent>
+      {showPopup && (
+        <div
+          style={{
+            position: 'fixed',
+            top: '50%',
+            left: '50%',
+            transform: 'translate(-50%, -50%)',
+            background: '#fff',
+            borderRadius: '8px',
+            boxShadow: '0 4px 6px rgba(0,0,0,0.1)',
+            padding: '16px',
+            zIndex: 50,
+            width: '300px',
+          }}
+        >
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+            <h3 style={{ fontSize: '14px', fontWeight: 'bold' }}>Asset Check Status</h3>
+            <button onClick={() => setShowPopup(false)} style={{ cursor: 'pointer', background: 'none', border: 'none', fontSize: '14px' }}>×</button>
+          </div>
+          <p style={{ fontSize: '12px', color: isAllMatched ? '#22c55e' : '#ef4444', marginBottom: '16px' }}>
+            {isAllMatched ? 'All assets are matched.' : `Matched: ${matchedCount}, Unmatched: ${unmatchedCount}`}
+          </p>
+          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                exportToCSV();
+                setShowPopup(false);
+              }}
+              style={{ fontSize: '12px' }}
+            >
+              Generate Report
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowPopup(false)}
+              style={{ fontSize: '12px' }}
+            >
+              Close
+            </Button>
+          </div>
+        </div>
+      )}
+      {scanResult && (
+        <div
+          style={{
+            position: 'fixed',
+            top: '50%',
+            left: '50%',
+            transform: 'translate(-50%, -50%)',
+            background: '#fff',
+            borderRadius: '8px',
+            boxShadow: '0 4px 6px rgba(0,0,0,0.1)',
+            padding: '16px',
+            zIndex: 50,
+            width: '300px',
+          }}
+        >
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+            <h3 style={{ fontSize: '14px', fontWeight: 'bold' }}>Scan Result</h3>
+            <button onClick={() => setScanResult(null)} style={{ cursor: 'pointer', background: 'none', border: 'none', fontSize: '14px' }}>×</button>
+          </div>
+          <p style={{ fontSize: '12px', color: scanResult === 'Matched' ? '#22c55e' : scanResult === 'Not Found' ? '#ef4444' : '#f59e0b', marginBottom: '16px' }}>
+            {scanResult}
+          </p>
+          <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setScanResult(null)}
+              style={{ fontSize: '12px' }}
+            >
+              Close
+            </Button>
+          </div>
+        </div>
+      )}
     </Card>
   );
 };
