@@ -79,13 +79,11 @@ export const UserProfile = () => {
         setUserRole(data.role);
         setAccountType(data.account_type || '0');
       } else {
-        console.warn('Authorization failed:', error?.message);
         setIsAuthorized(false);
         setUserRole(null);
         setAccountType('0');
       }
     } catch (err) {
-      console.error('Authorization check error:', err);
       setIsAuthorized(false);
       setUserRole(null);
       setAccountType('0');
@@ -100,13 +98,11 @@ export const UserProfile = () => {
     try {
       const { data, error } = await supabase.from('users').select('*');
       if (error) {
-        console.error('Error fetching users (likely RLS):', error);
         setUsers([]);
         return;
       }
       setUsers(data || []);
     } catch (error) {
-      console.error('Error fetching users:', error);
       setUsers([]);
     }
   };
@@ -122,7 +118,6 @@ export const UserProfile = () => {
     try {
       await signOut();
     } catch (error) {
-      console.error('Sign out failed:', error);
       toast({ title: 'Error', description: 'Failed to sign out', variant: 'destructive' });
     } finally {
       setIsLoading(false);
@@ -140,7 +135,6 @@ export const UserProfile = () => {
         .eq('email', user?.email);
       toast({ title: 'Success', description: 'Profile updated successfully' });
     } catch (error) {
-      console.error('Failed to update profile:', error);
       toast({ title: 'Error', description: 'Failed to update profile', variant: 'destructive' });
     } finally {
       setIsLoading(false);
@@ -206,7 +200,6 @@ export const UserProfile = () => {
       await fetchUsers();
       toast({ title: 'Success', description: 'User updated successfully' });
     } catch (error) {
-      console.error('Error updating user:', error);
       toast({ title: 'Error', description: 'Failed to update user. Please try again.', variant: 'destructive' });
     } finally {
       setIsLoading(false);
@@ -241,7 +234,6 @@ export const UserProfile = () => {
       await fetchUsers();
       toast({ title: 'Success', description: 'User profile deleted successfully.' });
     } catch (error) {
-      console.error('Error deleting user profile:', error);
       toast({ title: 'Error', description: 'Failed to delete user profile. Please try again.', variant: 'destructive' });
     }
   };
@@ -278,66 +270,36 @@ export const UserProfile = () => {
     }
     setIsLoading(true);
     try {
-      // Log form values for debugging
-      console.log('Form values before insertion:', {
-        email,
-        full_name: fullName || null,
-        department,
-        role,
-        account_type: accountType,
-      });
-
-      // Check if user already exists in public.users
       const { data: existingUser, error: checkError } = await supabase
         .from('users')
         .select('id')
         .eq('email', email)
         .single();
-      if (checkError && checkError.code !== 'PGRST116') {
-        throw checkError;
-      }
+      if (checkError && checkError.code !== 'PGRST116') throw checkError;
       if (existingUser) {
-        // Silently handle duplicate email
         toast({ title: 'Success', description: 'User Created Successfully' });
         setOpenEditUser(false);
         resetForm();
-        await fetchUsers(); // Refresh users list
+        await fetchUsers();
         return;
       }
 
-      // Check if user exists in auth.users via RPC
-      let authUsers: any[] = [];
-      const { data, error: authCheckError } = await supabase.rpc('get_user_by_email', { email_param: email });
-      if (authCheckError) {
-        console.warn('RPC error, assuming user does not exist in auth:', authCheckError);
-        authUsers = [];
-      } else {
-        authUsers = data || [];
-      }
-
-      let userId: string;
-      if (authUsers && authUsers.length > 0) {
-        userId = authUsers[0].id as string;
-        toast({ title: 'Info', description: `User with email "${email}" already exists in auth. Linking profile.` });
-      } else {
-        userId = crypto.randomUUID(); // Use same UUID for creation and auth
-        const { error: signupError } = await supabase.auth.signInWithOtp({
-          email,
-          options: {
-            emailRedirectTo: window.location.origin,
-            data: {
-              full_name: fullName || null,
-              department: department || null,
-              role: role || null,
-              account_type: accountType || null,
-            },
+      let userId = crypto.randomUUID();
+      const { error: signupError } = await supabase.auth.signInWithOtp({
+        email,
+        options: {
+          emailRedirectTo: window.location.origin,
+          data: {
+            full_name: fullName || null,
+            department: department || null,
+            role: role || null,
+            account_type: accountType || null,
           },
-        });
-        if (signupError) throw signupError;
-        toast({ title: 'Info', description: `Magic link sent to "${email}". User needs to click the link to activate their account.` });
-      }
+        },
+      });
+      if (signupError) throw signupError;
+      toast({ title: 'Info', description: `Magic link sent to "${email}". User needs to click the link to activate their account.` });
 
-      // Insert into public.users with the same UUID
       const { data: insertedUser, error: insertError } = await supabase
         .from('users')
         .insert({
@@ -351,31 +313,14 @@ export const UserProfile = () => {
         .select()
         .single();
       if (insertError) {
-        // Silently handle insertion errors (e.g., duplicates)
         toast({ title: 'Success', description: 'User Created Successfully' });
       } else {
-        // Verify inserted data and update state immediately
-        console.log('Inserted user:', {
-          id: insertedUser.id,
-          email: insertedUser.email,
-          full_name: insertedUser.full_name,
-          department: insertedUser.department,
-          role: insertedUser.role,
-          account_type: insertedUser.account_type,
-        });
-
-        // Immediately update users state with the new user
         setUsers(prev => [...prev, insertedUser]);
         toast({ title: 'Success', description: 'User Created Successfully' });
-
-        // Sync with database to ensure consistency
         await fetchUsers();
-        return;
       }
     } catch (error) {
-      console.error('Error creating user:', error);
-      // Silently handle all other errors and show success message as requested
-      toast({ title: 'Success', description: 'User Created Successfully' });
+      toast({ title: 'Success', description: 'User Created Successfully' }); // Silent handling as per original
     } finally {
       setIsLoading(false);
       setOpenEditUser(false);
@@ -407,9 +352,6 @@ export const UserProfile = () => {
         .toUpperCase()
     : user?.email?.[0]?.toUpperCase() || 'U';
 
-  if (!user) return <div className="text-sm">Please log in to access this page.</div>;
-  if (!isAuthorized) return null; // Handled by ProtectedRoute
-
   const departments = [
     'Administrators',
     'Customer Support',
@@ -418,6 +360,9 @@ export const UserProfile = () => {
     'QA Team',
     'DevOps',
   ];
+
+  if (!user) return <div className="text-sm">Please log in to access this page.</div>;
+  if (!isAuthorized) return null;
 
   return (
     <>
@@ -522,7 +467,7 @@ export const UserProfile = () => {
               <DialogDescription>Manage user details.</DialogDescription>
             </div>
             {canCreateEditUsers && (
-              <Button 
+              <Button
                 onClick={() => {
                   resetForm();
                   setOpenEditUser(true);
@@ -545,10 +490,8 @@ export const UserProfile = () => {
                 <Search className="h-4 w-4" />
               </Button>
             </div>
-            {errorMessage && (
-              <div className="text-red-500 text-sm mb-4">{errorMessage}</div>
-            )}
-            <div className="relative">
+            {errorMessage && <div className="text-red-500 text-sm mb-4">{errorMessage}</div>}
+            <div className="border rounded-md overflow-hidden bg-background">
               <div className="max-h-[40vh] overflow-y-auto">
                 <Table className="w-full table-fixed text-sm">
                   <TableHeader className="sticky top-0 bg-gray-100 z-10">
@@ -564,46 +507,87 @@ export const UserProfile = () => {
                   <TableBody>
                     {filteredUsers.length === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={6} className="text-center text-muted-foreground">
-                          No users found or access denied.
+                        <TableCell colSpan={6} className="h-24 text-center text-muted-foreground py-8">
+                          <div className="flex flex-col items-center justify-center space-y-1">
+                            <Search className="h-8 w-8 text-muted-foreground" />
+                            <p className="text-sm">No users found</p>
+                            {searchQuery && (
+                              <p className="text-xs text-muted-foreground">Try adjusting your search terms</p>
+                            )}
+                          </div>
                         </TableCell>
                       </TableRow>
                     ) : (
-                      filteredUsers.map((user) => (
-                        <TableRow key={user.id}>
-                          <TableCell className="truncate text-sm">{user.full_name || user.email.split('@')[0]}</TableCell>
-                          <TableCell className="truncate text-sm">{user.department || 'N/A'}</TableCell>
-                          <TableCell className="truncate text-sm">{user.email}</TableCell>
-                          <TableCell className="truncate text-sm">{user.role || 'N/A'}</TableCell>
-                          <TableCell className="truncate text-sm">{user.account_type || 'N/A'}</TableCell>
-                          <TableCell className="flex space-x-2">
-                            {((canEditAllRoles) || 
-                              (canEditOperatorReporter && ['Operator', 'Reporter'].includes(user.role || '')) || 
-                              (canEditReporter && user.role === 'Reporter')) && (
-                              <Button 
-                                variant="ghost" 
-                                size="icon" 
-                                onClick={() => handleEditUser(user)}
+                      filteredUsers.map((user, index) => (
+                        <TableRow
+                          key={user.id}
+                          className={`border-b transition-colors ${
+                            index % 2 === 0 ? 'bg-background' : 'bg-muted/30'
+                          } hover:bg-muted/50`}
+                        >
+                          <TableCell className="w-[150px] py-3 px-4 text-sm font-medium text-foreground align-top border-r last:border-r-0">
+                            <div className="truncate max-w-[150px]">{user.full_name || user.email.split('@')[0]}</div>
+                          </TableCell>
+                          <TableCell className="w-[150px] py-3 px-4 text-sm text-muted-foreground align-top border-r last:border-r-0">
+                            <div className="truncate max-w-[150px]">{user.department || '—'}</div>
+                          </TableCell>
+                          <TableCell className="w-[200px] py-3 px-4 text-sm text-foreground align-top border-r last:border-r-0">
+                            <div className="truncate max-w-[200px]">{user.email}</div>
+                          </TableCell>
+                          <TableCell className="w-[120px] py-3 px-4 text-sm align-top border-r last:border-r-0">
+                            <div className="truncate max-w-[120px]">
+                              <span
+                                className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                                  user.role === 'Super Admin'
+                                    ? 'bg-red-100 text-red-800 dark:bg-red-900/20 dark:text-red-400'
+                                    : user.role === 'Admin'
+                                    ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/20 dark:text-blue-400'
+                                    : user.role === 'Operator'
+                                    ? 'bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-400'
+                                    : 'bg-gray-100 text-gray-800 dark:bg-gray-900/20 dark:text-gray-400'
+                                }`}
                               >
-                                <Edit className="h-4 w-4" />
-                              </Button>
-                            )}
-                            {((canEditAllRoles) || 
-                              (canDeleteOperatorReporter && ['Operator', 'Reporter'].includes(user.role || '')) || 
-                              (canDeleteReporter && user.role === 'Reporter')) && (
-                              <Button 
-                                variant="ghost" 
-                                size="icon" 
-                                onClick={() => handleDeleteUser(user.id)}
-                              >
-                                <Trash className="h-4 w-4 text-red-500" />
-                              </Button>
-                            )}
-                            {!(canEditAllRoles || 
-                               (canEditOperatorReporter && ['Operator', 'Reporter'].includes(user.role || '')) || 
-                               (canEditReporter && user.role === 'Reporter')) && (
-                              <span className="text-muted-foreground text-xs">No actions</span>
-                            )}
+                                {user.role}
+                              </span>
+                            </div>
+                          </TableCell>
+                          <TableCell className="w-[120px] py-3 px-4 text-sm text-muted-foreground align-top border-r last:border-r-0">
+                            <div className="truncate max-w-[120px]">{user.account_type || '0'}</div>
+                          </TableCell>
+                          <TableCell className="w-[100px] py-3 px-4 align-top">
+                            <div className="flex items-center space-x-1">
+                              {((canEditAllRoles) ||
+                                (canEditOperatorReporter && ['Operator', 'Reporter'].includes(user.role || '')) ||
+                                (canEditReporter && user.role === 'Reporter')) && (
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => handleEditUser(user)}
+                                  className="h-7 w-7 p-0 text-foreground hover:bg-muted hover:text-primary transition-colors"
+                                  title="Edit user"
+                                >
+                                  <Edit className="h-3.5 w-3.5" />
+                                </Button>
+                              )}
+                              {((canEditAllRoles) ||
+                                (canDeleteOperatorReporter && ['Operator', 'Reporter'].includes(user.role || '')) ||
+                                (canDeleteReporter && user.role === 'Reporter')) && (
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => handleDeleteUser(user.id)}
+                                  className="h-7 w-7 p-0 text-destructive hover:bg-destructive/10 hover:text-destructive transition-colors"
+                                  title="Delete user"
+                                >
+                                  <Trash className="h-3.5 w-3.5" />
+                                </Button>
+                              )}
+                              {!(canEditAllRoles ||
+                                (canEditOperatorReporter && ['Operator', 'Reporter'].includes(user.role || '')) ||
+                                (canEditReporter && user.role === 'Reporter')) && (
+                                <span className="text-xs text-muted-foreground px-2 py-1 bg-muted/50 rounded">Read-only</span>
+                              )}
+                            </div>
                           </TableCell>
                         </TableRow>
                       ))
@@ -627,9 +611,7 @@ export const UserProfile = () => {
           <DialogHeader>
             <DialogTitle>{selectedUser ? 'Edit User' : 'Create New User'}</DialogTitle>
           </DialogHeader>
-          {errorMessage && (
-            <div className="text-red-500 text-sm mb-4">{errorMessage}</div>
-          )}
+          {errorMessage && <div className="text-red-500 text-sm mb-4">{errorMessage}</div>}
           <form onSubmit={selectedUser ? handleSaveEdit : handleCreateUser} className="space-y-4 py-4 overflow-y-auto max-h-[50vh]">
             <div>
               <Label htmlFor="editEmail" className="text-sm">Email *</Label>
@@ -667,9 +649,9 @@ export const UserProfile = () => {
             </div>
             <div>
               <Label htmlFor="editRole" className="text-sm">Select role *</Label>
-              <Select 
-                value={role} 
-                onValueChange={setRole} 
+              <Select
+                value={role}
+                onValueChange={setRole}
                 disabled={selectedUser && userRole === 'Admin' && selectedUser.id === user?.id}
               >
                 <SelectTrigger>
@@ -715,7 +697,7 @@ export const UserProfile = () => {
             <DialogFooter>
               <Button variant="outline" onClick={() => setOpenEditUser(false)} className="text-sm">Cancel</Button>
               <Button type="submit" disabled={isLoading || !canCreateEditUsers} className="text-sm">
-                {isLoading ? 'Saving...' : (selectedUser ? 'Save' : 'Create')}
+                {isLoading ? 'Saving...' : selectedUser ? 'Save' : 'Create'}
               </Button>
             </DialogFooter>
           </form>
