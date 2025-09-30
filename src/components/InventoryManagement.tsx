@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Package, BarChart3, Archive } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
 import { supabase } from '@/integrations/supabase/client';
@@ -18,6 +18,7 @@ const InventoryManagement = () => {
   const [devices, setDevices] = useState<Device[]>([]);
   const [orderSummary, setOrderSummary] = useState<OrderSummary[]>([]);
   const [loading, setLoading] = useState(false);
+  const [isClearing, setIsClearing] = useState(false);
   const [showScanner, setShowScanner] = useState(false);
   const [currentSerialIndex, setCurrentSerialIndex] = useState<{ itemId: string; index: number; type: 'tablet' | 'tv' } | null>(null);
   const [selectedWarehouse, setSelectedWarehouse] = useState<string>('All');
@@ -41,9 +42,38 @@ const InventoryManagement = () => {
   const [tablets, setTablets] = useState<TabletItem[]>([]);
   const [tvs, setTvs] = useState<TVItem[]>([]);
   const { toast } = useToast();
-  const userRole = 'admin'; // Replace with actual user role from authentication
+  const [userEmail, setUserEmail] = useState<string | null>(null);
+  const [userRole, setUserRole] = useState<string | null>(null);
 
   useEffect(() => {
+    const fetchUser = async () => {
+      try {
+        const { data: { user }, error } = await supabase.auth.getUser();
+        if (error) throw error;
+        setUserEmail(user?.email || null);
+        if (!user?.email) {
+          console.warn('No user email found.');
+          toast({ title: 'Warning', description: 'No authenticated user found. Updates may fail.', variant: 'destructive' });
+          return;
+        }
+
+        const { data: userData, error: roleError } = await supabase
+          .from('users')
+          .select('role')
+          .eq('email', user.email)
+          .single();
+        if (roleError) throw roleError;
+        setUserRole(userData?.role || null);
+        if (!userData?.role) {
+          console.warn('No role found for user.');
+          toast({ title: 'Warning', description: 'No role assigned to user. Updates may fail.', variant: 'destructive' });
+        }
+      } catch (error) {
+        console.error('Error fetching user:', error);
+        toast({ title: 'Error', description: 'Failed to fetch user information.', variant: 'destructive' });
+      }
+    };
+    fetchUser();
     loadOrders();
     loadDevices();
     loadOrderSummary();
@@ -221,6 +251,17 @@ const InventoryManagement = () => {
         page += 1;
       }
 
+      console.log('Raw devices from Supabase:', allDevices);
+
+      if (allDevices.length === 0) {
+        console.warn('No devices retrieved from Supabase.');
+        toast({
+          title: 'Warning',
+          description: 'No devices found in the database. Check your data or permissions.',
+          variant: 'destructive',
+        });
+      }
+
       const updatedDevices = allDevices.map((device: any) => ({
         id: device.id,
         sales_order: device.sales_order,
@@ -247,13 +288,22 @@ const InventoryManagement = () => {
         asset_check: device.asset_check || 'Unmatched',
       })) as Device[];
 
+      console.log('Processed devices:', updatedDevices);
       setDevices(updatedDevices);
       if (updatedDevices.length === 0) {
-        toast({ title: 'Warning', description: 'No devices loaded from database. Please check your data source or filters.', variant: 'destructive' });
+        toast({
+          title: 'Warning',
+          description: 'No devices loaded after processing. Check filters or database schema.',
+          variant: 'destructive',
+        });
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error loading devices:', error);
-      toast({ title: 'Error', description: 'Failed to load devices. Please check your database connection or schema.', variant: 'destructive' });
+      toast({
+        title: 'Error',
+        description: `Failed to load devices: ${error.message || 'Unknown error'}. Check database connection or permissions.`,
+        variant: 'destructive',
+      });
     } finally {
       setLoading(false);
     }
@@ -353,69 +403,225 @@ const InventoryManagement = () => {
 
   const handleUpdateAssetCheck = async (deviceId: string, checkStatus: string) => {
     try {
+      if (!userEmail) {
+        throw new Error('No authenticated user found. Please log in.');
+      }
+      if (!['Super Admin', 'Admin', 'Operator'].includes(userRole || '')) {
+        throw new Error('Insufficient permissions to update asset check. Super Admin, Admin, or Operator role required.');
+      }
+      const validStatus = checkStatus === 'Matched' || checkStatus === 'Unmatched' ? checkStatus : 'Unmatched';
+      if (!['Matched', 'Unmatched'].includes(validStatus)) {
+        throw new Error(`Invalid check status: ${checkStatus}`);
+      }
+
+      // Optimistic update
+      setDevices((prevDevices) =>
+        prevDevices.map((device) =>
+          device.id === deviceId
+            ? { ...device, asset_check: validStatus, updated_at: new Date().toISOString(), updated_by: userEmail }
+            : device
+        )
+      );
+
       const updates = { 
-        asset_check: checkStatus,
+        asset_check: validStatus,
         updated_at: new Date().toISOString(),
-        updated_by: userRole, // Assuming userRole represents the user performing the update
+        updated_by: userEmail,
       };
+
       const { data, error } = await supabase
         .from('devices')
         .update(updates)
         .eq('id', deviceId)
         .select();
+
       if (error) {
-        console.error('Update error:', error.message);
-        throw error;
-      }
-      if (data && data.length > 0) {
-        setDevices(prevDevices =>
-          prevDevices.map(device =>
-            device.id === deviceId ? { ...device, ...updates } : device
+        // Rollback optimistic update
+        setDevices((prevDevices) =>
+          prevDevices.map((device) =>
+            device.id === deviceId ? { ...device, asset_check: device.asset_check || 'Unmatched' } : device
           )
         );
-        toast({ title: 'Success', description: `Asset check updated to ${checkStatus}.` });
+        console.error('Supabase update error:', error);
+        if (error.code === '42501') {
+          throw new Error('Permission denied: You do not have sufficient privileges to update this device.');
+        }
+        throw error;
+      }
+
+      if (data && data.length > 0) {
+        console.log(`Successfully updated device ${deviceId}:`, data);
+        toast({ 
+          title: 'Success', 
+          description: `Asset check set to ${validStatus} for device ${deviceId}.`,
+        });
       } else {
-        console.warn('No rows updated for deviceId:', deviceId);
-        toast({ title: 'Warning', description: 'No device found with the given ID.', variant: 'destructive' });
+        // Rollback optimistic update
+        setDevices((prevDevices) =>
+          prevDevices.map((device) =>
+            device.id === deviceId ? { ...device, asset_check: device.asset_check || 'Unmatched' } : device
+          )
+        );
+        console.warn(`No device found with ID ${deviceId}`);
+        toast({ 
+          title: 'Warning', 
+          description: `No device found with ID ${deviceId}.`, 
+          variant: 'destructive' 
+        });
       }
     } catch (error: any) {
       console.error('Error updating asset check:', error);
-      toast({ title: 'Error', description: `Failed to update asset check: ${error.message}`, variant: 'destructive' });
+      const errorMessage = error.message?.includes('Failed to fetch')
+        ? 'Network error: Failed to connect to Supabase. Check CORS or network settings.'
+        : error.message || 'Unknown error';
+      toast({ 
+        title: 'Error', 
+        description: `Failed to set asset check to ${checkStatus}: ${errorMessage}`, 
+        variant: 'destructive' 
+      });
     }
+  };
+
+  const updateBatch = async (batchIds: string[], maxRetries = 3): Promise<{ updatedIds: string[]; error?: any }> => {
+    if (!userEmail) {
+      throw new Error('No authenticated user found. Please log in.');
+    }
+    if (!['Super Admin', 'Admin', 'Operator'].includes(userRole || '')) {
+      throw new Error('Insufficient permissions to update devices. Super Admin, Admin, or Operator role required.');
+    }
+    const updates = {
+      asset_check: 'Unmatched',
+      updated_at: new Date().toISOString(),
+      updated_by: userEmail,
+    };
+
+    for (let retry = 1; retry <= maxRetries; retry++) {
+      try {
+        console.log(`Batch update attempt ${retry}/${maxRetries} for IDs:`, batchIds);
+        const { data, error } = await supabase
+          .from('devices')
+          .update(updates)
+          .in('id', batchIds)
+          .select('id');
+
+        if (error) {
+          console.error(`Batch update error (try ${retry}):`, error);
+          if (retry === maxRetries) throw error;
+          await new Promise(resolve => setTimeout(resolve, 1000));
+          continue;
+        }
+
+        console.log(`Batch update success (try ${retry}):`, data);
+        return { updatedIds: data?.map((row: any) => row.id) || [] };
+      } catch (err: any) {
+        console.error(`Batch update fetch error (try ${retry}):`, err);
+        if (retry === maxRetries || !err.message?.includes('Failed to fetch')) throw err;
+        await new Promise(resolve => setTimeout(resolve, 1000));
+      }
+    }
+    return { updatedIds: [], error: new Error('Max retries exceeded') };
   };
 
   const handleClearAllChecks = async (ids: string[]) => {
     try {
+      setIsClearing(true);
+      if (!userEmail) {
+        throw new Error('No authenticated user found. Please log in.');
+      }
+      if (!['Super Admin', 'Admin', 'Operator'].includes(userRole || '')) {
+        throw new Error('Insufficient permissions to unmatch devices. Super Admin, Admin, or Operator role required.');
+      }
       if (ids.length === 0) {
-        toast({ title: 'Info', description: 'No devices to clear.' });
+        console.warn('No device IDs provided for clearing checks.');
+        toast({
+          title: 'Info',
+          description: 'No devices selected to unmatch. Adjust filters or select devices.',
+          variant: 'default',
+        });
         return;
       }
-      const updates = {
-        asset_check: 'Unmatched',
-        updated_at: new Date().toISOString(),
-        updated_by: userRole,
-      };
-      const { error } = await supabase
-        .from('devices')
-        .update(updates)
-        .in('id', ids);
-      if (error) throw error;
-      setDevices(prevDevices =>
-        prevDevices.map(device =>
-          ids.includes(device.id) ? { ...device, ...updates } : device
-        )
-      );
-      toast({ title: 'Success', description: 'All asset checks cleared successfully.' });
+
+      console.log('Testing Supabase connectivity before batch update...');
+      const { error: testError } = await supabase.from('devices').select('id').limit(1);
+      if (testError) {
+        console.error('Connectivity test failed:', testError);
+        throw new Error(`Supabase connection failed: ${testError.message}. Check CORS/network.`);
+      }
+      console.log('Connectivity test passed.');
+
+      console.log('Starting unmatch for device IDs:', ids);
+
+      if (ids.length === 1) {
+        await handleUpdateAssetCheck(ids[0], 'Unmatched');
+      } else {
+        const BATCH_SIZE = 50;
+        const allUpdatedIds: string[] = [];
+        const errors: any[] = [];
+
+        for (let i = 0; i < ids.length; i += BATCH_SIZE) {
+          const batchIds = ids.slice(i, i + BATCH_SIZE);
+          const result = await updateBatch(batchIds);
+          if (result.error) {
+            errors.push(result.error);
+          } else {
+            allUpdatedIds.push(...result.updatedIds);
+          }
+        }
+
+        if (allUpdatedIds.length > 0) {
+          setDevices(prevDevices => {
+            const updatedDevices = prevDevices.map(device =>
+              allUpdatedIds.includes(device.id)
+                ? { ...device, asset_check: 'Unmatched', updated_at: new Date().toISOString(), updated_by: userEmail }
+                : device
+            );
+            console.log('Updated devices state after batch unmatch:', updatedDevices);
+            return updatedDevices;
+          });
+
+          toast({
+            title: 'Success',
+            description: `Unmatched ${allUpdatedIds.length} device${allUpdatedIds.length !== 1 ? 's' : ''}.`,
+          });
+        }
+
+        if (errors.length > 0) {
+          console.warn('Some batches failed:', errors);
+          toast({
+            title: 'Partial Success',
+            description: `Unmatched ${allUpdatedIds.length} devices, but ${errors.length} batches failed. Check console.`,
+            variant: 'default',
+          });
+        }
+
+        if (allUpdatedIds.length === 0) {
+          console.warn('No devices unmatched during batch operation.');
+          toast({
+            title: 'Warning',
+            description: 'No devices were unmatched. Check filters or permissions.',
+            variant: 'destructive',
+          });
+        }
+      }
     } catch (error: any) {
-      console.error('Error clearing checks:', error);
-      toast({ title: 'Error', description: `Failed to clear checks: ${error.message}`, variant: 'destructive' });
+      console.error('Error in handleClearAllChecks:', error);
+      const message = error.message?.includes('Failed to fetch') 
+        ? 'Network error (CORS/fetch failed). Check browser console/Network tab and Supabase CORS settings.' 
+        : error.message || 'Unknown error';
+      toast({
+        title: 'Error',
+        description: `Failed to unmatch devices: ${message} Please try again or contact support.`,
+        variant: 'destructive',
+      });
+    } finally {
+      setIsClearing(false);
     }
   };
 
   return (
     <div className='min-h-screen bg-background flex flex-col'>
-      <div className='sticky top-0 z-20 bg-background border-b border-gray-200'>
-        <div className='container mx-auto p-4 flex justify-between items-center'>
+      <div className='sticky top-0 z-30 bg-background border-b border-gray-200'>
+        <div className='container mx-auto p-0 flex justify-between items-center'>
           <div className='flex items-center space-x-4'>
             <img src='/logo.png' alt='Logo' className='h-11 w-auto' />
             <h1 className='text-2xl font-bold'>Inventory Management</h1>
@@ -554,6 +760,7 @@ const InventoryManagement = () => {
           <TabsContent value='audit' className='space-y-4 mt-8'>
             <AuditTable
               devices={devices}
+              isClearing={isClearing}
               selectedWarehouse={selectedWarehouse}
               setSelectedWarehouse={setSelectedWarehouse}
               selectedAssetType={selectedAssetType}
@@ -580,7 +787,7 @@ const InventoryManagement = () => {
               setSearchQuery={setSearchQuery}
               onUpdateAssetCheck={handleUpdateAssetCheck}
               onClearAllChecks={handleClearAllChecks}
-              userRole={userRole}
+              userRole={userRole || 'unknown'}
             />
           </TabsContent>
         </Tabs>

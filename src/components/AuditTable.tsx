@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useCallback } from 'react';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -10,6 +10,7 @@ import { Filter, Search } from 'lucide-react';
 import { DatePickerWithRange } from './DatePickerWithRange';
 import { DateRange } from 'react-day-picker';
 import { Device } from './types';
+import debounce from 'lodash/debounce';
 
 interface AuditTableProps {
   devices: Device[];
@@ -25,20 +26,16 @@ interface AuditTableProps {
   setSelectedConfiguration: (value: string) => void;
   selectedProduct: string;
   setSelectedProduct: (value: string) => void;
-  selectedStatus: string;
-  setSelectedStatus: (value: string) => void;
   selectedOrderType: string;
   setSelectedOrderType: (value: string) => void;
   selectedAssetGroup: string;
   setSelectedAssetGroup: (value: string) => void;
   fromDate: DateRange | undefined;
   setFromDate: (range: DateRange | undefined) => void;
-  toDate: string;
-  setToDate: (value: string) => void;
   searchQuery: string;
   setSearchQuery: (value: string) => void;
-  onUpdateAssetCheck: (deviceId: string, checkStatus: string) => void;
-  onClearAllChecks: (ids: string[]) => void;
+  onUpdateAssetCheck: (deviceId: string, checkStatus: string) => Promise<void>;
+  onClearAllChecks: (ids: string[]) => Promise<void>;
   userRole: string;
 }
 
@@ -56,16 +53,12 @@ const AuditTable: React.FC<AuditTableProps> = ({
   setSelectedConfiguration,
   selectedProduct,
   setSelectedProduct,
-  selectedStatus,
-  setSelectedStatus,
   selectedOrderType,
   setSelectedOrderType,
   selectedAssetGroup,
   setSelectedAssetGroup,
   fromDate,
   setFromDate,
-  toDate,
-  setToDate,
   searchQuery,
   setSearchQuery,
   onUpdateAssetCheck,
@@ -77,9 +70,25 @@ const AuditTable: React.FC<AuditTableProps> = ({
   const [filterCheck, setFilterCheck] = useState<'all' | 'matched' | 'unmatched'>('all');
   const [showPopup, setShowPopup] = useState(false);
   const [scanResult, setScanResult] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [updatingDeviceId, setUpdatingDeviceId] = useState<string | null>(null);
+  const [isClearing, setIsClearing] = useState(false);
   const rowsPerPage = 10;
 
-  // Compute unique values
+  React.useEffect(() => {
+    if (scanResult) {
+      const timer = setTimeout(() => setScanResult(null), 3000);
+      return () => clearTimeout(timer);
+    }
+  }, [scanResult]);
+
+  React.useEffect(() => {
+    if (error) {
+      const timer = setTimeout(() => setError(null), 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [error]);
+
   const uniqueValues = useMemo(() => ({
     warehouses: ['All', ...[...new Set(devices.map((d) => d.warehouse || ''))].filter(Boolean).sort()],
     assetTypes: ['All', ...[...new Set(devices.map((d) => d.asset_type || ''))].filter(Boolean).sort()],
@@ -91,7 +100,6 @@ const AuditTable: React.FC<AuditTableProps> = ({
     orderTypes: ['All', ...[...new Set(devices.map((d) => d.order_type || ''))].filter(Boolean).sort()],
   }), [devices]);
 
-  // Memoized filtered devices
   const filteredDevices = useMemo(() => {
     const latestDevices = new Map<string, Device>();
     devices.forEach((d) => {
@@ -172,7 +180,6 @@ const AuditTable: React.FC<AuditTableProps> = ({
     filterCheck,
   ]);
 
-  // Paginated devices
   const paginatedDevices = useMemo(() => {
     const start = (currentPage - 1) * rowsPerPage;
     const end = start + rowsPerPage;
@@ -196,42 +203,42 @@ const AuditTable: React.FC<AuditTableProps> = ({
     setSelectedAssetGroup('All');
     setSelectedOrderType('All');
     setFromDate(undefined);
-    setToDate('');
     setSearchQuery('');
     setCurrentPage(1);
     setScannerInput('');
     setFilterCheck('all');
   };
 
-  const handleCheck = () => {
+  const handleCheck = useCallback(() => {
     const trimmedInput = scannerInput.trim();
     if (!trimmedInput) return;
 
-    // Search in all devices, not just filtered ones, but respect warehouse filter for status
+    setScannerInput(''); // Clear input immediately
+
     const matchedDevice = devices.find(
       (device) => (device.serial_number === trimmedInput || device.id === trimmedInput) && device.status === 'Stock' && !device.is_deleted
     );
 
-    let resultMessage = '';
     if (matchedDevice) {
-      let checkStatus;
-      if (selectedWarehouse === 'All' || matchedDevice.warehouse === selectedWarehouse) {
-        checkStatus = 'Matched';
-      } else {
-        checkStatus = `Found in ${matchedDevice.warehouse}`;
-      }
-      onUpdateAssetCheck(matchedDevice.id, checkStatus);
-      if (checkStatus === 'Matched') {
-        setSelectedStatus('Verified');
-      }
-      resultMessage = checkStatus;
+      const checkStatus = selectedWarehouse === 'All' || matchedDevice.warehouse === selectedWarehouse ? 'Matched' : `Found in ${matchedDevice.warehouse}`;
+      setUpdatingDeviceId(matchedDevice.id);
+      onUpdateAssetCheck(matchedDevice.id, checkStatus)
+        .then(() => {
+          setScanResult(checkStatus);
+        })
+        .catch((err) => {
+          setError(`Failed to update asset check: ${err.message}`);
+          setScanResult('Error');
+        })
+        .finally(() => {
+          setUpdatingDeviceId(null);
+        });
     } else {
-      console.log(`Serial number ${trimmedInput} not found.`);
-      resultMessage = 'Not Found';
+      setScanResult('Not Found');
     }
-    setScannerInput('');
-    setScanResult(resultMessage);
-  };
+  }, [scannerInput, devices, selectedWarehouse, onUpdateAssetCheck]);
+
+  const debouncedHandleCheck = useCallback(debounce(handleCheck, 300), [handleCheck]);
 
   const exportToCSV = () => {
     const headers = [
@@ -273,18 +280,24 @@ const AuditTable: React.FC<AuditTableProps> = ({
     document.body.removeChild(link);
   };
 
-  const canEdit = userRole === 'admin' || userRole === 'manager';
+  const handleClearAllChecks = () => {
+    if (filteredDevices.length === 0) return;
+    setIsClearing(true);
+    onClearAllChecks(filteredDevices.map((d) => d.id))
+      .catch((err) => {
+        setError(`Failed to clear checks: ${err.message}`);
+      })
+      .finally(() => {
+        setIsClearing(false);
+      });
+  };
 
-  // Debug output
-  console.log('AuditTable - devices:', devices);
-  console.log('AuditTable - filteredDevices:', filteredDevices);
-  console.log('AuditTable - paginatedDevices:', paginatedDevices);
+  const canEdit = userRole === 'Super Admin' || userRole === 'Admin' || userRole === 'Operator';
+  const isAllMatched = matchedCount === filteredDevices.length;
 
   if (!devices || devices.length === 0) {
     return <div style={{ fontSize: '12px', padding: '8px' }}>No devices available. Please check your data source.</div>;
   }
-
-  const isAllMatched = matchedCount === filteredDevices.length;
 
   return (
     <Card style={{ border: '1px solid #e2e8f0', borderRadius: '8px', background: '#fff', padding: '8px', minHeight: '200px', overflowY: 'auto', maxHeight: '600px' }}>
@@ -310,14 +323,14 @@ const AuditTable: React.FC<AuditTableProps> = ({
                 />
               </div>
               <div style={{ marginTop: '4px', fontSize: '12px', color: '#6b7280', display: 'flex', gap: '8px' }}>
-                <span 
+                <span
                   style={{ cursor: 'pointer' }}
                   onClick={() => setFilterCheck(filterCheck === 'matched' ? 'all' : 'matched')}
                 >
                   Matched: <span style={{ color: '#3b82f6' }}>{matchedCount}</span>
                 </span>
                 <span>|</span>
-                <span 
+                <span
                   style={{ cursor: 'pointer' }}
                   onClick={() => setFilterCheck(filterCheck === 'unmatched' ? 'all' : 'unmatched')}
                 >
@@ -329,7 +342,7 @@ const AuditTable: React.FC<AuditTableProps> = ({
               variant="outline"
               size="sm"
               style={{ border: '1px solid #d1d5db', borderRadius: '4px', padding: '4px 6px', fontSize: '12px', height: '28px' }}
-              onClick={handleCheck}
+              onClick={debouncedHandleCheck}
             >
               Check
             </Button>
@@ -341,20 +354,28 @@ const AuditTable: React.FC<AuditTableProps> = ({
             >
               Status
             </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              style={{ border: '1px solid #d1d5db', borderRadius: '4px', padding: '4px 6px', fontSize: '12px', height: '28px', background: '#fff', color: '#ef4444' }}
-              onClick={() => onClearAllChecks(filteredDevices.map((d) => d.id))}
-            >
-              Clear All
-            </Button>
+            <div style={{ position: 'relative' }}>
+              <Button
+                variant="outline"
+                size="sm"
+                style={{ border: '1px solid #d1d5db', borderRadius: '4px', padding: '4px 6px', fontSize: '12px', height: '28px', background: '#fff', color: '#ef4444' }}
+                onClick={handleClearAllChecks}
+                disabled={filteredDevices.length === 0 || isClearing}
+              >
+                {isClearing ? 'Clearing...' : 'Clear All'}
+              </Button>
+              {filteredDevices.length === 0 && (
+                <div style={{ position: 'absolute', top: '-30px', left: '0', fontSize: '12px', color: '#6b7280' }}>
+                  No devices match the current filters.
+                </div>
+              )}
+            </div>
           </div>
           <div style={{ display: 'flex', flexWrap: 'nowrap', gap: '4px', marginTop: '4px', maxWidth: '1200px', overflowX: 'auto' }}>
             <div style={{ flex: '0 0 150px' }}>
               <label htmlFor="warehouseFilter" style={{ fontSize: '12px', color: '#6b7280', display: 'block', marginBottom: '2px', whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' }}>Warehouse</label>
               <Select value={selectedWarehouse} onValueChange={setSelectedWarehouse}>
-                <SelectTrigger style={{ fontSize: '12px', width: '100%', border: '1px solid #d1d5db', borderRadius: '4px', padding: '6px', whiteSpace: 'nowrap', textOverflow: 'ellipsis', height: '28px' }}>
+                <SelectTrigger id="warehouseFilter" style={{ fontSize: '12px', width: '100%', border: '1px solid #d1d5db', borderRadius: '4px', padding: '6px', whiteSpace: 'nowrap', textOverflow: 'ellipsis', height: '28px' }}>
                   <SelectValue placeholder="All Warehouses" />
                 </SelectTrigger>
                 <SelectContent>
@@ -367,7 +388,7 @@ const AuditTable: React.FC<AuditTableProps> = ({
             <div style={{ flex: '0 0 150px' }}>
               <label htmlFor="assetTypeFilter" style={{ fontSize: '12px', color: '#6b7280', display: 'block', marginBottom: '2px', whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' }}>Asset Type</label>
               <Select value={selectedAssetType} onValueChange={setSelectedAssetType}>
-                <SelectTrigger style={{ fontSize: '12px', width: '100%', border: '1px solid #d1d5db', borderRadius: '4px', padding: '6px', whiteSpace: 'nowrap', textOverflow: 'ellipsis', height: '28px' }}>
+                <SelectTrigger id="assetTypeFilter" style={{ fontSize: '12px', width: '100%', border: '1px solid #d1d5db', borderRadius: '4px', padding: '6px', whiteSpace: 'nowrap', textOverflow: 'ellipsis', height: '28px' }}>
                   <SelectValue placeholder="All Types" />
                 </SelectTrigger>
                 <SelectContent>
@@ -380,7 +401,7 @@ const AuditTable: React.FC<AuditTableProps> = ({
             <div style={{ flex: '0 0 150px' }}>
               <label htmlFor="modelFilter" style={{ fontSize: '12px', color: '#6b7280', display: 'block', marginBottom: '2px', whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' }}>Model</label>
               <Select value={selectedModel} onValueChange={setSelectedModel}>
-                <SelectTrigger style={{ fontSize: '12px', width: '100%', border: '1px solid #d1d5db', borderRadius: '4px', padding: '6px', whiteSpace: 'nowrap', textOverflow: 'ellipsis', height: '28px' }}>
+                <SelectTrigger id="modelFilter" style={{ fontSize: '12px', width: '100%', border: '1px solid #d1d5db', borderRadius: '4px', padding: '6px', whiteSpace: 'nowrap', textOverflow: 'ellipsis', height: '28px' }}>
                   <SelectValue placeholder="All Models" />
                 </SelectTrigger>
                 <SelectContent>
@@ -393,7 +414,7 @@ const AuditTable: React.FC<AuditTableProps> = ({
             <div style={{ flex: '0 0 150px' }}>
               <label htmlFor="configurationFilter" style={{ fontSize: '12px', color: '#6b7280', display: 'block', marginBottom: '2px', whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' }}>Configuration</label>
               <Select value={selectedConfiguration} onValueChange={setSelectedConfiguration}>
-                <SelectTrigger style={{ fontSize: '12px', width: '100%', border: '1px solid #d1d5db', borderRadius: '4px', padding: '6px', whiteSpace: 'nowrap', textOverflow: 'ellipsis', height: '28px' }}>
+                <SelectTrigger id="configurationFilter" style={{ fontSize: '12px', width: '100%', border: '1px solid #d1d5db', borderRadius: '4px', padding: '6px', whiteSpace: 'nowrap', textOverflow: 'ellipsis', height: '28px' }}>
                   <SelectValue placeholder="All Configurations" />
                 </SelectTrigger>
                 <SelectContent>
@@ -406,7 +427,7 @@ const AuditTable: React.FC<AuditTableProps> = ({
             <div style={{ flex: '0 0 150px' }}>
               <label htmlFor="productFilter" style={{ fontSize: '12px', color: '#6b7280', display: 'block', marginBottom: '2px', whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' }}>Product</label>
               <Select value={selectedProduct} onValueChange={setSelectedProduct}>
-                <SelectTrigger style={{ fontSize: '12px', width: '100%', border: '1px solid #d1d5db', borderRadius: '4px', padding: '6px', whiteSpace: 'nowrap', textOverflow: 'ellipsis', height: '28px' }}>
+                <SelectTrigger id="productFilter" style={{ fontSize: '12px', width: '100%', border: '1px solid #d1d5db', borderRadius: '4px', padding: '6px', whiteSpace: 'nowrap', textOverflow: 'ellipsis', height: '28px' }}>
                   <SelectValue placeholder="All Products" />
                 </SelectTrigger>
                 <SelectContent>
@@ -419,7 +440,7 @@ const AuditTable: React.FC<AuditTableProps> = ({
             <div style={{ flex: '0 0 150px' }}>
               <label htmlFor="assetStatusFilter" style={{ fontSize: '12px', color: '#6b7280', display: 'block', marginBottom: '2px', whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' }}>Asset Status</label>
               <Select value={selectedAssetStatus} onValueChange={setSelectedAssetStatus}>
-                <SelectTrigger style={{ fontSize: '12px', width: '100%', border: '1px solid #d1d5db', borderRadius: '4px', padding: '6px', whiteSpace: 'nowrap', textOverflow: 'ellipsis', height: '28px' }}>
+                <SelectTrigger id="assetStatusFilter" style={{ fontSize: '12px', width: '100%', border: '1px solid #d1d5db', borderRadius: '4px', padding: '6px', whiteSpace: 'nowrap', textOverflow: 'ellipsis', height: '28px' }}>
                   <SelectValue placeholder="All Asset Statuses" />
                 </SelectTrigger>
                 <SelectContent>
@@ -432,7 +453,7 @@ const AuditTable: React.FC<AuditTableProps> = ({
             <div style={{ flex: '0 0 150px' }}>
               <label htmlFor="assetGroupFilter" style={{ fontSize: '12px', color: '#6b7280', display: 'block', marginBottom: '2px', whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' }}>Asset Group</label>
               <Select value={selectedAssetGroup} onValueChange={setSelectedAssetGroup}>
-                <SelectTrigger style={{ fontSize: '12px', width: '100%', border: '1px solid #d1d5db', borderRadius: '4px', padding: '6px', whiteSpace: 'nowrap', textOverflow: 'ellipsis', height: '28px' }}>
+                <SelectTrigger id="assetGroupFilter" style={{ fontSize: '12px', width: '100%', border: '1px solid #d1d5db', borderRadius: '4px', padding: '6px', whiteSpace: 'nowrap', textOverflow: 'ellipsis', height: '28px' }}>
                   <SelectValue placeholder="All Asset Groups" />
                 </SelectTrigger>
                 <SelectContent>
@@ -445,7 +466,7 @@ const AuditTable: React.FC<AuditTableProps> = ({
             <div style={{ flex: '0 0 150px' }}>
               <label htmlFor="orderTypeFilter" style={{ fontSize: '12px', color: '#6b7280', display: 'block', marginBottom: '2px', whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' }}>Order Type</label>
               <Select value={selectedOrderType} onValueChange={setSelectedOrderType}>
-                <SelectTrigger style={{ fontSize: '12px', width: '100%', border: '1px solid #d1d5db', borderRadius: '4px', padding: '6px', whiteSpace: 'nowrap', textOverflow: 'ellipsis', height: '28px' }}>
+                <SelectTrigger id="orderTypeFilter" style={{ fontSize: '12px', width: '100%', border: '1px solid #d1d5db', borderRadius: '4px', padding: '6px', whiteSpace: 'nowrap', textOverflow: 'ellipsis', height: '28px' }}>
                   <SelectValue placeholder="All Order Types" />
                 </SelectTrigger>
                 <SelectContent>
@@ -456,13 +477,23 @@ const AuditTable: React.FC<AuditTableProps> = ({
               </Select>
             </div>
             <div style={{ flex: '0 0 150px' }}>
+              <label htmlFor="assetCheckFilter" style={{ fontSize: '12px', color: '#6b7280', display: 'block', marginBottom: '2px', whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' }}>Asset Check</label>
+              <Select value={filterCheck} onValueChange={setFilterCheck}>
+                <SelectTrigger id="assetCheckFilter" style={{ fontSize: '12px', width: '100%', border: '1px solid #d1d5db', borderRadius: '4px', padding: '6px', whiteSpace: 'nowrap', textOverflow: 'ellipsis', height: '28px' }}>
+                  <SelectValue placeholder="All Asset Checks" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all" style={{ fontSize: '12px' }}>All</SelectItem>
+                  <SelectItem value="matched" style={{ fontSize: '12px' }}>Matched</SelectItem>
+                  <SelectItem value="unmatched" style={{ fontSize: '12px' }}>Unmatched</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div style={{ flex: '0 0 150px' }}>
               <label htmlFor="dateRangeFilter" style={{ fontSize: '12px', color: '#6b7280', display: 'block', marginBottom: '2px', whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' }}>Date Range</label>
               <DatePickerWithRange
                 date={fromDate}
-                setDate={(range) => {
-                  setFromDate(range);
-                  setToDate(range?.to ? range.to.toISOString().split('T')[0] : '');
-                }}
+                setDate={setFromDate}
                 style={{ height: '28px' }}
               />
             </div>
@@ -511,16 +542,22 @@ const AuditTable: React.FC<AuditTableProps> = ({
                           id={`check-${d.id}`}
                           checked={checkText === 'Matched'}
                           onCheckedChange={(checked) => {
-                            onUpdateAssetCheck(d.id, checked ? 'Matched' : 'Unmatched');
-                            if (checked) setSelectedStatus('Verified');
+                            setUpdatingDeviceId(d.id);
+                            onUpdateAssetCheck(d.id, checked ? 'Matched' : 'Unmatched')
+                              .catch((err) => {
+                                setError(`Failed to update asset check: ${err.message}`);
+                              })
+                              .finally(() => {
+                                setUpdatingDeviceId(null);
+                              });
                           }}
-                          disabled={!canEdit}
+                          disabled={!canEdit || updatingDeviceId === d.id}
                         />
                         <Label
                           htmlFor={`check-${d.id}`}
                           style={{ color: checkColor, fontSize: '12px' }}
                         >
-                          {checkText}
+                          {updatingDeviceId === d.id ? 'Updating...' : checkText}
                         </Label>
                       </div>
                     </TableCell>
@@ -624,6 +661,38 @@ const AuditTable: React.FC<AuditTableProps> = ({
               variant="outline"
               size="sm"
               onClick={() => setScanResult(null)}
+              style={{ fontSize: '12px' }}
+            >
+              Close
+            </Button>
+          </div>
+        </div>
+      )}
+      {error && (
+        <div
+          style={{
+            position: 'fixed',
+            top: '50%',
+            left: '50%',
+            transform: 'translate(-50%, -50%)',
+            background: '#fff',
+            borderRadius: '8px',
+            boxShadow: '0 4px 6px rgba(0,0,0,0.1)',
+            padding: '16px',
+            zIndex: 50,
+            width: '300px',
+          }}
+        >
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+            <h3 style={{ fontSize: '14px', fontWeight: 'bold' }}>Error</h3>
+            <button onClick={() => setError(null)} style={{ cursor: 'pointer', background: 'none', border: 'none', fontSize: '14px' }}>×</button>
+          </div>
+          <p style={{ fontSize: '12px', color: '#ef4444', marginBottom: '16px' }}>{error}</p>
+          <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setError(null)}
               style={{ fontSize: '12px' }}
             >
               Close
