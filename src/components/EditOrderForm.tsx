@@ -11,6 +11,18 @@ import { supabase } from '@/integrations/supabase/client';
 import EnhancedBarcodeScanner from './EnhancedBarcodeScanner';
 import { Order, Device } from './types';
 import { formatDate } from './utils';
+import {
+  orderTypes,
+  tabletModels,
+  tvModels,
+  configurations,
+  tvConfigurations,
+  products,
+  sdCardSizes,
+  locations,
+  assetStatuses,
+  assetGroups,
+} from './constants';
 
 interface EditOrderFormProps {
   order: Order;
@@ -29,38 +41,6 @@ const EditOrderForm: React.FC<EditOrderFormProps> = ({ order, onSave, onCancel }
   const [searchQuery, setSearchQuery] = useState('');
   const [serialErrors, setSerialErrors] = useState<(string | null)[]>([]);
   const { toast } = useToast();
-
-  const orderTypes = [
-    'Hardware',
-    'Additional Hardware',
-    'Replacement Hardware (FOC)',
-    'Replacement Hardware (CB)',
-    'Exp Hub',
-    'Stock Movement',
-    'Employee',
-    'Stock',
-    'Return',
-    'Other',
-  ];
-  const tabletModels = ['Lenovo TB301XU', 'Lenovo TB301FU', 'Lenovo TB-8505F', 'Lenovo TB-7306F', 'Lenovo TB-7306X', 'Lenovo TB-7305X', 'IRA T811'];
-  const tvModels = ['Hyundai TV - 39"', 'Hyundai TV - 43"', 'Hyundai TV - 50"', 'Hyundai TV - 55"', 'Hyundai TV - 65"', 'Xentec TV - 39"', 'Xentec TV - 43"'];
-  const configurations = [
-    '1G+8 GB (Android-7)',
-    '1G+16 GB (Android-9)',
-    '1G+32 GB (Android-9)',
-    '2G+16 GB (Android-9)',
-    '2G+32 GB (Android-9)',
-    '2G+32 GB (Android-10)',
-    '3G+32 GB (Android-10)',
-    '3G+32 GB (Android-13)',
-    '4G+64 GB (Android-13)',
-  ];
-  const tvConfigurations = ['Non Smart TV', 'Smart TV', 'Android TV', 'Web OS'];
-  const products = ['Lead', 'Propel', 'Pinnacle', 'Techbook', 'BoardAce'];
-  const sdCardSizes = ['64 GB', '128 GB', '256 GB', '512 GB'];
-  const locations = ['Trichy', 'Bangalore', 'Hyderabad', 'Kolkata', 'Bhiwandi', 'Ghaziabad', 'Zirakpur', 'Indore', 'Jaipur'];
-  const assetStatuses = ['Fresh', 'Refurb', 'Scrap'];
-  const assetGroups = ['NFA', 'FA'];
 
   // Fetch devices for the order on mount
   useEffect(() => {
@@ -99,41 +79,63 @@ const EditOrderForm: React.FC<EditOrderFormProps> = ({ order, onSave, onCancel }
         sd_card_size: '',
         profile_id: '',
       }));
+      setDevices(prev => prev.map(device => ({
+        ...device,
+        model: '',
+        configuration: null,
+        sd_card_size: null,
+        profile_id: null,
+      })));
     }
   }, [formData.asset_type]);
 
   // Validate serial numbers for duplicates and stock availability
   const validateSerials = async (devicesToValidate: Device[]) => {
     const errors = Array(devicesToValidate.length).fill(null);
-    const isInward = ['Stock', 'Return'].includes(formData.order_type);
-    const allSerials = devicesToValidate.map(d => d.serial_number?.trim() || '');
+    const isInward = orderTypes.includes(formData.order_type) && ['Stock', 'Return'].includes(formData.order_type);
+    const allSerials = devicesToValidate.map(d => d.serial_number?.trim() || '').filter(sn => sn);
 
-    // Check for duplicates
+    // Check for duplicates within the form
     for (let i = 0; i < allSerials.length; i++) {
       const serial = allSerials[i];
       if (serial && allSerials.filter(s => s === serial).length > 1) {
-        errors[i] = 'Duplicate';
+        errors[i] = 'Duplicate within order';
       }
     }
 
     // Validate serials against stock for outward orders
-    if (!isInward && formData.warehouse) {
+    if (!isInward && formData.warehouse && allSerials.length > 0) {
       const { data, error } = await supabase
         .from('devices')
-        .select('serial_number, warehouse, status')
-        .in('serial_number', allSerials.filter(sn => sn))
-        .eq('is_deleted', false);
+        .select('serial_number, warehouse, status, material_type, sales_order, updated_at, is_deleted')
+        .eq('asset_type', formData.asset_type)
+        .in('serial_number', allSerials)
+        .order('updated_at', { ascending: false });
 
       if (error) {
         toast({ title: 'Error', description: 'Failed to validate serials', variant: 'destructive' });
         return;
       }
 
+      // Group by serial and get the latest entry based on updated_at
+      const latestBySerial: Record<string, any> = {};
+      data.forEach(device => {
+        if (!device.is_deleted && (!latestBySerial[device.serial_number] || new Date(device.updated_at) > new Date(latestBySerial[device.serial_number].updated_at))) {
+          latestBySerial[device.serial_number] = device;
+        }
+      });
+
       for (let i = 0; i < devicesToValidate.length; i++) {
-        const serial = allSerials[i];
+        const serial = devicesToValidate[i].serial_number?.trim();
         if (serial && !errors[i]) {
-          const matchingDevice = data.find(d => d.serial_number === serial);
-          if (!matchingDevice || matchingDevice.warehouse !== formData.warehouse || matchingDevice.status !== 'Available') {
+          const latestDevice = latestBySerial[serial];
+          if (latestDevice) {
+            if (latestDevice.material_type === 'Outward') {
+              errors[i] = `Currently Outward in ${latestDevice.warehouse} (SO: ${latestDevice.sales_order || 'N/A'})`;
+            } else if (latestDevice.warehouse !== formData.warehouse) {
+              errors[i] = `In ${latestDevice.warehouse} stock (SO: ${latestDevice.sales_order || 'N/A'})`;
+            }
+          } else {
             errors[i] = 'Not in stock';
           }
         }
@@ -220,12 +222,12 @@ const EditOrderForm: React.FC<EditOrderFormProps> = ({ order, onSave, onCancel }
         deal_id: formData.deal_id || null,
         school_name: formData.school_name,
         nucleus_id: formData.nucleus_id || null,
-        status: ['Stock', 'Return'].includes(formData.order_type) ? 'Available' : 'Assigned',
-        material_type: ['Stock', 'Return'].includes(formData.order_type) ? 'Inward' : 'Outward',
+        status: orderTypes.includes(formData.order_type) && ['Stock', 'Return'].includes(formData.order_type) ? 'Available' : 'Assigned',
+        material_type: orderTypes.includes(formData.order_type) && ['Stock', 'Return'].includes(formData.order_type) ? 'Inward' : 'Outward',
         configuration: formData.configuration || null,
         product: formData.product || null,
-        sd_card_size: formData.asset_type === 'Tablet' ? formData.sd_card_size || '' : null,
-        profile_id: formData.asset_type === 'Tablet' ? formData.profile_id || '' : null,
+        sd_card_size: formData.asset_type === 'Tablet' ? formData.sd_card_size || null : null,
+        profile_id: formData.asset_type === 'Tablet' ? formData.profile_id || null : null,
         asset_status: 'Fresh',
         asset_group: 'NFA',
         created_at: new Date().toISOString(),
@@ -251,16 +253,44 @@ const EditOrderForm: React.FC<EditOrderFormProps> = ({ order, onSave, onCancel }
   };
 
   const validateForm = () => {
-    if (!formData.order_type) {
-      toast({ title: 'Error', description: 'Order type is required', variant: 'destructive' });
+    if (!orderTypes.includes(formData.order_type)) {
+      toast({ title: 'Error', description: `Order type must be one of: ${orderTypes.join(', ')}`, variant: 'destructive' });
       return false;
     }
     if (!formData.school_name?.trim()) {
       toast({ title: 'Error', description: 'School Name is required', variant: 'destructive' });
       return false;
     }
-    if (!formData.warehouse) {
-      toast({ title: 'Error', description: 'Warehouse is required', variant: 'destructive' });
+    if (!locations.includes(formData.warehouse)) {
+      toast({ title: 'Error', description: `Warehouse must be one of: ${locations.join(', ')}`, variant: 'destructive' });
+      return false;
+    }
+    if (!['Tablet', 'TV'].includes(formData.asset_type)) {
+      toast({ title: 'Error', description: 'Asset Type must be Tablet or TV', variant: 'destructive' });
+      return false;
+    }
+    if (formData.model && formData.asset_type === 'Tablet' && !tabletModels.includes(formData.model)) {
+      toast({ title: 'Error', description: `Tablet model must be one of: ${tabletModels.join(', ')}`, variant: 'destructive' });
+      return false;
+    }
+    if (formData.model && formData.asset_type === 'TV' && !tvModels.includes(formData.model)) {
+      toast({ title: 'Error', description: `TV model must be one of: ${tvModels.join(', ')}`, variant: 'destructive' });
+      return false;
+    }
+    if (formData.configuration && formData.asset_type === 'Tablet' && !configurations.includes(formData.configuration)) {
+      toast({ title: 'Error', description: `Tablet configuration must be one of: ${configurations.join(', ')}`, variant: 'destructive' });
+      return false;
+    }
+    if (formData.configuration && formData.asset_type === 'TV' && !tvConfigurations.includes(formData.configuration)) {
+      toast({ title: 'Error', description: `TV configuration must be one of: ${tvConfigurations.join(', ')}`, variant: 'destructive' });
+      return false;
+    }
+    if (formData.product && !products.includes(formData.product)) {
+      toast({ title: 'Error', description: `Product must be one of: ${products.join(', ')}`, variant: 'destructive' });
+      return false;
+    }
+    if (formData.asset_type === 'Tablet' && formData.sd_card_size && !sdCardSizes.includes(formData.sd_card_size)) {
+      toast({ title: 'Error', description: `SD Card Size must be one of: ${sdCardSizes.join(', ')}`, variant: 'destructive' });
       return false;
     }
     if (devices.length !== formData.quantity) {
@@ -289,19 +319,10 @@ const EditOrderForm: React.FC<EditOrderFormProps> = ({ order, onSave, onCancel }
       });
       return false;
     }
-    if (formData.asset_type === 'Tablet' && formData.sd_card_size && !sdCardSizes.includes(formData.sd_card_size)) {
+    if (serialErrors.some(error => error)) {
       toast({
         title: 'Validation Error',
-        description: `Invalid SD Card Size. Must be one of: ${sdCardSizes.join(', ')}`,
-        variant: 'destructive',
-      });
-      return false;
-    }
-    // Check for duplicate serials or invalid serials
-    if (serialErrors.some(error => error === 'Duplicate' || error === 'Not in stock')) {
-      toast({
-        title: 'Validation Error',
-        description: 'Please resolve duplicate serial numbers or serials not in stock before saving.',
+        description: 'Please resolve serial number errors (duplicates or not in stock) before saving.',
         variant: 'destructive',
       });
       return false;
@@ -357,9 +378,9 @@ const EditOrderForm: React.FC<EditOrderFormProps> = ({ order, onSave, onCancel }
       // Update order in the orders table
       const orderUpdates: Partial<Order> = {
         order_type: formData.order_type,
-        material_type: ['Stock', 'Return'].includes(formData.order_type) ? 'Inward' : 'Outward',
+        material_type: orderTypes.includes(formData.order_type) && ['Stock', 'Return'].includes(formData.order_type) ? 'Inward' : 'Outward',
         asset_type: formData.asset_type,
-        model: formData.model,
+        model: formData.model || null,
         quantity: formData.quantity,
         warehouse: formData.warehouse,
         sales_order: formData.sales_order || null,
@@ -431,15 +452,15 @@ const EditOrderForm: React.FC<EditOrderFormProps> = ({ order, onSave, onCancel }
         const originalDevice = originalDevices.find(od => od.id === device.id);
         const deviceData = {
           asset_type: formData.asset_type,
-          model: formData.model,
+          model: formData.model || null,
           serial_number: device.serial_number || '',
           warehouse: formData.warehouse,
           sales_order: formData.sales_order || null,
           deal_id: formData.deal_id || null,
           school_name: formData.school_name,
           nucleus_id: formData.nucleus_id || null,
-          status: ['Stock', 'Return'].includes(formData.order_type) ? 'Available' : 'Assigned',
-          material_type: ['Stock', 'Return'].includes(formData.order_type) ? 'Inward' : 'Outward',
+          status: orderTypes.includes(formData.order_type) && ['Stock', 'Return'].includes(formData.order_type) ? 'Available' : 'Assigned',
+          material_type: orderTypes.includes(formData.order_type) && ['Stock', 'Return'].includes(formData.order_type) ? 'Inward' : 'Outward',
           order_id: formData.id,
           configuration: formData.configuration || null,
           product: formData.product || null,
