@@ -310,32 +310,17 @@ const AuditTable: React.FC<AuditTableProps> = ({
       </CardHeader>
       <CardContent style={{ paddingTop: '2px' }}>
         <div style={{ marginBottom: '8px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-            <div style={{ flex: 1, maxWidth: '1200px' }}>
-              <div style={{ position: 'relative' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '4px', flexWrap: 'wrap' }}>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ position: 'relative', width: '100%' }}>
                 <Search style={{ position: 'absolute', left: '8px', top: '50%', transform: 'translateY(-50%)', width: '12px', height: '12px', color: '#6b7280' }} />
                 <Input
                   type="text"
-                  placeholder="      Enter Serial number"
+                  placeholder="     Enter Serial number"
                   value={scannerInput}
                   onChange={(e) => setScannerInput(e.target.value)}
                   style={{ paddingLeft: '28px', fontSize: '12px', width: '100%', border: '1px solid #d1d5db', borderRadius: '4px', padding: '6px', height: '28px' }}
                 />
-              </div>
-              <div style={{ marginTop: '4px', fontSize: '12px', color: '#6b7280', display: 'flex', gap: '8px' }}>
-                <span
-                  style={{ cursor: 'pointer' }}
-                  onClick={() => setFilterCheck(filterCheck === 'matched' ? 'all' : 'matched')}
-                >
-                  Matched: <span style={{ color: '#3b82f6' }}>{matchedCount}</span>
-                </span>
-                <span>|</span>
-                <span
-                  style={{ cursor: 'pointer' }}
-                  onClick={() => setFilterCheck(filterCheck === 'unmatched' ? 'all' : 'unmatched')}
-                >
-                  Unmatched: <span style={{ color: '#ef4444' }}>{unmatchedCount}</span>
-                </span>
               </div>
             </div>
             <Button
@@ -354,22 +339,20 @@ const AuditTable: React.FC<AuditTableProps> = ({
             >
               Status
             </Button>
-            <div style={{ position: 'relative' }}>
-              <Button
-                variant="outline"
-                size="sm"
-                style={{ border: '1px solid #d1d5db', borderRadius: '4px', padding: '4px 6px', fontSize: '12px', height: '28px', background: '#fff', color: '#ef4444' }}
-                onClick={handleClearAllChecks}
-                disabled={filteredDevices.length === 0 || isClearing}
-              >
-                {isClearing ? 'Clearing...' : 'Clear All'}
-              </Button>
-              {filteredDevices.length === 0 && (
-                <div style={{ position: 'absolute', top: '-30px', left: '0', fontSize: '12px', color: '#6b7280' }}>
-                  No devices match the current filters.
-                </div>
-              )}
-            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              style={{ border: '1px solid #d1d5db', borderRadius: '4px', padding: '4px 6px', fontSize: '12px', height: '28px', background: '#fff', color: '#ef4444' }}
+              onClick={handleClearAllChecks}
+              disabled={filteredDevices.length === 0 || isClearing}
+            >
+              {isClearing ? 'Clearing...' : 'Clear All'}
+            </Button>
+          </div>
+          <div style={{ marginTop: '4px', fontSize: '12px', color: '#6b7280', display: 'flex', gap: '8px', alignItems: 'center' }}>
+            <span style={{ color: '#22c55e' }}>Matched: {matchedCount}</span>
+            <span>|</span>
+            <span style={{ color: '#ef4444' }}>Unmatched: {unmatchedCount}</span>
           </div>
           <div style={{ display: 'flex', flexWrap: 'nowrap', gap: '4px', marginTop: '4px', maxWidth: '1200px', overflowX: 'auto' }}>
             <div style={{ flex: '0 0 150px' }}>
@@ -507,11 +490,11 @@ const AuditTable: React.FC<AuditTableProps> = ({
               <TableHead style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', textAlign: 'left', position: 'sticky', top: 0, background: '#fff', zIndex: 20 }}>Model</TableHead>
               <TableHead style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', textAlign: 'left', position: 'sticky', top: 0, background: '#fff', zIndex: 20 }}>Configuration</TableHead>
               <TableHead style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', textAlign: 'left', position: 'sticky', top: 0, background: '#fff', zIndex: 20 }}>Serial Number</TableHead>
-              <TableHead style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', textAlign: 'left', position: 'sticky', top: 0, background: '#fff', zIndex: 20 }}>Product</TableHead>
-              <TableHead style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', textAlign: 'left', position: 'sticky', top: 0, background: '#fff', zIndex: 20 }}>Asset Status</TableHead>
-              <TableHead style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', textAlign: 'left', position: 'sticky', top: 0, background: '#fff', zIndex: 20 }}>Asset Group</TableHead>
-              <TableHead style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', textAlign: 'left', position: 'sticky', top: 0, background: '#fff', zIndex: 20 }}>Warehouse</TableHead>
-              <TableHead style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', textAlign: 'left', position: 'sticky', top: 0, background: '#fff', zIndex: 20 }}>Asset Check</TableHead>
+              <TableHead style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', textAlign: 'left', position: 'sticky', top: 0, background: '#fff', zIndex: '20' }}>Product</TableHead>
+              <TableHead style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', textAlign: 'left', position: 'sticky', top: 0, background: '#fff', zIndex: '20' }}>Asset Status</TableHead>
+              <TableHead style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', textAlign: 'left', position: 'sticky', top: 0, background: '#fff', zIndex: '20' }}>Asset Group</TableHead>
+              <TableHead style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', textAlign: 'left', position: 'sticky', top: 0, background: '#fff', zIndex: '20' }}>Warehouse</TableHead>
+              <TableHead style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', textAlign: 'left', position: 'sticky', top: 0, background: '#fff', zIndex: '20' }}>Asset Check</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
