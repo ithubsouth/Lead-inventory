@@ -1,10 +1,9 @@
-import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Search, Eye, Edit, Trash2, RotateCcw, Download, Calendar } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import EditOrderForm from './EditOrderForm';
 import { Order } from './types';
 import { formatDate } from './utils';
-import { debounce } from 'lodash';
 
 interface OrdersTableProps {
   orders: Order[];
@@ -87,12 +86,6 @@ const OrdersTable: React.FC<OrdersTableProps> = ({
     alert(`${title}: ${description}`);
   };
 
-  // Debounce search input
-  const debouncedSetSearchQuery = useCallback(
-    debounce((value: string) => setSearchQuery(value.trim()), 300),
-    []
-  );
-
   // Handle keyboard and mouse scroll for horizontal scrolling
   useEffect(() => {
     const container = tableContainerRef.current;
@@ -122,87 +115,44 @@ const OrdersTable: React.FC<OrdersTableProps> = ({
     };
   }, []);
 
-  // Reset page on filter or search changes
-  useEffect(() => {
-    setCurrentOrdersPage(1);
-  }, [searchQuery, showDeleted, selectedWarehouse, selectedAssetType, selectedModel, selectedConfiguration, selectedOrderType, selectedProduct, selectedStatus, fromDate, toDate]);
-
-  // Debug logging
   useEffect(() => {
     console.log('OrdersTable props:', {
       ordersLength: orders.length,
       deletedOrders: orders.filter(o => o.is_deleted).length,
       activeOrders: orders.filter(o => !o.is_deleted).length,
+      selectedWarehouse,
+      selectedAssetType,
+      selectedModel,
+      selectedConfiguration,
+      selectedOrderType,
+      selectedProduct,
+      selectedStatus,
+      fromDate,
+      toDate,
       showDeleted,
       searchQuery,
     });
     console.log('Raw orders (first 5):', orders.slice(0, 5).map(o => ({
       id: o.id,
+      order_date: o.order_date,
       sales_order: o.sales_order || '',
-      is_deleted: o.is_deleted,
+      order_type: o.order_type || '',
+      asset_type: o.asset_type || '',
+      model: o.model || '',
+      configuration: o.configuration || '',
+      quantity: o.quantity || 0,
+      sd_card_size: o.sd_card_size || '',
+      profile_id: o.profile_id || '',
+      product: o.product || '',
+      warehouse: o.warehouse || '',
+      school_name: o.school_name || '',
+      deal_id: o.deal_id || '',
+      nucleus_id: o.nucleus_id || '',
+      status: o.status || '',
+      updated_by: o.updated_by || '',
     })));
-  }, [orders, showDeleted, searchQuery]);
-
-  // Memoize orders to prevent unnecessary re-renders
-  const memoizedOrders = useMemo(() => orders, [orders]);
-
-  // Dynamically generate dropdown options
-  const warehouseOptions = useMemo(() => ['All', ...[...new Set(memoizedOrders.map(o => o.warehouse || ''))].filter(w => w).sort()], [memoizedOrders]);
-  const assetTypeOptions = useMemo(() => ['All', ...[...new Set(memoizedOrders.map(o => o.asset_type || ''))].filter(a => a).sort()], [memoizedOrders]);
-  const modelOptions = useMemo(() => ['All', ...[...new Set(
-    selectedAssetType === 'All'
-      ? memoizedOrders.map(o => o.model || '')
-      : memoizedOrders.filter(o => o.asset_type === selectedAssetType).map(o => o.model || '')
-  )].filter(m => m).sort()], [memoizedOrders, selectedAssetType]);
-  const configurationOptions = useMemo(() => ['All', ...[...new Set(
-    selectedModel === 'All'
-      ? memoizedOrders.map(o => o.configuration || '')
-      : memoizedOrders.filter(o => o.model === selectedModel).map(o => o.configuration || '')
-  )].filter(c => c).sort()], [memoizedOrders, selectedModel]);
-  const orderTypeOptions = useMemo(() => ['All', ...[...new Set(memoizedOrders.map(o => o.order_type || ''))].filter(o => o).sort()], [memoizedOrders]);
-  const productOptions = useMemo(() => ['All', ...[...new Set(memoizedOrders.map(o => o.product || ''))].filter(p => p).sort()], [memoizedOrders]);
-  const statusOptions = useMemo(() => ['All', ...[...new Set(memoizedOrders.map(o => o.status || ''))].filter(s => s).sort()], [memoizedOrders]);
-
-  // Filter orders
-  const filteredOrders = useMemo(() => {
-    return memoizedOrders.filter((order) => {
-      const matchesDeleted = showDeleted ? order.is_deleted : !order.is_deleted;
-      const matchesWarehouse = selectedWarehouse === 'All' || (order.warehouse || '') === selectedWarehouse;
-      const matchesAssetType = selectedAssetType === 'All' || (order.asset_type || '') === selectedAssetType;
-      const matchesModel = selectedModel === 'All' || (order.model || '') === selectedModel;
-      const matchesConfiguration = selectedConfiguration === 'All' || (order.configuration || '') === selectedConfiguration;
-      const matchesOrderType = selectedOrderType === 'All' || (order.order_type || '') === selectedOrderType;
-      const matchesProduct = selectedProduct === 'All' || (order.product || '') === selectedProduct;
-      const matchesStatus = selectedStatus === 'All' || (order.status || '') === selectedStatus;
-      const matchesDateRange =
-        (!fromDate || !order.order_date || new Date(order.order_date) >= new Date(fromDate)) &&
-        (!toDate || !order.order_date || new Date(order.order_date) <= new Date(toDate));
-      const matchesSearch = searchQuery
-        ? [
-            (order.sales_order || '').trim(),
-            (order.deal_id || '').trim(),
-            (order.school_name || '').trim(),
-            (order.nucleus_id || '').trim(),
-            (order.profile_id || '').trim(),
-          ].some((field) => field.toLowerCase().includes(searchQuery.toLowerCase().trim()))
-        : true;
-
-      return (
-        matchesDeleted &&
-        matchesWarehouse &&
-        matchesAssetType &&
-        matchesModel &&
-        matchesConfiguration &&
-        matchesOrderType &&
-        matchesProduct &&
-        matchesStatus &&
-        matchesDateRange &&
-        matchesSearch
-      );
-    });
   }, [
-    memoizedOrders,
-    showDeleted,
+    orders,
     selectedWarehouse,
     selectedAssetType,
     selectedModel,
@@ -212,83 +162,153 @@ const OrdersTable: React.FC<OrdersTableProps> = ({
     selectedStatus,
     fromDate,
     toDate,
+    showDeleted,
     searchQuery,
   ]);
 
-  // Sort orders
-  const sortedOrders = useMemo(() => {
-    return [...filteredOrders].sort((a, b) => {
-      const dateA = a.order_date ? new Date(a.order_date).getTime() : -Infinity;
-      const dateB = b.order_date ? new Date(b.order_date).getTime() : -Infinity;
-      if (dateA !== dateB) {
-        return dateB - dateA;
-      }
-      const salesOrderA = a.sales_order || '';
-      const salesOrderB = b.sales_order || '';
-      return salesOrderA.localeCompare(salesOrderB);
-    });
-  }, [filteredOrders]);
+  // Dynamically generate dropdown options from orders table
+  const warehouseOptions = ['All', ...[...new Set(orders.map(o => o.warehouse || ''))].filter(w => w).sort()];
+  const assetTypeOptions = ['All', ...[...new Set(orders.map(o => o.asset_type || ''))].filter(a => a).sort()];
+  const modelOptions = ['All', ...[...new Set(
+    selectedAssetType === 'All'
+      ? orders.map(o => o.model || '')
+      : orders.filter(o => o.asset_type === selectedAssetType).map(o => o.model || '')
+  )].filter(m => m).sort()];
+  const configurationOptions = ['All', ...[...new Set(
+    selectedModel === 'All'
+      ? orders.map(o => o.configuration || '')
+      : orders.filter(o => o.model === selectedModel).map(o => o.configuration || '')
+  )].filter(c => c).sort()];
+  const orderTypeOptions = ['All', ...[...new Set(orders.map(o => o.order_type || ''))].filter(o => o).sort()];
+  const productOptions = ['All', ...[...new Set(orders.map(o => o.product || ''))].filter(p => p).sort()];
+  const statusOptions = ['All', ...[...new Set(orders.map(o => o.status || ''))].filter(s => s).sort()];
 
-  // Debug sorting and filtering
+  const filteredOrders = orders.filter((order) => {
+    const matchesDeleted = showDeleted ? order.is_deleted : !order.is_deleted;
+    const matchesWarehouse = selectedWarehouse === 'All' || (order.warehouse || '') === selectedWarehouse;
+    const matchesAssetType = selectedAssetType === 'All' || (order.asset_type || '') === selectedAssetType;
+    const matchesModel = selectedModel === 'All' || (order.model || '') === selectedModel;
+    const matchesConfiguration = selectedConfiguration === 'All' || (order.configuration || '') === selectedConfiguration;
+    const matchesOrderType = selectedOrderType === 'All' || (order.order_type || '') === selectedOrderType;
+    const matchesProduct = selectedProduct === 'All' || (order.product || '') === selectedProduct;
+    const matchesStatus = selectedStatus === 'All' || (order.status || '') === selectedStatus;
+    const matchesDateRange =
+      (!fromDate || !order.order_date || new Date(order.order_date) >= new Date(fromDate)) &&
+      (!toDate || !order.order_date || new Date(order.order_date) <= new Date(toDate));
+    const matchesSearch = searchQuery
+      ? [
+          order.sales_order || '',
+          order.deal_id || '',
+          order.school_name || '',
+          order.nucleus_id || '',
+          order.profile_id || '',
+        ].some((field) => field.toLowerCase().includes(searchQuery.toLowerCase()))
+      : true;
+
+    return (
+      matchesDeleted &&
+      matchesWarehouse &&
+      matchesAssetType &&
+      matchesModel &&
+      matchesConfiguration &&
+      matchesOrderType &&
+      matchesProduct &&
+      matchesStatus &&
+      matchesDateRange &&
+      matchesSearch
+    );
+  });
+
+  // Sort filteredOrders by order_date (descending) and sales_order (ascending)
+  const sortedOrders = [...filteredOrders].sort((a, b) => {
+    const dateA = a.order_date ? new Date(a.order_date).getTime() : -Infinity;
+    const dateB = b.order_date ? new Date(b.order_date).getTime() : -Infinity;
+
+    if (dateA !== dateB) {
+      return dateB - dateA;
+    }
+
+    const salesOrderA = a.sales_order || '';
+    const salesOrderB = b.sales_order || '';
+    return salesOrderA.localeCompare(salesOrderB);
+  });
+
+  // Debug sorting and check for invalid dates
   useEffect(() => {
+    const invalidDates = filteredOrders.filter(o => o.order_date && isNaN(new Date(o.order_date).getTime())).map(o => ({
+      id: o.id,
+      order_date: o.order_date,
+      sales_order: o.sales_order || '',
+    }));
+    if (invalidDates.length > 0) {
+      console.warn('Invalid order_date values detected:', invalidDates);
+    }
+
     console.log('Filtered orders (first 5):', filteredOrders.slice(0, 5).map(o => ({
       id: o.id,
+      order_date: o.order_date,
       sales_order: o.sales_order || '',
-      is_deleted: o.is_deleted,
     })));
     console.log('Sorted orders (first 5):', sortedOrders.slice(0, 5).map(o => ({
       id: o.id,
+      order_date: o.order_date,
       sales_order: o.sales_order || '',
-      is_deleted: o.is_deleted,
     })));
+    console.log('Filtered and sorted orders summary:', {
+      filteredLength: filteredOrders.length,
+      sortedLength: sortedOrders.length,
+      deletedOrders: sortedOrders.filter(o => o.is_deleted).length,
+      activeOrders: sortedOrders.filter(o => !o.is_deleted).length,
+    });
   }, [filteredOrders, sortedOrders]);
 
-  // Group orders by sales_order
-  const ordersBySalesOrder = useMemo(() => {
-    return sortedOrders.reduce((acc, order, index) => {
-      const salesOrder = order.sales_order || 'No Sales Order';
-      if (!acc[salesOrder]) {
-        acc[salesOrder] = [];
-      }
-      acc[salesOrder].push({ ...order, originalIndex: index });
-      return acc;
-    }, {} as Record<string, (Order & { originalIndex: number })[]>);
-  }, [sortedOrders]);
+  // Group orders by sales_order while preserving sort order
+  const ordersBySalesOrder = sortedOrders.reduce((acc, order, index) => {
+    const salesOrder = order.sales_order || 'No Sales Order';
+    if (!acc[salesOrder]) {
+      acc[salesOrder] = [];
+    }
+    acc[salesOrder].push({ ...order, originalIndex: index });
+    return acc;
+  }, {} as Record<string, (Order & { originalIndex: number })[]>);
 
-  const ordersWithCounts = useMemo(() => {
-    return Object.entries(ordersBySalesOrder)
-      .flatMap(([salesOrder, orders]) =>
-        orders
-          .sort((a, b) => a.originalIndex - b.originalIndex)
-          .map((order, index) => ({
-            ...order,
-            orderCount: `${index + 1}/${orders.length}`,
-          }))
-      )
-      .sort((a, b) => a.originalIndex - b.originalIndex);
-  }, [ordersBySalesOrder]);
+  const ordersWithCounts = Object.entries(ordersBySalesOrder)
+    .flatMap(([salesOrder, orders]) =>
+      orders
+        .sort((a, b) => a.originalIndex - b.originalIndex)
+        .map((order, index) => ({
+          ...order,
+          orderCount: `${index + 1}/${orders.length}`,
+        }))
+    )
+    .sort((a, b) => a.originalIndex - b.originalIndex);
 
-  const duplicateSerials = useMemo(() => {
-    const duplicates = new Set<string>();
-    Object.values(ordersBySalesOrder).forEach(salesOrderGroup => {
-      const allSerials = salesOrderGroup.flatMap(order => order.serial_numbers || []);
-      const seen = new Set();
-      allSerials.forEach(serial => {
-        if (serial && seen.has(serial)) {
-          duplicates.add(serial);
-        }
-        seen.add(serial);
-      });
+  const duplicateSerials = new Set<string>();
+  Object.values(ordersBySalesOrder).forEach(salesOrderGroup => {
+    const allSerials = salesOrderGroup.flatMap(order => order.serial_numbers || []);
+    const duplicates = allSerials.filter((serial, index, arr) => serial && arr.indexOf(serial) !== index);
+    duplicates.forEach(serial => duplicateSerials.add(serial));
+  });
+
+  const paginatedOrders = ordersWithCounts.slice(
+    (currentOrdersPage - 1) * ordersPerPage,
+    currentOrdersPage * ordersPerPage
+  );
+
+  useEffect(() => {
+    console.log('Paginated orders (first 5):', paginatedOrders.slice(0, 5).map(o => ({
+      id: o.id,
+      order_date: o.order_date,
+      sales_order: o.sales_order || '',
+      orderCount: o.orderCount,
+    })));
+    console.log('Pagination info:', {
+      currentOrdersPage,
+      ordersPerPage,
+      sortedOrdersLength: ordersWithCounts.length,
+      totalOrdersPages: Math.ceil(ordersWithCounts.length / ordersPerPage),
     });
-    return duplicates;
-  }, [ordersBySalesOrder]);
-
-  const paginatedOrders = useMemo(() => {
-    return ordersWithCounts.slice(
-      (currentOrdersPage - 1) * ordersPerPage,
-      currentOrdersPage * ordersPerPage
-    );
-  }, [ordersWithCounts, currentOrdersPage, ordersPerPage]);
+  }, [paginatedOrders]);
 
   const totalOrdersPages = Math.ceil(ordersWithCounts.length / ordersPerPage);
 
@@ -315,7 +335,9 @@ const OrdersTable: React.FC<OrdersTableProps> = ({
         .eq('order_id', orderId);
       if (deviceError) throw deviceError;
 
-      await Promise.all([loadOrders(), loadDevices(), loadOrderSummary()]);
+      await loadOrders();
+      await loadDevices();
+      await loadOrderSummary();
       toast({ title: 'Success', description: 'Order soft deleted successfully' });
     } catch (error) {
       console.error('Error soft deleting order:', error);
@@ -344,7 +366,9 @@ const OrdersTable: React.FC<OrdersTableProps> = ({
         .eq('order_id', orderId);
       if (deviceError) throw deviceError;
 
-      await Promise.all([loadOrders(), loadDevices(), loadOrderSummary()]);
+      await loadOrders();
+      await loadDevices();
+      await loadOrderSummary();
       toast({ title: 'Success', description: 'Order restored successfully' });
     } catch (error) {
       console.error('Error restoring order:', error);
@@ -422,6 +446,7 @@ const OrdersTable: React.FC<OrdersTableProps> = ({
     setShowDatePickerDialog(false);
   };
 
+  // Define column widths to ensure header and body alignment
   const columnWidths = {
     sales_order: '150px',
     order_type: '120px',
@@ -457,7 +482,7 @@ const OrdersTable: React.FC<OrdersTableProps> = ({
                 <input
                   id="search"
                   value={searchQuery}
-                  onChange={(e) => debouncedSetSearchQuery(e.target.value)}
+                  onChange={(e) => setSearchQuery(e.target.value)}
                   placeholder="Search by Sales Order, Deal ID, School, Nucleus ID, or Profile ID"
                   style={{ paddingLeft: '28px', fontSize: '12px', width: '100%', border: '1px solid #d1d5db', borderRadius: '4px', padding: '6px' }}
                 />
@@ -598,7 +623,7 @@ const OrdersTable: React.FC<OrdersTableProps> = ({
           </div>
         </div>
 
-        {memoizedOrders.length === 0 ? (
+        {orders.length === 0 ? (
           <div style={{ fontSize: '12px' }}>No orders available. Create an order or check your database.</div>
         ) : (
           <>
