@@ -74,38 +74,33 @@ const DevicesTable: React.FC<DevicesTableProps> = ({
     alert(`${title}: ${description}`);
   };
 
-  // Handle keyboard and mouse scroll for horizontal scrolling
-  useEffect(() => {
-    const container = tableContainerRef.current;
-    if (!container) return;
+useEffect(() => {
+  const container = tableContainerRef.current;
+  if (!container) return;
 
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'ArrowLeft') {
-        container.scrollBy({ left: -50, behavior: 'smooth' });
-      } else if (e.key === 'ArrowRight') {
-        container.scrollBy({ left: 50, behavior: 'smooth' });
-      }
-    };
+  const handleKeyDown = (e: KeyboardEvent) => {
+    if (e.key === 'ArrowLeft') {
+      container.scrollBy({ left: -50, behavior: 'smooth' });
+    } else if (e.key === 'ArrowRight') {
+      container.scrollBy({ left: 50, behavior: 'smooth' });
+    }
+  };
 
-    const handleWheel = (e: WheelEvent) => {
-      if (e.deltaY !== 0) {
-        container.scrollBy({ left: e.deltaY * 2, behavior: 'smooth' });
-        e.preventDefault();
-      }
-    };
+  const handleWheel = (e: WheelEvent) => {
+    if (e.deltaY !== 0) {
+      container.scrollBy({ top: e.deltaY * 2, behavior: 'smooth' });
+      e.preventDefault();
+    }
+  };
 
-    container.addEventListener('keydown', handleKeyDown);
-    container.addEventListener('wheel', handleWheel);
+  container.addEventListener('keydown', handleKeyDown);
+  container.addEventListener('wheel', handleWheel);
 
-    return () => {
-      container.removeEventListener('keydown', handleKeyDown);
-      container.removeEventListener('wheel', handleWheel);
-    };
-  }, []);
-
-  if (!devices) {
-    return <div style={{ fontSize: '12px' }}>Loading devices... Please wait.</div>;
-  }
+  return () => {
+    container.removeEventListener('keydown', handleKeyDown);
+    container.removeEventListener('wheel', handleWheel);
+  };
+}, []);
 
   useEffect(() => {
     console.log('DevicesTable props:', {
