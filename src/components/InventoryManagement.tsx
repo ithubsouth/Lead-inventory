@@ -137,6 +137,7 @@ const InventoryManagement = () => {
           material_type: order.material_type as 'Inward' | 'Outward',
           asset_type: order.asset_type as 'Tablet' | 'TV' | 'SD Card' | 'Pendrive',
           serial_numbers: (order.serial_numbers || []).map((sn: string) => sn.trim().toUpperCase()),
+          is_deleted: order.is_deleted || false, // Ensure is_deleted is present
         });
       });
 
@@ -195,11 +196,13 @@ const InventoryManagement = () => {
           serial_numbers: order.serial_numbers || [],
           status,
           statusDetails,
+          is_deleted: order.is_deleted || false, // Ensure is_deleted is included
         } as Order & { statusDetails: string };
       });
 
       ordersWithStatus.sort((a, b) => new Date(b.order_date).getTime() - new Date(a.order_date).getTime());
       setOrders(ordersWithStatus);
+      console.log('Loaded orders with is_deleted:', ordersWithStatus.map(o => ({ id: o.id, sales_order: o.sales_order, is_deleted: o.is_deleted })));
     } catch (error) {
       console.error('Error loading orders:', error);
       toast({ title: 'Error', description: 'Failed to load orders. Please try again.', variant: 'destructive' });
@@ -282,7 +285,7 @@ const InventoryManagement = () => {
         status: device.order_id && device.orders?.material_type === 'Outward' ? 'Assigned' : 'Stock',
         updated_at: device.updated_at,
         updated_by: device.updated_by,
-        is_deleted: device.is_deleted,
+        is_deleted: device.is_deleted || false,
         order_id: device.order_id,
         material_type: device.orders?.material_type,
         asset_check: device.asset_check || 'Unmatched',
@@ -700,6 +703,14 @@ const InventoryManagement = () => {
               setSelectedProduct={setSelectedProduct}
               selectedStatus={selectedStatus}
               setSelectedStatus={setSelectedStatus}
+              fromDate={fromDate?.from?.toISOString().split('T')[0] || ''}
+              setFromDate={(date) => setFromDate(date ? { from: date, to: undefined } : undefined)}
+              toDate={toDate}
+              setToDate={setToDate}
+              showDeleted={showDeleted}
+              setShowDeleted={setShowDeleted}
+              searchQuery={searchQuery}
+              setSearchQuery={setSearchQuery}
               loading={loading}
               setLoading={setLoading}
               loadOrders={loadOrders}
