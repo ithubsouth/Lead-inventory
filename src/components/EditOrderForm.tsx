@@ -10,6 +10,7 @@ import { useToast } from '@/components/ui/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import EnhancedBarcodeScanner from './EnhancedBarcodeScanner';
 import { Order, Device } from './types';
+import type { ASSET_TYPES } from './types';
 import { formatDate } from './utils';
 import {
   orderTypes,
@@ -54,9 +55,9 @@ const EditOrderForm: React.FC<EditOrderFormProps> = ({ order, onSave, onCancel }
         toast({ title: 'Error', description: `Failed to fetch devices: ${error.message}`, variant: 'destructive' });
         return;
       }
-      const fetchedDevices = data || [];
-      setDevices(fetchedDevices);
-      setOriginalDevices(fetchedDevices);
+      const fetchedDevices = (data || []) as any[];
+      setDevices(fetchedDevices as Device[]);
+      setOriginalDevices(fetchedDevices as Device[]);
       setFormData(prev => ({
         ...prev,
         serial_numbers: fetchedDevices.map(d => d.serial_number || ''),
@@ -107,7 +108,7 @@ const EditOrderForm: React.FC<EditOrderFormProps> = ({ order, onSave, onCancel }
     if (!isInward && formData.warehouse && allSerials.length > 0) {
       const { data, error } = await supabase
         .from('devices')
-        .select('serial_number, warehouse, status, material_type, sales_order, updated_at, is_deleted')
+        .select('*')
         .eq('asset_type', formData.asset_type)
         .in('serial_number', allSerials)
         .order('updated_at', { ascending: false });
@@ -119,7 +120,7 @@ const EditOrderForm: React.FC<EditOrderFormProps> = ({ order, onSave, onCancel }
 
       // Group by serial and get the latest entry based on updated_at
       const latestBySerial: Record<string, any> = {};
-      data.forEach(device => {
+      (data as any[])?.forEach((device: any) => {
         if (!device.is_deleted && (!latestBySerial[device.serial_number] || new Date(device.updated_at) > new Date(latestBySerial[device.serial_number].updated_at))) {
           latestBySerial[device.serial_number] = device;
         }
@@ -235,8 +236,9 @@ const EditOrderForm: React.FC<EditOrderFormProps> = ({ order, onSave, onCancel }
         created_by: '',
         updated_by: '',
         is_deleted: false,
+        order_type: order.order_type,
       }));
-      setDevices([...currentDevices, ...newDevices]);
+      setDevices([...currentDevices, ...newDevices] as Device[]);
       setFormData(prev => ({
         ...prev,
         quantity: newQuantity,
@@ -553,7 +555,7 @@ const EditOrderForm: React.FC<EditOrderFormProps> = ({ order, onSave, onCancel }
           // Revert to original devices
           await supabase
             .from('devices')
-            .upsert(originalDevices.map(device => ({
+            .upsert((originalDevices as any[]).map((device: any) => ({
               ...device,
               updated_at: new Date().toISOString(),
               updated_by: userEmail,
@@ -655,7 +657,7 @@ const EditOrderForm: React.FC<EditOrderFormProps> = ({ order, onSave, onCancel }
                 <Label className='text-xs font-medium text-gray-700'>Asset Type</Label>
                 <Select
                   value={formData.asset_type || ''}
-                  onValueChange={(value) => setFormData(prev => ({ ...prev, asset_type: value }))}
+                  onValueChange={(value) => setFormData(prev => ({ ...prev, asset_type: value as ASSET_TYPES }))}
                 >
                   <SelectTrigger className='text-xs bg-white border-gray-300'>
                     <SelectValue placeholder='Select asset type' />

@@ -103,7 +103,7 @@ const CreateOrderForm: React.FC<CreateOrderFormProps> = ({
       if (allSerials.length > 0) {
         const { data: deviceData, error: deviceError } = await supabase
           .from('devices')
-          .select('serial_number, warehouse, material_type, sales_order, updated_at, is_deleted')
+          .select('*')
           .eq('asset_type', type === 'tablet' ? 'Tablet' : 'TV')
           .in('serial_number', allSerials)
           .order('updated_at', { ascending: false })
@@ -117,7 +117,7 @@ const CreateOrderForm: React.FC<CreateOrderFormProps> = ({
 
         // Group by serial and get the latest entry based on updated_at
         const latestBySerial: Record<string, any> = {};
-        deviceData.forEach(device => {
+        (deviceData as any[])?.forEach((device: any) => {
           if (!device.is_deleted && (!latestBySerial[device.serial_number] || new Date(device.updated_at) > new Date(latestBySerial[device.serial_number].updated_at))) {
             latestBySerial[device.serial_number] = device;
           }
@@ -252,7 +252,7 @@ const CreateOrderForm: React.FC<CreateOrderFormProps> = ({
   const removeTV = (id: string) => setTvs(tvs.filter(tv => tv.id !== id));
 
   const logHistory = async (tableName: string, recordId: string, fieldName: string, newData: string, userEmail: string, salesOrder: string | null) => {
-    const { error } = await supabase
+    const { error } = await (supabase as any)
       .from('history')
       .insert({
         record_id: recordId,

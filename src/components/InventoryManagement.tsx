@@ -57,14 +57,14 @@ const InventoryManagement = () => {
           return;
         }
 
-        const { data: userData, error: roleError } = await supabase
+        const { data: userData, error: roleError} = await (supabase as any)
           .from('users')
           .select('role')
           .eq('email', user.email)
           .single();
         if (roleError) throw roleError;
-        setUserRole(userData?.role || null);
-        if (!userData?.role) {
+        setUserRole((userData as any)?.role || null);
+        if (!(userData as any)?.role) {
           console.warn('No role found for user.');
           toast({ title: 'Warning', description: 'No role assigned to user. Updates may fail.', variant: 'destructive' });
         }
