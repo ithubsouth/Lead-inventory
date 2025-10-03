@@ -59,11 +59,37 @@ export const products = [
   'BoardAce',
 ];
 
+export const coverModels = [
+  'M7 Flap Cover',
+  'M8 Flap Cover',
+  'M8 Flap Cover 4th gen - Lead',
+  'M8 Flap Cover 4th gen - Propel',
+  'M8 Flap Cover 4th gen - Pinnacle',
+];
+
 export const sdCardSizes = [
   '64 GB',
   '128 GB',
   '256 GB',
   '512 GB',
+];
+
+export const pendriveSizes = [
+  '8 GB',
+  '16 GB',
+  '32 GB',
+  '64 GB',
+  '128 GB',
+];
+
+export const otherMaterials = [
+  'Dongle',
+  'NAS Power Adapter',
+  'Router Power Adapter',
+  'HDMI Cable',
+  'Tablet Charger - C Type',
+  'Tablet Charger',
+  'VGA Converter',
 ];
 
 export const locations = [
@@ -89,28 +115,11 @@ export const assetGroups = [
   'FA',
 ];
 
-export const coverModels = [
-  'M7 Flap Cover',
-  'M8 Flap Cover',
-  'M8 Flap Cover 4th gen - Lead',
-  'M8 Flap Cover 4th gen - Propel',
-  'M8 Flap Cover 4th gen - Pinnacle',
-];
-
-export const pendriveSizes = [
-  '8 GB',
-  '16 GB',
-  '32 GB',
-  '64 GB',
-  '128 GB',
-];
-
-export const otherMaterials = [
-  'Dongle',
-  'NAS Power Adapter',
-  'Router Power Adapter',
-  'HDMI Cable',
-  'Tablet Charger - C Type',
-  'Tablet Charger',
-  'VGA Converter',
-];
+export const assetTypes = [
+  'Tablet',
+  'TV',
+  'SD Card',
+  'Cover',
+  'Pendrive',
+  'Other',
+] as const;

@@ -1,12 +1,9 @@
 // types.ts
-import type { 
-  ORDER_TYPES, 
-  TABLET_MODELS, 
-  TV_MODELS, 
-  SD_CARD_MODELS, 
-  COVER_MODELS,
-  ASSET_TYPES 
-} from './constants';
+export type ORDER_TYPES = typeof import('./constants').orderTypes[number];
+export type TABLET_MODELS = typeof import('./constants').tabletModels[number];
+export type TV_MODELS = typeof import('./constants').tvModels[number];
+export type COVER_MODELS = typeof import('./constants').coverModels[number];
+export type ASSET_TYPES = 'Tablet' | 'TV' | 'SD Card' | 'Cover' | 'Pendrive' | 'Other';
 
 export interface TabletItem {
   id: string;
@@ -36,22 +33,33 @@ export interface TVItem {
 
 export interface SDCardItem {
   id: string;
-  model: SD_CARD_MODELS;
-  configuration: string;
-  product: string;
+  sdCardSize: string;
+  profileId: string;
   quantity: number;
   location: string;
-  // No serialNumbers, assetStatuses, assetGroups
+  serialNumbers?: string[];
 }
 
 export interface CoverItem {
   id: string;
-  model: COVER_MODELS;
-  configuration: string;
-  product: string;
+  coverType: string;
   quantity: number;
   location: string;
-  // No serialNumbers, assetStatuses, assetGroups
+}
+
+export interface PendriveItem {
+  id: string;
+  size: string;
+  quantity: number;
+  location: string;
+  serialNumbers: string[];
+}
+
+export interface OtherItem {
+  id: string;
+  material: string;
+  quantity: number;
+  location: string;
 }
 
 export interface Order {
@@ -92,15 +100,19 @@ export interface Device {
   asset_type: ASSET_TYPES;
   model: string;
   configuration?: string | null;
-  serial_number?: string | null; // Null for SD Card/Covers
-  sd_card_size?: string | null; // Only for Tablets
-  profile_id?: string | null; // Only for Tablets
+  serial_number?: string | null;
+  sd_card_size?: string | null;
+  profile_id?: string | null;
   product?: string | null;
-  asset_status?: string | null; // Null for SD Card/Covers
-  asset_group?: string | null; // Null for SD Card/Covers
+  asset_status?: string | null;
+  asset_group?: string | null;
+  asset_check?: string | null;
   status: 'Stock' | 'Assigned' | 'Available';
   created_at: string;
+  created_by?: string;
+  updated_at: string;
   updated_by?: string;
+  deleted_at?: string | null;
   is_deleted: boolean;
   order_id: string;
   material_type?: 'Inward' | 'Outward';
