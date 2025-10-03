@@ -29,6 +29,7 @@ export const tvModels = [
   'Hyundai TV - 65"',
   'Xentec TV - 39"',
   'Xentec TV - 43"',
+  'Other TV - 39"',
 ];
 
 export const configurations = [
