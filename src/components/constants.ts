@@ -123,3 +123,17 @@ export const assetTypes = [
   'Pendrive',
   'Other',
 ] as const;
+
+export const profileIds = [
+  'Profile 1',
+  'Profile 2',
+  'Profile 3',
+  'Profile 4',
+  'Profile 5',
+];
+
+export const deviceStatuses = [
+  'Available',
+  'Assigned',
+  'Stock',
+];
