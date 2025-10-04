@@ -34,6 +34,7 @@ interface AssetItem {
   serialNumbers: string[];
   assetStatuses: string[];
   assetGroups: string[];
+  hasSerials: boolean;
 }
 
 interface UnifiedAssetFormProps {
@@ -88,11 +89,12 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
     return `SO-${digit}-${randomString}`;
   };
 
-  const needsSerialNumbers = (assetType: string) => {
+  const defaultHasSerials = (assetType: string) => {
     return ['Tablet', 'TV', 'Pendrive'].includes(assetType);
   };
 
   const addAsset = (assetType: string) => {
+    const hasSerials = defaultHasSerials(assetType);
     const newAsset: AssetItem = {
       id: generateId(),
       assetType,
@@ -105,9 +107,10 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
       material: '',
       quantity: 1,
       location: '',
-      serialNumbers: needsSerialNumbers(assetType) ? [''] : [],
+      serialNumbers: hasSerials ? [''] : [],
       assetStatuses: ['Fresh'],
       assetGroups: ['NFA'],
+      hasSerials,
     };
     setAssets([...assets, newAsset]);
   };
@@ -117,14 +120,13 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
       if (asset.id === id) {
         if (field === 'quantity' && typeof value === 'number') {
           const newQuantity = Math.max(1, value);
-          const needsSerial = needsSerialNumbers(asset.assetType);
           const currentSerials = asset.serialNumbers || [];
           const currentStatuses = asset.assetStatuses || [];
           const currentGroups = asset.assetGroups || [];
-          const newSerialNumbers = needsSerial ? Array(newQuantity).fill('').map((_, i) => currentSerials[i] || '') : [];
+          const newSerialNumbers = asset.hasSerials ? Array(newQuantity).fill('').map((_, i) => currentSerials[i] || '') : [];
           let newAssetStatuses;
           let newAssetGroups;
-          if (needsSerial) {
+          if (asset.hasSerials) {
             newAssetStatuses = Array(newQuantity).fill('Fresh').map((_, i) => currentStatuses[i] || 'Fresh');
             newAssetGroups = Array(newQuantity).fill('NFA').map((_, i) => currentGroups[i] || 'NFA');
           } else {
@@ -134,6 +136,22 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
             newAssetGroups = Array(newQuantity).fill(defaultGroup);
           }
           return { ...asset, quantity: newQuantity, serialNumbers: newSerialNumbers, assetStatuses: newAssetStatuses, assetGroups: newAssetGroups };
+        }
+        if (field === 'hasSerials') {
+          const newHasSerials = value;
+          let newSerialNumbers = asset.serialNumbers;
+          if (newHasSerials && newSerialNumbers.length === 0) {
+            newSerialNumbers = Array(asset.quantity).fill('');
+          } else if (!newHasSerials) {
+            newSerialNumbers = [];
+          }
+          if (!newHasSerials) {
+            const uniformStatuses = Array(asset.quantity).fill(asset.assetStatuses[0] || 'Fresh');
+            const uniformGroups = Array(asset.quantity).fill(asset.assetGroups[0] || 'NFA');
+            return { ...asset, hasSerials: newHasSerials, serialNumbers: newSerialNumbers, assetStatuses: uniformStatuses, assetGroups: uniformGroups };
+          } else {
+            return { ...asset, hasSerials: newHasSerials, serialNumbers: newSerialNumbers };
+          }
         }
         return { ...asset, [field]: value };
       }
@@ -148,7 +166,7 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
     const isInward = ['Stock', 'Return'].includes(orderType);
 
     for (const asset of assets) {
-      if (!needsSerialNumbers(asset.assetType)) {
+      if (!asset.hasSerials) {
         errors[asset.id] = [];
         continue;
       }
@@ -302,7 +320,7 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
 
       for (const asset of assets) {
         const salesOrderId = salesOrder || generateSalesOrder();
-        const assetSerials = needsSerialNumbers(asset.assetType) ? asset.serialNumbers.filter(sn => sn && sn.trim()) : [];
+        const assetSerials = asset.hasSerials ? asset.serialNumbers.filter(sn => sn && sn.trim()) : [];
 
         // Determine model based on asset type
         let model = '';
@@ -345,7 +363,7 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
 
         // Create devices
         for (let i = 0; i < asset.quantity; i++) {
-          const serialNumber = needsSerialNumbers(asset.assetType) ? (asset.serialNumbers[i] || '') : null;
+          const serialNumber = asset.hasSerials ? (asset.serialNumbers[i] || '') : null;
           const assetStatus = asset.assetStatuses[i] || 'Fresh';
           const assetGroup = asset.assetGroups[i] || 'NFA';
 
@@ -392,15 +410,28 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
   };
 
   const renderAssetFields = (asset: AssetItem) => {
-    const needsSerial = needsSerialNumbers(asset.assetType);
+    const isMandatorySerial = ['Tablet', 'TV'].includes(asset.assetType);
+    const showSerialSection = isMandatorySerial || asset.hasSerials;
 
     return (
       <div key={asset.id} style={{ border: '1px solid #e5e7eb', borderRadius: '8px', padding: '16px', marginBottom: '16px', background: '#f9fafb' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '12px' }}>
           <h4 style={{ fontSize: '14px', fontWeight: 'bold' }}>{asset.assetType}</h4>
-          <button onClick={() => removeAsset(asset.id)} style={{ color: '#ef4444' }}>
-            <Trash2 size={16} />
-          </button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+            {!isMandatorySerial && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                <label style={{ fontSize: '12px' }}>Enable Serial Numbers</label>
+                <input
+                  type="checkbox"
+                  checked={asset.hasSerials}
+                  onChange={(e) => updateAsset(asset.id, 'hasSerials', e.target.checked)}
+                />
+              </div>
+            )}
+            <button onClick={() => removeAsset(asset.id)} style={{ color: '#ef4444' }}>
+              <Trash2 size={16} />
+            </button>
+          </div>
         </div>
 
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '12px' }}>
@@ -603,7 +634,7 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
               </button>
             </div>
           </div>
-          {!needsSerial && (
+          {!showSerialSection && (
             <>
               <div>
                 <label style={{ fontSize: '12px', display: 'block', marginBottom: '4px' }}>Asset Status</label>
@@ -635,8 +666,8 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
           )}
         </div>
 
-        {/* Serial Numbers Section (only for Tablet, TV, Pendrive) */}
-        {needsSerial && (
+        {/* Serial Numbers Section */}
+        {showSerialSection && (
           <div style={{ marginTop: '16px' }}>
             <h5 style={{ fontSize: '12px', fontWeight: 'bold', marginBottom: '8px' }}>Serial Numbers</h5>
             <div style={{ display: 'grid', gap: '8px' }}>

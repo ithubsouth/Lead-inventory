@@ -85,12 +85,20 @@ export const pendriveSizes = [
 
 export const otherMaterials = [
   'Dongle',
+  'Synology NAS',
+  'Netgear NAS',
+  'Access Point',
+  '1 TB HDD',
+  'Hybrid Router',
+  'Sim Router',
   'NAS Power Adapter',
   'Router Power Adapter',
   'HDMI Cable',
+  'Mini VGA Gender',
+  'HDMI to VGA Converter',
   'Tablet Charger - C Type',
   'Tablet Charger',
-  'VGA Converter',
+  'SD Card Box',
 ];
 
 export const locations = [
