@@ -3,7 +3,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Package, BarChart3, Archive } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
 import { supabase } from '@/integrations/supabase/client';
-import CreateOrderForm from './CreateOrderForm';
+import UnifiedAssetForm from './UnifiedAssetForm';
 import OrdersTable from './OrdersTable';
 import DevicesTable from './DevicesTable';
 import OrderSummaryTable from './OrderSummaryTable';
@@ -659,7 +659,7 @@ const InventoryManagement = () => {
             </TabsTrigger>
           </TabsList>
           <TabsContent value='create' className='space-y-4 mt-8'>
-            <CreateOrderForm
+            <UnifiedAssetForm
               orderType={orderType}
               setOrderType={setOrderType}
               salesOrder={salesOrder}

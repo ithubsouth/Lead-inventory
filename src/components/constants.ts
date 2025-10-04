@@ -65,6 +65,7 @@ export const coverModels = [
   'M8 Flap Cover 4th gen - Lead',
   'M8 Flap Cover 4th gen - Propel',
   'M8 Flap Cover 4th gen - Pinnacle',
+  'M8 Flap Cover 4th gen - Techbook',
 ];
 
 export const sdCardSizes = [

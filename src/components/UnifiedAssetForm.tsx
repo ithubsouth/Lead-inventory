@@ -122,8 +122,17 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
           const currentStatuses = asset.assetStatuses || [];
           const currentGroups = asset.assetGroups || [];
           const newSerialNumbers = needsSerial ? Array(newQuantity).fill('').map((_, i) => currentSerials[i] || '') : [];
-          const newAssetStatuses = Array(newQuantity).fill('Fresh').map((_, i) => currentStatuses[i] || 'Fresh');
-          const newAssetGroups = Array(newQuantity).fill('NFA').map((_, i) => currentGroups[i] || 'NFA');
+          let newAssetStatuses;
+          let newAssetGroups;
+          if (needsSerial) {
+            newAssetStatuses = Array(newQuantity).fill('Fresh').map((_, i) => currentStatuses[i] || 'Fresh');
+            newAssetGroups = Array(newQuantity).fill('NFA').map((_, i) => currentGroups[i] || 'NFA');
+          } else {
+            const defaultStatus = currentStatuses[0] || 'Fresh';
+            const defaultGroup = currentGroups[0] || 'NFA';
+            newAssetStatuses = Array(newQuantity).fill(defaultStatus);
+            newAssetGroups = Array(newQuantity).fill(defaultGroup);
+          }
           return { ...asset, quantity: newQuantity, serialNumbers: newSerialNumbers, assetStatuses: newAssetStatuses, assetGroups: newAssetGroups };
         }
         return { ...asset, [field]: value };
@@ -444,14 +453,12 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
               </div>
               <div>
                 <label style={{ fontSize: '12px', display: 'block', marginBottom: '4px' }}>Profile ID</label>
-                <select
+                <input
+                  type="text"
                   value={asset.profileId || ''}
                   onChange={(e) => updateAsset(asset.id, 'profileId', e.target.value)}
                   style={{ width: '100%', padding: '8px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '14px' }}
-                >
-                  <option value="">Select Profile</option>
-                  {profileIds.map(p => <option key={p} value={p}>{p}</option>)}
-                </select>
+                />
               </div>
             </>
           )}
@@ -511,14 +518,12 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
               </div>
               <div>
                 <label style={{ fontSize: '12px', display: 'block', marginBottom: '4px' }}>Profile ID</label>
-                <select
+                <input
+                  type="text"
                   value={asset.profileId || ''}
                   onChange={(e) => updateAsset(asset.id, 'profileId', e.target.value)}
                   style={{ width: '100%', padding: '8px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '14px' }}
-                >
-                  <option value="">Select Profile</option>
-                  {profileIds.map(p => <option key={p} value={p}>{p}</option>)}
-                </select>
+                />
               </div>
             </>
           )}
@@ -598,6 +603,36 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
               </button>
             </div>
           </div>
+          {!needsSerial && (
+            <>
+              <div>
+                <label style={{ fontSize: '12px', display: 'block', marginBottom: '4px' }}>Asset Status</label>
+                <select
+                  value={asset.assetStatuses[0] || 'Fresh'}
+                  onChange={(e) => {
+                    const newStatuses = Array(asset.quantity).fill(e.target.value);
+                    updateAsset(asset.id, 'assetStatuses', newStatuses);
+                  }}
+                  style={{ width: '100%', padding: '8px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '14px' }}
+                >
+                  {assetStatuses.map(s => <option key={s} value={s}>{s}</option>)}
+                </select>
+              </div>
+              <div>
+                <label style={{ fontSize: '12px', display: 'block', marginBottom: '4px' }}>Asset Group</label>
+                <select
+                  value={asset.assetGroups[0] || 'NFA'}
+                  onChange={(e) => {
+                    const newGroups = Array(asset.quantity).fill(e.target.value);
+                    updateAsset(asset.id, 'assetGroups', newGroups);
+                  }}
+                  style={{ width: '100%', padding: '8px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '14px' }}
+                >
+                  {assetGroups.map(g => <option key={g} value={g}>{g}</option>)}
+                </select>
+              </div>
+            </>
+          )}
         </div>
 
         {/* Serial Numbers Section (only for Tablet, TV, Pendrive) */}
@@ -658,38 +693,6 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
                 </div>
               ))}
             </div>
-          </div>
-        )}
-
-        {/* Asset Status/Group for non-serial assets */}
-        {!needsSerial && (
-          <div style={{ marginTop: '16px', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '12px' }}>
-            {Array.from({ length: asset.quantity }).map((_, index) => (
-              <div key={index} style={{ display: 'flex', gap: '8px' }}>
-                <select
-                  value={asset.assetStatuses[index] || 'Fresh'}
-                  onChange={(e) => {
-                    const newStatuses = [...asset.assetStatuses];
-                    newStatuses[index] = e.target.value;
-                    updateAsset(asset.id, 'assetStatuses', newStatuses);
-                  }}
-                  style={{ flex: 1, padding: '8px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '14px' }}
-                >
-                  {assetStatuses.map(s => <option key={s} value={s}>{s}</option>)}
-                </select>
-                <select
-                  value={asset.assetGroups[index] || 'NFA'}
-                  onChange={(e) => {
-                    const newGroups = [...asset.assetGroups];
-                    newGroups[index] = e.target.value;
-                    updateAsset(asset.id, 'assetGroups', newGroups);
-                  }}
-                  style={{ flex: 1, padding: '8px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '14px' }}
-                >
-                  {assetGroups.map(g => <option key={g} value={g}>{g}</option>)}
-                </select>
-              </div>
-            ))}
           </div>
         )}
       </div>
