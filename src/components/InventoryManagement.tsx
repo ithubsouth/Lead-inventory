@@ -3,6 +3,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Package, BarChart3, Archive } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
 import { supabase } from '@/integrations/supabase/client';
+import UnifiedAssetForm from './UnifiedAssetForm';
 import CreateOrderForm from './CreateOrderForm';
 import OrdersTable from './OrdersTable';
 import DevicesTable from './DevicesTable';
@@ -648,44 +649,45 @@ const InventoryManagement = () => {
   };
 
   return (
-    <div className='min-h-screen bg-background flex flex-col'>
-      <div className='sticky top-0 z-30 bg-background border-b border-gray-200'>
-        <div className='container mx-auto p-0 flex justify-between items-center'>
+    <div className='min-h-screen max-h-screen overflow-hidden bg-gradient-to-br from-background to-secondary/20 flex flex-col'>
+      <div className='w-full bg-card/80 backdrop-blur-sm border-b border-border/50 fixed top-0 left-0 right-0 z-50 shadow-sm'>
+        <div className='container mx-auto px-4 py-3 flex justify-between items-center'>
           <div className='flex items-center space-x-4'>
             <img src='/logo.png' alt='Logo' className='h-11 w-auto' />
-            <h1 className='text-2xl font-bold'>Inventory Management</h1>
+            <h1 className='text-2xl font-bold bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent'>Lead Inventory Management</h1>
           </div>
           <div className='flex items-center space-x-4'>
             <UserProfile />
           </div>
         </div>
       </div>
-      <div className='flex-1 container mx-auto p-4 pt-12'>
-        <Tabs defaultValue='create' className='w-full'>
-          <TabsList className='grid w-full grid-cols-5 fixed top-12 left-0 right-0 bg-background z-20 border-b border-gray-200'>
-            <TabsTrigger value='create'>
-              <Package className='w-3 h-3 mr-1' />
+      <div className='flex-1 overflow-y-auto pt-[70px]'>
+        <div className='container mx-auto px-4 py-6 h-full'>
+          <Tabs defaultValue='create' className='w-full h-full flex flex-col'>
+            <TabsList className='grid w-full grid-cols-5 mb-6 bg-card/50 backdrop-blur-sm border border-border/50 flex-shrink-0'>
+            <TabsTrigger value='create' className='flex items-center gap-2 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground'>
+              <Package className='w-4 h-4' />
               Create Order
             </TabsTrigger>
-            <TabsTrigger value='view'>
-              <Archive className='w-3 h-3 mr-1' />
+            <TabsTrigger value='view' className='flex items-center gap-2 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground'>
+              <Archive className='w-4 h-4' />
               View Orders
             </TabsTrigger>
-            <TabsTrigger value='order'>
-              <BarChart3 className='w-3 h-3 mr-1' />
+            <TabsTrigger value='order' className='flex items-center gap-2 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground'>
+              <BarChart3 className='w-4 h-4' />
               Order Summary
             </TabsTrigger>
-            <TabsTrigger value='devices'>
-              <Archive className='w-3 h-3 mr-1' />
+            <TabsTrigger value='devices' className='flex items-center gap-2 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground'>
+              <Archive className='w-4 h-4' />
               Devices
             </TabsTrigger>
-            <TabsTrigger value='audit'>
-              <Archive className='w-3 h-3 mr-1' />
+            <TabsTrigger value='audit' className='flex items-center gap-2 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground'>
+              <Archive className='w-4 h-4' />
               Audit View
             </TabsTrigger>
           </TabsList>
-          <TabsContent value='create' className='space-y-4 mt-8'>
-            <CreateOrderForm
+          <TabsContent value='create' className='space-y-6 flex-1 overflow-y-auto'>
+            <UnifiedAssetForm
               orderType={orderType}
               setOrderType={setOrderType}
               salesOrder={salesOrder}
@@ -696,22 +698,18 @@ const InventoryManagement = () => {
               setNucleusId={setNucleusId}
               schoolName={schoolName}
               setSchoolName={setSchoolName}
-              tablets={tablets}
-              setTablets={setTablets}
-              tvs={tvs}
-              setTvs={setTvs}
               loading={loading}
               setLoading={setLoading}
               loadOrders={loadOrders}
               loadDevices={loadDevices}
               loadOrderSummary={loadOrderSummary}
-              openScanner={(itemId, index, type) => {
-                setCurrentSerialIndex({ itemId, index, type });
+              openScanner={(itemId, index, assetType) => {
+                setCurrentSerialIndex({ itemId, index, type: assetType as 'tablet' | 'tv' });
                 setShowScanner(true);
               }}
             />
           </TabsContent>
-          <TabsContent value='view' className='space-y-4 mt-8'>
+          <TabsContent value='view' className='flex-1 overflow-y-auto'>
             <OrdersTable
               orders={orders}
               setOrders={setOrders}
@@ -744,7 +742,7 @@ const InventoryManagement = () => {
               loadOrderSummary={loadOrderSummary}
             />
           </TabsContent>
-          <TabsContent value='order' className='space-y-4 mt-8'>
+          <TabsContent value='order' className='flex-1 overflow-y-auto'>
             <OrderSummaryTable
               orderSummary={orderSummary}
               selectedWarehouse={selectedWarehouse}
@@ -763,7 +761,7 @@ const InventoryManagement = () => {
               setSearchQuery={setSearchQuery}
             />
           </TabsContent>
-          <TabsContent value='devices' className='space-y-4 mt-8'>
+          <TabsContent value='devices' className='flex-1 overflow-y-auto'>
             <DevicesTable
               devices={devices}
               selectedWarehouse={selectedWarehouse}
@@ -794,27 +792,27 @@ const InventoryManagement = () => {
               setSearchQuery={setSearchQuery}
             />
           </TabsContent>
-          <TabsContent value='audit' className='space-y-4 mt-8'>
-          <AuditTable
-            devices={devices}
-            selectedWarehouse={selectedWarehouse}
-            setSelectedWarehouse={setSelectedWarehouse}
-            selectedAssetType={selectedAssetType}
-            setSelectedAssetType={setSelectedAssetType}
-            selectedModel={selectedModel}
-            setSelectedModel={setSelectedModel}
-            selectedAssetStatus={selectedAssetStatus}
-            setSelectedAssetStatus={setSelectedAssetStatus}
-            selectedConfiguration={selectedConfiguration}
-            setSelectedConfiguration={setSelectedConfiguration}
-            selectedProduct={selectedProduct}
-            setSelectedProduct={setSelectedProduct}
-            selectedOrderType={selectedOrderType}
-            setSelectedOrderType={setSelectedOrderType}
-            selectedAssetGroup={selectedAssetGroup}
-            setSelectedAssetGroup={setSelectedAssetGroup}
-            fromDate={fromDate ? { from: new Date(fromDate), to: undefined } : undefined}
-            setFromDate={(range) => setFromDate(range?.from?.toISOString().split('T')[0] || '')}
+          <TabsContent value='audit' className='flex-1 overflow-y-auto'>
+            <AuditTable
+              devices={devices}
+              selectedWarehouse={selectedWarehouse}
+              setSelectedWarehouse={setSelectedWarehouse}
+              selectedAssetType={selectedAssetType}
+              setSelectedAssetType={setSelectedAssetType}
+              selectedModel={selectedModel}
+              setSelectedModel={setSelectedModel}
+              selectedAssetStatus={selectedAssetStatus}
+              setSelectedAssetStatus={setSelectedAssetStatus}
+              selectedConfiguration={selectedConfiguration}
+              setSelectedConfiguration={setSelectedConfiguration}
+              selectedProduct={selectedProduct}
+              setSelectedProduct={setSelectedProduct}
+              selectedOrderType={selectedOrderType}
+              setSelectedOrderType={setSelectedOrderType}
+              selectedAssetGroup={selectedAssetGroup}
+              setSelectedAssetGroup={setSelectedAssetGroup}
+              fromDate={fromDate ? { from: new Date(fromDate), to: undefined } : undefined}
+              setFromDate={(range) => setFromDate(range?.from?.toISOString().split('T')[0] || '')}
               searchQuery={searchQuery}
               setSearchQuery={setSearchQuery}
               onUpdateAssetCheck={handleUpdateAssetCheck}
@@ -823,18 +821,16 @@ const InventoryManagement = () => {
             />
           </TabsContent>
         </Tabs>
-        <EnhancedBarcodeScanner
-          isOpen={showScanner}
-          onClose={() => {
-            setShowScanner(false);
-            setCurrentSerialIndex(null);
-          }}
-          onScan={handleScanResult}
-        />
+        </div>
       </div>
-      <footer className='w-full bg-gray-100 text-gray-600 text-left py-1 fixed bottom-0 left-2 z-10'>
-        Crafted by 😊 IT Infra minds, for IT Infra needs
-      </footer>
+      <EnhancedBarcodeScanner
+        isOpen={showScanner}
+        onClose={() => {
+          setShowScanner(false);
+          setCurrentSerialIndex(null);
+        }}
+        onScan={handleScanResult}
+      />
     </div>
   );
 };
