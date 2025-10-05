@@ -82,6 +82,11 @@ const OrderSummaryTable: React.FC<OrderSummaryTableProps> = ({
     'Hyundai TV - 65"',
     'Xentec TV - 39"',
     'Xentec TV - 43"',
+    '64 GB',
+    '128 GB',
+    '256 GB',
+    '512 GB',
+    'Pendrive',
   ];
 
   const filteredSummary = orderSummary.filter((summary) => {

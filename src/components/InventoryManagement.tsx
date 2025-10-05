@@ -3,7 +3,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Package, BarChart3, Archive } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
 import { supabase } from '@/integrations/supabase/client';
-import UnifiedAssetForm from './UnifiedAssetForm';
+import CreateOrderForm from './CreateOrderForm';
 import OrdersTable from './OrdersTable';
 import DevicesTable from './DevicesTable';
 import OrderSummaryTable from './OrderSummaryTable';
@@ -30,7 +30,7 @@ const InventoryManagement = () => {
   const [selectedStatus, setSelectedStatus] = useState<string>('All');
   const [selectedOrderType, setSelectedOrderType] = useState<string>('All');
   const [selectedAssetGroup, setSelectedAssetGroup] = useState<string>('All');
-  const [fromDate, setFromDate] = useState<DateRange | undefined>(undefined);
+  const [fromDate, setFromDate] = useState<string>('');
   const [toDate, setToDate] = useState<string>('');
   const [showDeleted, setShowDeleted] = useState<boolean>(false);
   const [searchQuery, setSearchQuery] = useState<string>('');
@@ -317,7 +317,7 @@ const InventoryManagement = () => {
       setLoading(true);
       const { data: ordersData, error: ordersError } = await supabase
         .from('orders')
-        .select('warehouse, asset_type, model, material_type, quantity')
+        .select('warehouse, asset_type, model, material_type, quantity, sd_card_size')
         .eq('is_deleted', false);
       if (ordersError) throw ordersError;
 
@@ -325,11 +325,17 @@ const InventoryManagement = () => {
       const assetTypeOptions = ['Tablet', 'TV', 'SD Card', 'Pendrive'];
       const tabletModels = ['Lenovo TB301XU', 'Lenovo TB301FU', 'Lenovo TB-8505F', 'Lenovo TB-7306F', 'Lenovo TB-7306X', 'Lenovo TB-7305X', 'IRA T811'];
       const tvModels = ['Hyundai TV - 39"', 'Hyundai TV - 43"', 'Hyundai TV - 50"', 'Hyundai TV - 55"', 'Hyundai TV - 65"', 'Xentec TV - 39"', 'Xentec TV - 43"'];
+      const sdCardSizes = ['64 GB', '128 GB', '256 GB', '512 GB'];
 
       const summaryMap = new Map<string, OrderSummary>();
       locations.forEach(warehouse => {
         assetTypeOptions.forEach(asset_type => {
-          const models = asset_type === 'Tablet' ? tabletModels : tvModels;
+          let models: string[] = [];
+          if (asset_type === 'Tablet') models = tabletModels;
+          else if (asset_type === 'TV') models = tvModels;
+          else if (asset_type === 'SD Card') models = sdCardSizes;
+          else if (asset_type === 'Pendrive') models = ['Pendrive'];
+          
           models.forEach(model => {
             const key = `${warehouse}-${asset_type}-${model}`;
             if (!summaryMap.has(key)) {
@@ -347,6 +353,7 @@ const InventoryManagement = () => {
       });
 
       ordersData?.forEach((order: any) => {
+        // Regular order processing
         const key = `${order.warehouse}-${order.asset_type}-${order.model}`;
         if (!summaryMap.has(key)) {
           summaryMap.set(key, { 
@@ -362,6 +369,25 @@ const InventoryManagement = () => {
         if (order.material_type === 'Inward') summary.inward += order.quantity;
         else if (order.material_type === 'Outward') summary.outward += order.quantity;
         summary.stock = summary.inward - summary.outward;
+
+        // SD Card calculation from Tablet orders
+        if (order.asset_type === 'Tablet' && order.sd_card_size) {
+          const sdKey = `${order.warehouse}-SD Card-${order.sd_card_size}`;
+          if (!summaryMap.has(sdKey)) {
+            summaryMap.set(sdKey, {
+              warehouse: order.warehouse,
+              asset_type: 'SD Card',
+              model: order.sd_card_size,
+              inward: 0,
+              outward: 0,
+              stock: 0
+            });
+          }
+          const sdSummary = summaryMap.get(sdKey)!;
+          if (order.material_type === 'Inward') sdSummary.inward += order.quantity;
+          else if (order.material_type === 'Outward') sdSummary.outward += order.quantity;
+          sdSummary.stock = sdSummary.inward - sdSummary.outward;
+        }
       });
 
       setOrderSummary(Array.from(summaryMap.values()));
@@ -659,7 +685,7 @@ const InventoryManagement = () => {
             </TabsTrigger>
           </TabsList>
           <TabsContent value='create' className='space-y-4 mt-8'>
-            <UnifiedAssetForm
+            <CreateOrderForm
               orderType={orderType}
               setOrderType={setOrderType}
               salesOrder={salesOrder}
@@ -703,8 +729,8 @@ const InventoryManagement = () => {
               setSelectedProduct={setSelectedProduct}
               selectedStatus={selectedStatus}
               setSelectedStatus={setSelectedStatus}
-              fromDate={fromDate?.from?.toISOString().split('T')[0] || ''}
-              setFromDate={(date) => setFromDate(date ? { from: date, to: undefined } : undefined)}
+              fromDate={fromDate}
+              setFromDate={setFromDate}
               toDate={toDate}
               setToDate={setToDate}
               showDeleted={showDeleted}
@@ -769,31 +795,26 @@ const InventoryManagement = () => {
             />
           </TabsContent>
           <TabsContent value='audit' className='space-y-4 mt-8'>
-            <AuditTable
-              devices={devices}
-              isClearing={isClearing}
-              selectedWarehouse={selectedWarehouse}
-              setSelectedWarehouse={setSelectedWarehouse}
-              selectedAssetType={selectedAssetType}
-              setSelectedAssetType={setSelectedAssetType}
-              selectedModel={selectedModel}
-              setSelectedModel={setSelectedModel}
-              selectedAssetStatus={selectedAssetStatus}
-              setSelectedAssetStatus={setSelectedAssetStatus}
-              selectedConfiguration={selectedConfiguration}
-              setSelectedConfiguration={setSelectedConfiguration}
-              selectedProduct={selectedProduct}
-              setSelectedProduct={setSelectedProduct}
-              selectedStatus={selectedStatus}
-              setSelectedStatus={setSelectedStatus}
-              selectedOrderType={selectedOrderType}
-              setSelectedOrderType={setSelectedOrderType}
-              selectedAssetGroup={selectedAssetGroup}
-              setSelectedAssetGroup={setSelectedAssetGroup}
-              fromDate={fromDate}
-              setFromDate={setFromDate}
-              toDate={toDate}
-              setToDate={setToDate}
+          <AuditTable
+            devices={devices}
+            selectedWarehouse={selectedWarehouse}
+            setSelectedWarehouse={setSelectedWarehouse}
+            selectedAssetType={selectedAssetType}
+            setSelectedAssetType={setSelectedAssetType}
+            selectedModel={selectedModel}
+            setSelectedModel={setSelectedModel}
+            selectedAssetStatus={selectedAssetStatus}
+            setSelectedAssetStatus={setSelectedAssetStatus}
+            selectedConfiguration={selectedConfiguration}
+            setSelectedConfiguration={setSelectedConfiguration}
+            selectedProduct={selectedProduct}
+            setSelectedProduct={setSelectedProduct}
+            selectedOrderType={selectedOrderType}
+            setSelectedOrderType={setSelectedOrderType}
+            selectedAssetGroup={selectedAssetGroup}
+            setSelectedAssetGroup={setSelectedAssetGroup}
+            fromDate={fromDate ? { from: new Date(fromDate), to: undefined } : undefined}
+            setFromDate={(range) => setFromDate(range?.from?.toISOString().split('T')[0] || '')}
               searchQuery={searchQuery}
               setSearchQuery={setSearchQuery}
               onUpdateAssetCheck={handleUpdateAssetCheck}
