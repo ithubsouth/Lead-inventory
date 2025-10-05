@@ -98,13 +98,13 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
     const newAsset: AssetItem = {
       id: generateId(),
       assetType,
-      model: assetType === 'SD Card' ? '' : undefined,
-      configuration: assetType === 'SD Card' ? undefined : '',
-      product: assetType === 'SD Card' ? undefined : '',
-      sdCardSize: assetType === 'SD Card' ? '' : undefined,
-      profileId: assetType === 'SD Card' ? '' : undefined,
-      size: assetType === 'Pendrive' ? '' : undefined,
-      material: assetType === 'Other' ? '' : undefined,
+      model: '',
+      configuration: '',
+      product: '',
+      sdCardSize: '',
+      profileId: '',
+      size: '',
+      material: '',
       quantity: 1,
       location: '',
       serialNumbers: hasSerials ? [''] : [],
@@ -191,9 +191,9 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
           .in('serial_number', allSerials)
           .order('updated_at', { ascending: false });
 
-        if (!deviceError && deviceData) {
+        if (!deviceError) {
           const latestBySerial: Record<string, any> = {};
-          deviceData.forEach((device: any) => {
+          deviceData?.forEach((device: any) => {
             if (!device.is_deleted && (!latestBySerial[device.serial_number] || new Date(device.updated_at) > new Date(latestBySerial[device.serial_number].updated_at))) {
               latestBySerial[device.serial_number] = device;
             }
@@ -214,15 +214,6 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
               } else if (!isInward) {
                 serialErrors[i] = 'Not in stock';
               }
-            } else if (!serial) {
-              serialErrors[i] = 'Serial number required';
-            }
-          }
-        } else {
-          console.error('Validation error:', deviceError);
-          for (let i = 0; i < asset.serialNumbers.length; i++) {
-            if (!asset.serialNumbers[i]?.trim()) {
-              serialErrors[i] = 'Serial number required';
             }
           }
         }
@@ -315,17 +306,20 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
     });
   };
 
-  const createOrderFromData = async (orderData: { orderType: string; salesOrder: string; dealId: string; nucleusId: string; schoolName: string }, assetsData: AssetItem[]) => {
+  const createOrder = async () => {
+    if (!validateForm()) return;
+
+    setLoading(true);
     try {
       const { data: userData, error: userError } = await supabase.auth.getUser();
       if (userError || !userData?.user?.email) {
         throw new Error('Failed to retrieve authenticated user email');
       }
       const userEmail = userData.user.email;
-      const materialType = ['Stock', 'Return'].includes(orderData.orderType) ? 'Inward' : 'Outward';
+      const materialType = ['Stock', 'Return'].includes(orderType) ? 'Inward' : 'Outward';
 
-      for (const asset of assetsData) {
-        const salesOrderId = orderData.salesOrder || generateSalesOrder();
+      for (const asset of assets) {
+        const salesOrderId = salesOrder || generateSalesOrder();
         const assetSerials = asset.hasSerials ? asset.serialNumbers.filter(sn => sn && sn.trim()) : [];
 
         // Determine model based on asset type
@@ -340,19 +334,19 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
           model = asset.material || '';
         }
 
-        const { data: orderDbData, error: orderError } = await supabase
+        const { data: orderData, error: orderError } = await supabase
           .from('orders')
           .insert({
-            order_type: orderData.orderType,
+            order_type: orderType,
             material_type: materialType,
             asset_type: asset.assetType,
             model: model,
             quantity: asset.quantity,
             warehouse: asset.location,
             sales_order: salesOrderId,
-            deal_id: orderData.dealId || null,
-            school_name: orderData.schoolName,
-            nucleus_id: orderData.nucleusId || null,
+            deal_id: dealId || null,
+            school_name: schoolName,
+            nucleus_id: nucleusId || null,
             serial_numbers: assetSerials,
             order_date: new Date().toISOString(),
             configuration: asset.configuration || null,
@@ -379,12 +373,12 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
             serial_number: serialNumber,
             warehouse: asset.location,
             sales_order: salesOrderId,
-            deal_id: orderData.dealId || null,
-            school_name: orderData.schoolName,
-            nucleus_id: orderData.nucleusId || null,
+            deal_id: dealId || null,
+            school_name: schoolName,
+            nucleus_id: nucleusId || null,
             status: materialType === 'Inward' ? 'Available' : 'Assigned',
             material_type: materialType,
-            order_id: orderDbData.id,
+            order_id: orderData.id,
             configuration: asset.configuration || null,
             product: asset.product || null,
             sd_card_size: asset.sdCardSize || null,
@@ -396,133 +390,23 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
           });
         }
 
-        await logHistory('orders', orderDbData.id, 'order_type', orderData.orderType, userEmail, salesOrderId);
+        await logHistory('orders', orderData.id, 'order_type', orderType, userEmail, salesOrderId);
       }
 
       toast({ title: 'Success', description: 'Orders created successfully' });
+      setAssets([]);
+      setSalesOrder('');
+      setDealId('');
+      setNucleusId('');
+      setSchoolName('');
       await loadOrders();
       await loadDevices();
       await loadOrderSummary();
     } catch (error: any) {
       toast({ title: 'Error', description: error.message, variant: 'destructive' });
-    }
-  };
-
-  const createOrder = async () => {
-    if (!validateForm()) return;
-
-    setLoading(true);
-    await createOrderFromData({ orderType, salesOrder, dealId, nucleusId, schoolName }, assets);
-    setAssets([]);
-    setSalesOrder('');
-    setDealId('');
-    setNucleusId('');
-    setSchoolName('');
-    setLoading(false);
-  };
-
-  const downloadTemplate = () => {
-    const headers = 'order_type,school_name,sales_order,deal_id,nucleus_id,asset_type,model,configuration,product,sd_card_size,profile_id,size,material,quantity,location,serial_numbers,asset_statuses,asset_groups\n';
-    const example = 'Stock,Example School,SO-123,DEAL-456,NUC-789,Tablet,ModelX,Config1,ProductA,32GB,Profile123,,,1,Location1,Serial001,Fresh,NFA\n';
-    const csvContent = headers + example;
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = 'bulk_upload_template.csv';
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-  };
-
-  const handleBulkUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    setLoading(true);
-    const reader = new FileReader();
-    reader.onload = async (event) => {
-      const csv = event.target?.result as string;
-      const lines = csv.split('\n').filter(line => line.trim());
-      if (lines.length < 2) {
-        toast({ title: 'Error', description: 'Invalid CSV file', variant: 'destructive' });
-        setLoading(false);
-        return;
-      }
-
-      const headers = lines[0].split(',').map(h => h.trim());
-      const rows = lines.slice(1).map(line => {
-        const values = line.split(',').map(v => v.trim());
-        return headers.reduce((obj, header, index) => {
-          obj[header] = values[index] || '';
-          return obj;
-        }, {} as Record<string, string>);
-      });
-
-      // Group rows by sales_order, or deal_id, or school_name
-      const groups: Record<string, { orderData: { orderType: string; salesOrder: string; dealId: string; nucleusId: string; schoolName: string }; assets: AssetItem[] }> = {};
-
-      rows.forEach(row => {
-        let key = row.sales_order;
-        if (!key) key = row.deal_id;
-        if (!key) key = row.school_name;
-        if (!key) return; // skip invalid row
-
-        if (!groups[key]) {
-          groups[key] = {
-            orderData: {
-              orderType: row.order_type,
-              salesOrder: row.sales_order,
-              dealId: row.deal_id,
-              nucleusId: row.nucleus_id,
-              schoolName: row.school_name,
-            },
-            assets: [],
-          };
-        }
-
-        const assetType = row.asset_type;
-        const quantity = parseInt(row.quantity) || 1;
-        const hasSerials = !!row.serial_numbers || ['Tablet', 'TV'].includes(assetType);
-        const serialNumbers = row.serial_numbers ? row.serial_numbers.split(',').map(s => s.trim()) : (hasSerials ? Array(quantity).fill('') : []);
-        const assetStatuses = row.asset_statuses ? row.asset_statuses.split(',').map(s => s.trim()) : Array(quantity).fill('Fresh');
-        const assetGroups = row.asset_groups ? row.asset_groups.split(',').map(g => g.trim()) : Array(quantity).fill('NFA');
-
-        // Adjust lengths if mismatch
-        if (hasSerials && serialNumbers.length !== quantity) {
-          toast({ title: 'Error', description: `Serial numbers count mismatch for row with asset_type ${assetType}`, variant: 'destructive' });
-          return;
-        }
-        if (assetStatuses.length !== quantity) assetStatuses = Array(quantity).fill(assetStatuses[0] || 'Fresh');
-        if (assetGroups.length !== quantity) assetGroups = Array(quantity).fill(assetGroups[0] || 'NFA');
-
-        groups[key].assets.push({
-          id: generateId(),
-          assetType,
-          model: row.model,
-          configuration: row.configuration,
-          product: row.product,
-          sdCardSize: row.sd_card_size,
-          profileId: row.profile_id,
-          size: row.size,
-          material: row.material,
-          quantity,
-          location: row.location,
-          serialNumbers,
-          assetStatuses,
-          assetGroups,
-          hasSerials,
-        });
-      });
-
-      // Process each group
-      for (const group of Object.values(groups)) {
-        await createOrderFromData(group.orderData, group.assets);
-      }
-
+    } finally {
       setLoading(false);
-    };
-    reader.readAsText(file);
+    }
   };
 
   const renderAssetFields = (asset: AssetItem) => {
@@ -551,34 +435,6 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
         </div>
 
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '12px' }}>
-          {/* SD Card Fields */}
-          {asset.assetType === 'SD Card' && (
-            <>
-              <div>
-                <label style={{ fontSize: '12px', display: 'block', marginBottom: '4px' }}>Size *</label>
-                <select
-                  value={asset.sdCardSize || ''}
-                  onChange={(e) => updateAsset(asset.id, 'sdCardSize', e.target.value)}
-                  style={{ width: '100%', padding: '8px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '14px' }}
-                >
-                  <option value="">Select Size</option>
-                  {sdCardSizes.map(s => <option key={s} value={s}>{s}</option>)}
-                </select>
-              </div>
-              <div>
-                <label style={{ fontSize: '12px', display: 'block', marginBottom: '4px' }}>Profile ID</label>
-                <select
-                  value={asset.profileId || ''}
-                  onChange={(e) => updateAsset(asset.id, 'profileId', e.target.value)}
-                  style={{ width: '100%', padding: '8px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '14px' }}
-                >
-                  <option value="">Select Profile</option>
-                  {profileIds.map(p => <option key={p} value={p}>{p}</option>)}
-                </select>
-              </div>
-            </>
-          )}
-
           {/* Tablet Fields */}
           {asset.assetType === 'Tablet' && (
             <>
@@ -614,6 +470,26 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
                   <option value="">Select Product</option>
                   {products.map(p => <option key={p} value={p}>{p}</option>)}
                 </select>
+              </div>
+              <div>
+                <label style={{ fontSize: '12px', display: 'block', marginBottom: '4px' }}>SD Card Size</label>
+                <select
+                  value={asset.sdCardSize || ''}
+                  onChange={(e) => updateAsset(asset.id, 'sdCardSize', e.target.value)}
+                  style={{ width: '100%', padding: '8px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '14px' }}
+                >
+                  <option value="">Select Size</option>
+                  {sdCardSizes.map(s => <option key={s} value={s}>{s}</option>)}
+                </select>
+              </div>
+              <div>
+                <label style={{ fontSize: '12px', display: 'block', marginBottom: '4px' }}>Profile ID</label>
+                <input
+                  type="text"
+                  value={asset.profileId || ''}
+                  onChange={(e) => updateAsset(asset.id, 'profileId', e.target.value)}
+                  style={{ width: '100%', padding: '8px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '14px' }}
+                />
               </div>
             </>
           )}
@@ -653,6 +529,32 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
                   <option value="">Select Product</option>
                   {products.map(p => <option key={p} value={p}>{p}</option>)}
                 </select>
+              </div>
+            </>
+          )}
+
+          {/* SD Card Fields */}
+          {asset.assetType === 'SD Card' && (
+            <>
+              <div>
+                <label style={{ fontSize: '12px', display: 'block', marginBottom: '4px' }}>Size *</label>
+                <select
+                  value={asset.sdCardSize || ''}
+                  onChange={(e) => updateAsset(asset.id, 'sdCardSize', e.target.value)}
+                  style={{ width: '100%', padding: '8px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '14px' }}
+                >
+                  <option value="">Select Size</option>
+                  {sdCardSizes.map(s => <option key={s} value={s}>{s}</option>)}
+                </select>
+              </div>
+              <div>
+                <label style={{ fontSize: '12px', display: 'block', marginBottom: '4px' }}>Profile ID</label>
+                <input
+                  type="text"
+                  value={asset.profileId || ''}
+                  onChange={(e) => updateAsset(asset.id, 'profileId', e.target.value)}
+                  style={{ width: '100%', padding: '8px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '14px' }}
+                />
               </div>
             </>
           )}
@@ -831,30 +733,6 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
   return (
     <div style={{ padding: '16px', maxWidth: '1200px', margin: '0 auto' }}>
       <h2 style={{ fontSize: '20px', fontWeight: 'bold', marginBottom: '16px' }}>Create Order</h2>
-
-      {/* Bulk Upload and Template Download */}
-      <div style={{ display: 'flex', gap: '16px', marginBottom: '16px' }}>
-        <button
-          onClick={downloadTemplate}
-          style={{
-            padding: '8px 16px',
-            border: '1px solid #3b82f6',
-            borderRadius: '4px',
-            background: '#3b82f6',
-            color: '#fff',
-            fontSize: '14px',
-            cursor: 'pointer'
-          }}
-        >
-          Download Template
-        </button>
-        <input
-          type="file"
-          accept=".csv"
-          onChange={handleBulkUpload}
-          style={{ padding: '8px' }}
-        />
-      </div>
 
       {/* Order Details */}
       <div style={{ border: '1px solid #e5e7eb', borderRadius: '8px', padding: '16px', marginBottom: '16px', background: '#fff' }}>
