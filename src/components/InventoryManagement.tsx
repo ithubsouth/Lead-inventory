@@ -240,6 +240,7 @@ const InventoryManagement = () => {
             product,
             asset_status,
             asset_group,
+            asset_condition,
             updated_at,
             updated_by,
             is_deleted,
@@ -283,6 +284,7 @@ const InventoryManagement = () => {
         product: device.product,
         asset_status: device.asset_status,
         asset_group: device.asset_group,
+        asset_condition: device.asset_condition,
         status: device.order_id && device.orders?.material_type === 'Outward' ? 'Assigned' : 'Stock',
         updated_at: device.updated_at,
         updated_by: device.updated_by,
@@ -391,7 +393,12 @@ const InventoryManagement = () => {
         }
       });
 
-      setOrderSummary(Array.from(summaryMap.values()));
+      const summaries = Array.from(summaryMap.values()).sort((a, b) => 
+        a.warehouse.localeCompare(b.warehouse) ||
+        a.asset_type.localeCompare(b.asset_type) ||
+        a.model.localeCompare(b.model)
+      );
+      setOrderSummary(summaries);
     } catch (error) {
       console.error('Error loading order summary:', error);
       toast({ title: 'Error', description: 'Failed to load order summary. Please try again.', variant: 'destructive' });
