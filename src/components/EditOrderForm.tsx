@@ -104,7 +104,7 @@ const EditOrderForm: React.FC<EditOrderFormProps> = ({ order, onSave, onCancel }
       }
     }
 
-    // Validate serials against stock for outward orders
+    // Validate serials against stock for outward orders and auto-populate status/group
     if (!isInward && formData.warehouse && allSerials.length > 0) {
       const { data, error } = await supabase
         .from('devices')
@@ -126,11 +126,27 @@ const EditOrderForm: React.FC<EditOrderFormProps> = ({ order, onSave, onCancel }
         }
       });
 
+      // Auto-populate asset_status and asset_group from inward records
+      const updatedDevices = [...devicesToValidate];
+      let hasUpdates = false;
+
       for (let i = 0; i < devicesToValidate.length; i++) {
         const serial = devicesToValidate[i].serial_number?.trim();
         if (serial && !errors[i]) {
           const latestDevice = latestBySerial[serial];
           if (latestDevice) {
+            // Auto-populate if current values are defaults
+            if (latestDevice.material_type === 'Inward') {
+              if (!updatedDevices[i].asset_status || updatedDevices[i].asset_status === 'Fresh') {
+                updatedDevices[i] = { ...updatedDevices[i], asset_status: latestDevice.asset_status || 'Fresh' };
+                hasUpdates = true;
+              }
+              if (!updatedDevices[i].asset_group || updatedDevices[i].asset_group === 'NFA') {
+                updatedDevices[i] = { ...updatedDevices[i], asset_group: latestDevice.asset_group || 'NFA' };
+                hasUpdates = true;
+              }
+            }
+
             if (latestDevice.material_type === 'Outward') {
               errors[i] = `Currently Outward in ${latestDevice.warehouse} (SO: ${latestDevice.sales_order || 'N/A'})`;
             } else if (latestDevice.warehouse !== formData.warehouse) {
@@ -140,6 +156,10 @@ const EditOrderForm: React.FC<EditOrderFormProps> = ({ order, onSave, onCancel }
             errors[i] = 'Not in stock';
           }
         }
+      }
+
+      if (hasUpdates) {
+        setDevices(updatedDevices);
       }
     }
 

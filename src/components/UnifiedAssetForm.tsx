@@ -182,7 +182,7 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
         }
       }
 
-      // Validate against database
+      // Validate against database and auto-populate status/group for outward orders
       if (allSerials.length > 0) {
         const { data: deviceData, error: deviceError } = await supabase
           .from('devices')
@@ -191,13 +191,43 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
           .in('serial_number', allSerials)
           .order('updated_at', { ascending: false });
 
-        if (!deviceError) {
+        if (!deviceError && deviceData) {
           const latestBySerial: Record<string, any> = {};
-          deviceData?.forEach((device: any) => {
+          deviceData.forEach((device: any) => {
             if (!device.is_deleted && (!latestBySerial[device.serial_number] || new Date(device.updated_at) > new Date(latestBySerial[device.serial_number].updated_at))) {
               latestBySerial[device.serial_number] = device;
             }
           });
+
+          // Auto-populate asset_status and asset_group for outward orders
+          if (!isInward) {
+            const newStatuses = [...asset.assetStatuses];
+            const newGroups = [...asset.assetGroups];
+            let updated = false;
+
+            for (let i = 0; i < asset.serialNumbers.length; i++) {
+              const serial = asset.serialNumbers[i]?.trim();
+              if (serial) {
+                const latestDevice = latestBySerial[serial];
+                if (latestDevice && latestDevice.material_type === 'Inward') {
+                  if (newStatuses[i] === 'Fresh' || !newStatuses[i]) {
+                    newStatuses[i] = latestDevice.asset_status || 'Fresh';
+                    updated = true;
+                  }
+                  if (newGroups[i] === 'NFA' || !newGroups[i]) {
+                    newGroups[i] = latestDevice.asset_group || 'NFA';
+                    updated = true;
+                  }
+                }
+              }
+            }
+
+            if (updated) {
+              setAssets(prevAssets => prevAssets.map(a => 
+                a.id === asset.id ? { ...a, assetStatuses: newStatuses, assetGroups: newGroups } : a
+              ));
+            }
+          }
 
           for (let i = 0; i < asset.serialNumbers.length; i++) {
             const serial = asset.serialNumbers[i]?.trim();
@@ -319,7 +349,18 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
       const materialType = ['Stock', 'Return'].includes(orderType) ? 'Inward' : 'Outward';
 
       for (const asset of assets) {
-        const salesOrderId = salesOrder || generateSalesOrder();
+        // Generate sales order from sales_order, deal_id, or school_name
+        let salesOrderId = salesOrder;
+        if (!salesOrderId) {
+          if (dealId) {
+            salesOrderId = `SO-${dealId}-${Math.random().toString(36).substr(2, 4)}`;
+          } else if (schoolName) {
+            const schoolCode = schoolName.substring(0, 3).toUpperCase();
+            salesOrderId = `SO-${schoolCode}-${Math.random().toString(36).substr(2, 5)}`;
+          } else {
+            salesOrderId = generateSalesOrder();
+          }
+        }
         const assetSerials = asset.hasSerials ? asset.serialNumbers.filter(sn => sn && sn.trim()) : [];
 
         // Determine model based on asset type
@@ -556,52 +597,102 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
                   style={{ width: '100%', padding: '8px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '14px' }}
                 />
               </div>
+              <div>
+                <label style={{ fontSize: '12px', display: 'block', marginBottom: '4px' }}>Product</label>
+                <select
+                  value={asset.product || ''}
+                  onChange={(e) => updateAsset(asset.id, 'product', e.target.value)}
+                  style={{ width: '100%', padding: '8px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '14px' }}
+                >
+                  <option value="">Select Product</option>
+                  {products.map(p => <option key={p} value={p}>{p}</option>)}
+                </select>
+              </div>
             </>
           )}
 
           {/* Cover Fields */}
           {asset.assetType === 'Cover' && (
-            <div>
-              <label style={{ fontSize: '12px', display: 'block', marginBottom: '4px' }}>Model *</label>
-              <select
-                value={asset.model || ''}
-                onChange={(e) => updateAsset(asset.id, 'model', e.target.value)}
-                style={{ width: '100%', padding: '8px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '14px' }}
-              >
-                <option value="">Select Model</option>
-                {coverModels.map(m => <option key={m} value={m}>{m}</option>)}
-              </select>
-            </div>
+            <>
+              <div>
+                <label style={{ fontSize: '12px', display: 'block', marginBottom: '4px' }}>Model *</label>
+                <select
+                  value={asset.model || ''}
+                  onChange={(e) => updateAsset(asset.id, 'model', e.target.value)}
+                  style={{ width: '100%', padding: '8px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '14px' }}
+                >
+                  <option value="">Select Model</option>
+                  {coverModels.map(m => <option key={m} value={m}>{m}</option>)}
+                </select>
+              </div>
+              <div>
+                <label style={{ fontSize: '12px', display: 'block', marginBottom: '4px' }}>Product</label>
+                <select
+                  value={asset.product || ''}
+                  onChange={(e) => updateAsset(asset.id, 'product', e.target.value)}
+                  style={{ width: '100%', padding: '8px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '14px' }}
+                >
+                  <option value="">Select Product</option>
+                  {products.map(p => <option key={p} value={p}>{p}</option>)}
+                </select>
+              </div>
+            </>
           )}
 
           {/* Pendrive Fields */}
           {asset.assetType === 'Pendrive' && (
-            <div>
-              <label style={{ fontSize: '12px', display: 'block', marginBottom: '4px' }}>Size *</label>
-              <select
-                value={asset.size || ''}
-                onChange={(e) => updateAsset(asset.id, 'size', e.target.value)}
-                style={{ width: '100%', padding: '8px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '14px' }}
-              >
-                <option value="">Select Size</option>
-                {pendriveSizes.map(s => <option key={s} value={s}>{s}</option>)}
-              </select>
-            </div>
+            <>
+              <div>
+                <label style={{ fontSize: '12px', display: 'block', marginBottom: '4px' }}>Size *</label>
+                <select
+                  value={asset.size || ''}
+                  onChange={(e) => updateAsset(asset.id, 'size', e.target.value)}
+                  style={{ width: '100%', padding: '8px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '14px' }}
+                >
+                  <option value="">Select Size</option>
+                  {pendriveSizes.map(s => <option key={s} value={s}>{s}</option>)}
+                </select>
+              </div>
+              <div>
+                <label style={{ fontSize: '12px', display: 'block', marginBottom: '4px' }}>Product</label>
+                <select
+                  value={asset.product || ''}
+                  onChange={(e) => updateAsset(asset.id, 'product', e.target.value)}
+                  style={{ width: '100%', padding: '8px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '14px' }}
+                >
+                  <option value="">Select Product</option>
+                  {products.map(p => <option key={p} value={p}>{p}</option>)}
+                </select>
+              </div>
+            </>
           )}
 
           {/* Other Fields */}
           {asset.assetType === 'Other' && (
-            <div>
-              <label style={{ fontSize: '12px', display: 'block', marginBottom: '4px' }}>Material *</label>
-              <select
-                value={asset.material || ''}
-                onChange={(e) => updateAsset(asset.id, 'material', e.target.value)}
-                style={{ width: '100%', padding: '8px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '14px' }}
-              >
-                <option value="">Select Material</option>
-                {otherMaterials.map(m => <option key={m} value={m}>{m}</option>)}
-              </select>
-            </div>
+            <>
+              <div>
+                <label style={{ fontSize: '12px', display: 'block', marginBottom: '4px' }}>Material *</label>
+                <select
+                  value={asset.material || ''}
+                  onChange={(e) => updateAsset(asset.id, 'material', e.target.value)}
+                  style={{ width: '100%', padding: '8px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '14px' }}
+                >
+                  <option value="">Select Material</option>
+                  {otherMaterials.map(m => <option key={m} value={m}>{m}</option>)}
+                </select>
+              </div>
+              <div>
+                <label style={{ fontSize: '12px', display: 'block', marginBottom: '4px' }}>Product</label>
+                <select
+                  value={asset.product || ''}
+                  onChange={(e) => updateAsset(asset.id, 'product', e.target.value)}
+                  style={{ width: '100%', padding: '8px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '14px' }}
+                >
+                  <option value="">Select Product</option>
+                  {products.map(p => <option key={p} value={p}>{p}</option>)}
+                </select>
+              </div>
+            </>
           )}
 
           {/* Common Fields */}
@@ -810,6 +901,103 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
               + {type}
             </button>
           ))}
+        </div>
+        
+        {/* Bulk Upload Section */}
+        <div style={{ marginTop: '16px', padding: '12px', background: '#f9fafb', borderRadius: '4px' }}>
+          <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginBottom: '8px' }}>
+            <label style={{ fontSize: '14px', fontWeight: 'bold' }}>Bulk Upload (CSV)</label>
+            <button
+              onClick={() => {
+                const csvTemplate = `Order Type,Asset Type,Model,Configuration,Product,SD Card Size,Profile ID,Size,Material,Location,Quantity,Serial Numbers (pipe-separated),Asset Status,Asset Group
+Hardware,Tablet,Lenovo TB301XU,2G+32 GB (Android-10),Lead,128 GB,Profile 1,,,Trichy,2,SN001|SN002,Fresh,NFA
+Stock,TV,Hyundai TV - 43",Smart TV,Propel,,,,,Bangalore,1,SN003,Fresh,NFA
+Hardware,SD Card,,,,256 GB,Profile 2,,,Hyderabad,5,,Fresh,NFA
+Hardware,Cover,M8 Flap Cover 4th gen - Lead,,Lead,,,,, Trichy,3,,Fresh,NFA
+Hardware,Pendrive,,,,,,32 GB,,Kolkata,2,SN004|SN005,Fresh,NFA
+Hardware,Other,,,Lead,,,, Dongle,Indore,1,,Fresh,NFA`;
+                const blob = new Blob([csvTemplate], { type: 'text/csv' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = 'bulk_upload_template.csv';
+                a.click();
+                URL.revokeObjectURL(url);
+              }}
+              style={{ padding: '6px 12px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '12px', background: '#fff', cursor: 'pointer' }}
+            >
+              Download Template
+            </button>
+          </div>
+          <input
+            type="file"
+            accept=".csv"
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              if (!file) return;
+
+              const reader = new FileReader();
+              reader.onload = async (evt) => {
+                try {
+                  const text = evt.target?.result as string;
+                  const lines = text.split('\n').filter(line => line.trim());
+                  const headers = lines[0].split(',').map(h => h.trim());
+
+                  const newAssets: AssetItem[] = [];
+                  for (let i = 1; i < lines.length; i++) {
+                    const values = lines[i].split(',').map((v: string) => v.trim().replace(/^"|"$/g, ''));
+                    const orderTypeVal = values[headers.indexOf('Order Type')];
+                    const assetTypeVal = values[headers.indexOf('Asset Type')];
+                    const modelVal = values[headers.indexOf('Model')];
+                    const configVal = values[headers.indexOf('Configuration')];
+                    const productVal = values[headers.indexOf('Product')];
+                    const sdCardVal = values[headers.indexOf('SD Card Size')];
+                    const profileVal = values[headers.indexOf('Profile ID')];
+                    const sizeVal = values[headers.indexOf('Size')];
+                    const materialVal = values[headers.indexOf('Material')];
+                    const locationVal = values[headers.indexOf('Location')];
+                    const quantityVal = parseInt(values[headers.indexOf('Quantity')]) || 1;
+                    const serialsVal = values[headers.indexOf('Serial Numbers (pipe-separated)')];
+                    const statusVal = values[headers.indexOf('Asset Status')];
+                    const groupVal = values[headers.indexOf('Asset Group')];
+
+                    const serialNumbers = serialsVal ? serialsVal.split('|').map(s => s.trim()) : [];
+                    const hasSerials = defaultHasSerials(assetTypeVal);
+
+                    newAssets.push({
+                      id: generateId(),
+                      assetType: assetTypeVal,
+                      model: modelVal || '',
+                      configuration: configVal || '',
+                      product: productVal || '',
+                      sdCardSize: sdCardVal || '',
+                      profileId: profileVal || '',
+                      size: sizeVal || '',
+                      material: materialVal || '',
+                      quantity: quantityVal,
+                      location: locationVal,
+                      serialNumbers: hasSerials ? (serialNumbers.length > 0 ? serialNumbers : Array(quantityVal).fill('')) : [],
+                      assetStatuses: Array(quantityVal).fill(statusVal || 'Fresh'),
+                      assetGroups: Array(quantityVal).fill(groupVal || 'NFA'),
+                      hasSerials,
+                    });
+
+                    // Set order type if from CSV
+                    if (orderTypeVal && !orderType) {
+                      setOrderType(orderTypeVal);
+                    }
+                  }
+
+                  setAssets([...assets, ...newAssets]);
+                  toast({ title: 'Success', description: `Imported ${newAssets.length} assets from CSV` });
+                } catch (error) {
+                  toast({ title: 'Error', description: 'Failed to parse CSV file. Please check format.', variant: 'destructive' });
+                }
+              };
+              reader.readAsText(file);
+            }}
+            style={{ width: '100%', padding: '8px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '14px' }}
+          />
         </div>
       </div>
 
