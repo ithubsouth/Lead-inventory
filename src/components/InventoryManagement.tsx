@@ -138,7 +138,7 @@ const InventoryManagement = () => {
           material_type: order.material_type as 'Inward' | 'Outward',
           asset_type: order.asset_type as 'Tablet' | 'TV' | 'SD Card' | 'Pendrive',
           serial_numbers: (order.serial_numbers || []).map((sn: string) => sn.trim().toUpperCase()),
-          is_deleted: order.is_deleted || false, // Ensure is_deleted is present
+          is_deleted: order.is_deleted || false,
         });
       });
 
@@ -197,7 +197,7 @@ const InventoryManagement = () => {
           serial_numbers: order.serial_numbers || [],
           status,
           statusDetails,
-          is_deleted: order.is_deleted || false, // Ensure is_deleted is included
+          is_deleted: order.is_deleted || false,
         } as Order & { statusDetails: string };
       });
 
@@ -245,18 +245,20 @@ const InventoryManagement = () => {
             updated_by,
             is_deleted,
             order_id,
-            orders!left(material_type),
+            orders!left(id, material_type),
             asset_check
           `)
           .order('updated_at', { ascending: false })
           .range(page * batchSize, (page + 1) * batchSize - 1);
-        if (error) throw error;
+        if (error) {
+          console.error(`Supabase fetch error (page ${page}):`, error);
+          throw error;
+        }
+        console.log(`Fetched devices batch ${page}:`, data.length);
         allDevices = [...allDevices, ...data];
         hasMore = data.length === batchSize;
         page += 1;
       }
-
-      console.log('Raw devices from Supabase:', allDevices);
 
       if (allDevices.length === 0) {
         console.warn('No devices retrieved from Supabase.');
@@ -267,35 +269,41 @@ const InventoryManagement = () => {
         });
       }
 
-      const updatedDevices = allDevices.map((device: any) => ({
-        id: device.id,
-        sales_order: device.sales_order,
-        order_type: device.order_type,
-        warehouse: device.warehouse,
-        deal_id: device.deal_id,
-        nucleus_id: device.nucleus_id,
-        school_name: device.school_name,
-        asset_type: device.asset_type,
-        model: device.model,
-        configuration: device.configuration,
-        serial_number: device.serial_number,
-        sd_card_size: device.sd_card_size,
-        profile_id: device.profile_id,
-        product: device.product,
-        asset_status: device.asset_status,
-        asset_group: device.asset_group,
-        asset_condition: device.asset_condition,
-        status: device.order_id && device.orders?.material_type === 'Outward' ? 'Assigned' : 'Stock',
-        updated_at: device.updated_at,
-        updated_by: device.updated_by,
-        is_deleted: device.is_deleted || false,
-        order_id: device.order_id,
-        material_type: device.orders?.material_type,
-        asset_check: device.asset_check || 'Unmatched',
-      })) as Device[];
+      const updatedDevices = allDevices.map((device: any) => {
+        const materialType = device.orders?.material_type || null;
+        const status = device.order_id && materialType === 'Outward' ? 'Assigned' : 'Stock';
+        return {
+          id: device.id,
+          sales_order: device.sales_order?.trim() || '',
+          order_type: device.order_type?.trim() || '',
+          warehouse: device.warehouse?.trim() || '',
+          deal_id: device.deal_id?.trim() || '',
+          nucleus_id: device.nucleus_id?.trim() || '',
+          school_name: device.school_name?.trim() || '',
+          asset_type: device.asset_type?.trim() || '',
+          model: device.model?.trim() || '',
+          configuration: device.configuration?.trim() || '',
+          serial_number: device.serial_number?.trim() || '',
+          sd_card_size: device.sd_card_size?.trim() || '',
+          profile_id: device.profile_id?.trim() || '',
+          product: device.product?.trim() || '',
+          asset_status: device.asset_status?.trim() || '',
+          asset_group: device.asset_group?.trim() || '',
+          asset_condition: device.asset_condition?.trim() || '',
+          status,
+          updated_at: device.updated_at ? new Date(device.updated_at).toISOString() : '',
+          updated_by: device.updated_by?.trim() || '',
+          is_deleted: device.is_deleted || false,
+          order_id: device.order_id || null,
+          material_type: materialType,
+          asset_check: device.asset_check?.trim() || 'Unmatched',
+        } as Device;
+      });
 
-      console.log('Processed devices:', updatedDevices);
+      console.log('Processed devices:', updatedDevices.length);
+      console.log('Devices with sales_order 905643:', updatedDevices.filter(d => d.sales_order === '905643'));
       setDevices(updatedDevices);
+
       if (updatedDevices.length === 0) {
         toast({
           title: 'Warning',
@@ -356,7 +364,6 @@ const InventoryManagement = () => {
       });
 
       ordersData?.forEach((order: any) => {
-        // Regular order processing
         const key = `${order.warehouse}-${order.asset_type}-${order.model}`;
         if (!summaryMap.has(key)) {
           summaryMap.set(key, { 
@@ -373,7 +380,6 @@ const InventoryManagement = () => {
         else if (order.material_type === 'Outward') summary.outward += order.quantity;
         summary.stock = summary.inward - summary.outward;
 
-        // SD Card calculation from Tablet orders
         if (order.asset_type === 'Tablet' && order.sd_card_size) {
           const sdKey = `${order.warehouse}-SD Card-${order.sd_card_size}`;
           if (!summaryMap.has(sdKey)) {
@@ -451,7 +457,6 @@ const InventoryManagement = () => {
         throw new Error(`Invalid check status: ${checkStatus}`);
       }
 
-      // Optimistic update
       setDevices((prevDevices) =>
         prevDevices.map((device) =>
           device.id === deviceId
@@ -473,7 +478,6 @@ const InventoryManagement = () => {
         .select();
 
       if (error) {
-        // Rollback optimistic update
         setDevices((prevDevices) =>
           prevDevices.map((device) =>
             device.id === deviceId ? { ...device, asset_check: device.asset_check || 'Unmatched' } : device
@@ -493,7 +497,6 @@ const InventoryManagement = () => {
           description: `Asset check set to ${validStatus} for device ${deviceId}.`,
         });
       } else {
-        // Rollback optimistic update
         setDevices((prevDevices) =>
           prevDevices.map((device) =>
             device.id === deviceId ? { ...device, asset_check: device.asset_check || 'Unmatched' } : device
