@@ -4,6 +4,7 @@ export const orderTypes = [
   'Replacement Hardware (FOC)',
   'Replacement Hardware (CB)',
   'Exp Hub',
+  'SD Card',
   'Stock Movement',
   'Employee',
   'Stock',
@@ -22,13 +23,15 @@ export const tabletModels = [
 ];
 
 export const tvModels = [
+  'Xentec TV - 39"',
+  'Xentec TV - 43"',
   'Hyundai TV - 39"',
   'Hyundai TV - 43"',
   'Hyundai TV - 50"',
   'Hyundai TV - 55"',
   'Hyundai TV - 65"',
-  'Xentec TV - 39"',
-  'Xentec TV - 43"',
+  'Hyundai TV - 75"',
+  'Hyundai TV - 85"',
   'Other TV - 39"',
 ];
 
@@ -66,6 +69,7 @@ export const coverModels = [
   'M8 Flap Cover 4th gen - Propel',
   'M8 Flap Cover 4th gen - Pinnacle',
   'M8 Flap Cover 4th gen - Techbook',
+  'M8 Flap Cover 4th gen - BoardAce',
 ];
 
 export const sdCardSizes = [
@@ -85,20 +89,22 @@ export const pendriveSizes = [
 
 export const otherMaterials = [
   'Dongle',
+  'USB Wall Adapter',
   'Synology NAS',
   'Netgear NAS',
-  'Access Point',
   '1 TB HDD',
+  'Access Point',
   'Hybrid Router',
   'Sim Router',
   'NAS Power Adapter',
   'Router Power Adapter',
   'HDMI Cable',
-  'Mini VGA Gender',
+  'Mini VGA Gender Changer',
   'HDMI to VGA Converter',
   'Tablet Charger - C Type',
-  'Tablet Charger',
+  'Tablet Charger - Micro USB',
   'SD Card Box',
+  'Envelope'
 ];
 
 export const locations = [
