@@ -88,7 +88,7 @@ export const CreateUserDialog = ({ onSuccess }: CreateUserDialogProps) => {
       });
       if (authError) throw authError;
 
-      const { error: insertError } = await supabase.from('users').insert({
+      const { error: insertError } = await (supabase as any).from('users').insert({
         id: authData.user?.id,
         email,
         department,

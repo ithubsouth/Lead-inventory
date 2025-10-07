@@ -461,7 +461,7 @@ const AuditTable: React.FC<AuditTableProps> = ({
             </div>
             <div style={{ flex: '0 0 150px' }}>
               <label htmlFor="assetCheckFilter" style={{ fontSize: '12px', color: '#6b7280', display: 'block', marginBottom: '2px', whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' }}>Asset Check</label>
-              <Select value={filterCheck} onValueChange={setFilterCheck}>
+              <Select value={filterCheck} onValueChange={(value) => setFilterCheck(value as "all" | "matched" | "unmatched")}>
                 <SelectTrigger id="assetCheckFilter" style={{ fontSize: '12px', width: '100%', border: '1px solid #d1d5db', borderRadius: '4px', padding: '6px', whiteSpace: 'nowrap', textOverflow: 'ellipsis', height: '28px' }}>
                   <SelectValue placeholder="All Asset Checks" />
                 </SelectTrigger>
@@ -477,7 +477,7 @@ const AuditTable: React.FC<AuditTableProps> = ({
               <DatePickerWithRange
                 date={fromDate}
                 setDate={setFromDate}
-                style={{ height: '28px' }}
+                className="h-7"
               />
             </div>
           </div>

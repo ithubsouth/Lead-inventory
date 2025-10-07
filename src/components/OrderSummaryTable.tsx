@@ -49,8 +49,8 @@ const OrderSummaryTable: React.FC<OrderSummaryTableProps> = ({
   useEffect(() => {
     console.log('OrderSummaryTable props:', {
       orderSummaryLength: orderSummary.length,
-      deletedSummaries: orderSummary.filter(s => s.stock === 0).length,
-      activeSummaries: orderSummary.filter(s => s.stock !== 0).length,
+      deletedSummaries: orderSummary.filter(s => s.inward === 0 && s.outward === 0).length,
+      activeSummaries: orderSummary.filter(s => s.inward !== 0 || s.outward !== 0).length,
       selectedWarehouse,
       selectedAssetType,
       selectedModel,
@@ -82,10 +82,15 @@ const OrderSummaryTable: React.FC<OrderSummaryTableProps> = ({
     'Hyundai TV - 65"',
     'Xentec TV - 39"',
     'Xentec TV - 43"',
+    '64 GB',
+    '128 GB',
+    '256 GB',
+    '512 GB',
+    'Pendrive',
   ];
 
   const filteredSummary = orderSummary.filter((summary) => {
-    const matchesDeleted = showDeleted || summary.stock !== 0;
+    const matchesDeleted = showDeleted || (summary.inward !== 0 || summary.outward !== 0);
     const matchesWarehouse = selectedWarehouse === 'All' || summary.warehouse === selectedWarehouse;
     const matchesAssetType = selectedAssetType === 'All' || summary.asset_type === selectedAssetType;
     const matchesModel = selectedModel === 'All' || summary.model === selectedModel;
@@ -132,8 +137,8 @@ const OrderSummaryTable: React.FC<OrderSummaryTableProps> = ({
     console.log('Filtered and sorted summaries summary:', {
       filteredLength: filteredSummary.length,
       sortedLength: sortedSummary.length,
-      deletedSummaries: sortedSummary.filter(s => s.stock === 0).length,
-      activeSummaries: sortedSummary.filter(s => s.stock !== 0).length,
+      deletedSummaries: sortedSummary.filter(s => s.inward === 0 && s.outward === 0).length,
+      activeSummaries: sortedSummary.filter(s => s.inward !== 0 || s.outward !== 0).length,
     });
   }, [filteredSummary, sortedSummary]);
 
@@ -183,6 +188,15 @@ const OrderSummaryTable: React.FC<OrderSummaryTableProps> = ({
     window.URL.revokeObjectURL(url);
   };
 
+  const columnWidths = {
+    warehouse: '150px',
+    asset_type: '120px',
+    model: '150px',
+    inward: '80px',
+    outward: '80px',
+    stock: '80px',
+  };
+
   return (
     <div style={{ border: '1px solid #e2e8f0', borderRadius: '8px', background: '#fff', padding: '16px' }}>
       <div style={{ padding: '8px 0' }}></div>
@@ -211,7 +225,7 @@ const OrderSummaryTable: React.FC<OrderSummaryTableProps> = ({
               onClick={() => setShowDeleted(!showDeleted)}
               style={{ border: '1px solid #d1d5db', borderRadius: '4px', padding: '4px 8px', fontSize: '12px' }}
             >
-              {showDeleted ? 'Show Active' : 'Show Deleted'}
+              {showDeleted ? 'Hide Zero Stock' : 'Show Zero Stock'}
             </button>
           </div>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginTop: '8px' }}>
@@ -290,38 +304,47 @@ const OrderSummaryTable: React.FC<OrderSummaryTableProps> = ({
           <div style={{ fontSize: '12px' }}>No order summary available. Create an order or check your database.</div>
         ) : (
           <>
-            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-              <thead>
-                <tr>
-                  <th style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', textAlign: 'left' }}>Warehouse</th>
-                  <th style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', textAlign: 'left' }}>Asset Type</th>
-                  <th style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', textAlign: 'left' }}>Model</th>
-                  <th style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', textAlign: 'left' }}>Inward</th>
-                  <th style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', textAlign: 'left' }}>Outward</th>
-                  <th style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', textAlign: 'left' }}>Stock</th>
-                </tr>
-              </thead>
-              <tbody>
-                {paginatedSummary.length === 0 ? (
+            <div
+              style={{
+                overflowX: 'auto',
+                overflowY: 'auto',
+                maxHeight: '400px',
+                position: 'relative',
+              }}
+            >
+              <table style={{ width: '100%', minWidth: '800px', borderCollapse: 'collapse' }}>
+                <thead>
                   <tr>
-                    <td colSpan={6} style={{ textAlign: 'center', fontSize: '12px', padding: '8px' }}>
-                      No summary data found with current filters. Try adjusting the filters.
-                    </td>
+                    <th style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', textAlign: 'left', position: 'sticky', top: 0, background: '#fff', zIndex: 20, width: columnWidths.warehouse }}>Warehouse</th>
+                    <th style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', textAlign: 'left', position: 'sticky', top: 0, background: '#fff', zIndex: 20, width: columnWidths.asset_type }}>Asset Type</th>
+                    <th style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', textAlign: 'left', position: 'sticky', top: 0, background: '#fff', zIndex: 20, width: columnWidths.model }}>Model</th>
+                    <th style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', textAlign: 'left', position: 'sticky', top: 0, background: '#fff', zIndex: 20, width: columnWidths.inward }}>Inward</th>
+                    <th style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', textAlign: 'left', position: 'sticky', top: 0, background: '#fff', zIndex: 20, width: columnWidths.outward }}>Outward</th>
+                    <th style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', textAlign: 'left', position: 'sticky', top: 0, background: '#fff', zIndex: 20, width: columnWidths.stock }}>Stock</th>
                   </tr>
-                ) : (
-                  paginatedSummary.map((summary, index) => (
-                    <tr key={index}>
-                      <td style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db' }}>{summary.warehouse}</td>
-                      <td style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db' }}>{summary.asset_type}</td>
-                      <td style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db' }}>{summary.model}</td>
-                      <td style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db' }}>{summary.inward}</td>
-                      <td style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db' }}>{summary.outward}</td>
-                      <td style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db' }}>{summary.stock}</td>
+                </thead>
+                <tbody>
+                  {paginatedSummary.length === 0 ? (
+                    <tr>
+                      <td colSpan={6} style={{ textAlign: 'center', fontSize: '12px', padding: '8px' }}>
+                        No summary data found with current filters. Try adjusting the filters.
+                      </td>
                     </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
+                  ) : (
+                    paginatedSummary.map((summary, index) => (
+                      <tr key={index}>
+                        <td style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', width: columnWidths.warehouse }}>{summary.warehouse}</td>
+                        <td style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', width: columnWidths.asset_type }}>{summary.asset_type}</td>
+                        <td style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', width: columnWidths.model }}>{summary.model}</td>
+                        <td style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', width: columnWidths.inward }}>{summary.inward}</td>
+                        <td style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', width: columnWidths.outward }}>{summary.outward}</td>
+                        <td style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', width: columnWidths.stock }}>{summary.stock}</td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
 
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '8px', fontSize: '12px' }}>
               <div>

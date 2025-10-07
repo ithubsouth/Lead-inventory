@@ -3,6 +3,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Package, BarChart3, Archive } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
 import { supabase } from '@/integrations/supabase/client';
+import UnifiedAssetForm from './UnifiedAssetForm';
 import CreateOrderForm from './CreateOrderForm';
 import OrdersTable from './OrdersTable';
 import DevicesTable from './DevicesTable';
@@ -30,7 +31,7 @@ const InventoryManagement = () => {
   const [selectedStatus, setSelectedStatus] = useState<string>('All');
   const [selectedOrderType, setSelectedOrderType] = useState<string>('All');
   const [selectedAssetGroup, setSelectedAssetGroup] = useState<string>('All');
-  const [fromDate, setFromDate] = useState<DateRange | undefined>(undefined);
+  const [fromDate, setFromDate] = useState<string>('');
   const [toDate, setToDate] = useState<string>('');
   const [showDeleted, setShowDeleted] = useState<boolean>(false);
   const [searchQuery, setSearchQuery] = useState<string>('');
@@ -57,14 +58,14 @@ const InventoryManagement = () => {
           return;
         }
 
-        const { data: userData, error: roleError } = await supabase
+        const { data: userData, error: roleError} = await (supabase as any)
           .from('users')
           .select('role')
           .eq('email', user.email)
           .single();
         if (roleError) throw roleError;
-        setUserRole(userData?.role || null);
-        if (!userData?.role) {
+        setUserRole((userData as any)?.role || null);
+        if (!(userData as any)?.role) {
           console.warn('No role found for user.');
           toast({ title: 'Warning', description: 'No role assigned to user. Updates may fail.', variant: 'destructive' });
         }
@@ -137,7 +138,7 @@ const InventoryManagement = () => {
           material_type: order.material_type as 'Inward' | 'Outward',
           asset_type: order.asset_type as 'Tablet' | 'TV' | 'SD Card' | 'Pendrive',
           serial_numbers: (order.serial_numbers || []).map((sn: string) => sn.trim().toUpperCase()),
-          is_deleted: order.is_deleted || false, // Ensure is_deleted is present
+          is_deleted: order.is_deleted || false,
         });
       });
 
@@ -196,7 +197,7 @@ const InventoryManagement = () => {
           serial_numbers: order.serial_numbers || [],
           status,
           statusDetails,
-          is_deleted: order.is_deleted || false, // Ensure is_deleted is included
+          is_deleted: order.is_deleted || false,
         } as Order & { statusDetails: string };
       });
 
@@ -239,22 +240,25 @@ const InventoryManagement = () => {
             product,
             asset_status,
             asset_group,
+            asset_condition,
             updated_at,
             updated_by,
             is_deleted,
             order_id,
-            orders!left(material_type),
+            orders!left(id, material_type),
             asset_check
           `)
           .order('updated_at', { ascending: false })
           .range(page * batchSize, (page + 1) * batchSize - 1);
-        if (error) throw error;
+        if (error) {
+          console.error(`Supabase fetch error (page ${page}):`, error);
+          throw error;
+        }
+        console.log(`Fetched devices batch ${page}:`, data.length);
         allDevices = [...allDevices, ...data];
         hasMore = data.length === batchSize;
         page += 1;
       }
-
-      console.log('Raw devices from Supabase:', allDevices);
 
       if (allDevices.length === 0) {
         console.warn('No devices retrieved from Supabase.');
@@ -265,34 +269,42 @@ const InventoryManagement = () => {
         });
       }
 
-      const updatedDevices = allDevices.map((device: any) => ({
-        id: device.id,
-        sales_order: device.sales_order,
-        order_type: device.order_type,
-        warehouse: device.warehouse,
-        deal_id: device.deal_id,
-        nucleus_id: device.nucleus_id,
-        school_name: device.school_name,
-        asset_type: device.asset_type,
-        model: device.model,
-        configuration: device.configuration,
-        serial_number: device.serial_number,
-        sd_card_size: device.sd_card_size,
-        profile_id: device.profile_id,
-        product: device.product,
-        asset_status: device.asset_status,
-        asset_group: device.asset_group,
-        status: device.order_id && device.orders?.material_type === 'Outward' ? 'Assigned' : 'Stock',
-        updated_at: device.updated_at,
-        updated_by: device.updated_by,
-        is_deleted: device.is_deleted || false,
-        order_id: device.order_id,
-        material_type: device.orders?.material_type,
-        asset_check: device.asset_check || 'Unmatched',
-      })) as Device[];
+      const updatedDevices = allDevices.map((device: any) => {
+        const materialType = device.orders?.material_type || null;
+        const status = device.order_id && materialType === 'Outward' ? 'Assigned' : 'Stock';
+        return {
+          id: device.id,
+          sales_order: device.sales_order?.trim() || '',
+          order_type: device.order_type?.trim() || '',
+          warehouse: device.warehouse?.trim() || '',
+          deal_id: device.deal_id?.trim() || '',
+          nucleus_id: device.nucleus_id?.trim() || '',
+          school_name: device.school_name?.trim() || '',
+          asset_type: device.asset_type?.trim() || '',
+          model: device.model?.trim() || '',
+          configuration: device.configuration?.trim() || '',
+          serial_number: device.serial_number?.trim() || '',
+          sd_card_size: device.sd_card_size?.trim() || '',
+          profile_id: device.profile_id?.trim() || '',
+          product: device.product?.trim() || '',
+          asset_status: device.asset_status?.trim() || '',
+          asset_group: device.asset_group?.trim() || '',
+          asset_condition: device.asset_condition?.trim() || '',
+          status,
+          created_at: device.created_at || '',
+          updated_at: device.updated_at ? new Date(device.updated_at).toISOString() : '',
+          updated_by: device.updated_by?.trim() || '',
+          is_deleted: device.is_deleted || false,
+          order_id: device.order_id || null,
+          material_type: materialType,
+          asset_check: device.asset_check?.trim() || 'Unmatched',
+        } as Device;
+      });
 
-      console.log('Processed devices:', updatedDevices);
+      console.log('Processed devices:', updatedDevices.length);
+      console.log('Devices with sales_order 905643:', updatedDevices.filter(d => d.sales_order === '905643'));
       setDevices(updatedDevices);
+
       if (updatedDevices.length === 0) {
         toast({
           title: 'Warning',
@@ -317,7 +329,7 @@ const InventoryManagement = () => {
       setLoading(true);
       const { data: ordersData, error: ordersError } = await supabase
         .from('orders')
-        .select('warehouse, asset_type, model, material_type, quantity')
+        .select('warehouse, asset_type, model, material_type, quantity, sd_card_size')
         .eq('is_deleted', false);
       if (ordersError) throw ordersError;
 
@@ -325,11 +337,17 @@ const InventoryManagement = () => {
       const assetTypeOptions = ['Tablet', 'TV', 'SD Card', 'Pendrive'];
       const tabletModels = ['Lenovo TB301XU', 'Lenovo TB301FU', 'Lenovo TB-8505F', 'Lenovo TB-7306F', 'Lenovo TB-7306X', 'Lenovo TB-7305X', 'IRA T811'];
       const tvModels = ['Hyundai TV - 39"', 'Hyundai TV - 43"', 'Hyundai TV - 50"', 'Hyundai TV - 55"', 'Hyundai TV - 65"', 'Xentec TV - 39"', 'Xentec TV - 43"'];
+      const sdCardSizes = ['64 GB', '128 GB', '256 GB', '512 GB'];
 
       const summaryMap = new Map<string, OrderSummary>();
       locations.forEach(warehouse => {
         assetTypeOptions.forEach(asset_type => {
-          const models = asset_type === 'Tablet' ? tabletModels : tvModels;
+          let models: string[] = [];
+          if (asset_type === 'Tablet') models = tabletModels;
+          else if (asset_type === 'TV') models = tvModels;
+          else if (asset_type === 'SD Card') models = sdCardSizes;
+          else if (asset_type === 'Pendrive') models = ['Pendrive'];
+          
           models.forEach(model => {
             const key = `${warehouse}-${asset_type}-${model}`;
             if (!summaryMap.has(key)) {
@@ -362,9 +380,32 @@ const InventoryManagement = () => {
         if (order.material_type === 'Inward') summary.inward += order.quantity;
         else if (order.material_type === 'Outward') summary.outward += order.quantity;
         summary.stock = summary.inward - summary.outward;
+
+        if (order.asset_type === 'Tablet' && order.sd_card_size) {
+          const sdKey = `${order.warehouse}-SD Card-${order.sd_card_size}`;
+          if (!summaryMap.has(sdKey)) {
+            summaryMap.set(sdKey, {
+              warehouse: order.warehouse,
+              asset_type: 'SD Card',
+              model: order.sd_card_size,
+              inward: 0,
+              outward: 0,
+              stock: 0
+            });
+          }
+          const sdSummary = summaryMap.get(sdKey)!;
+          if (order.material_type === 'Inward') sdSummary.inward += order.quantity;
+          else if (order.material_type === 'Outward') sdSummary.outward += order.quantity;
+          sdSummary.stock = sdSummary.inward - sdSummary.outward;
+        }
       });
 
-      setOrderSummary(Array.from(summaryMap.values()));
+      const summaries = Array.from(summaryMap.values()).sort((a, b) => 
+        a.warehouse.localeCompare(b.warehouse) ||
+        a.asset_type.localeCompare(b.asset_type) ||
+        a.model.localeCompare(b.model)
+      );
+      setOrderSummary(summaries);
     } catch (error) {
       console.error('Error loading order summary:', error);
       toast({ title: 'Error', description: 'Failed to load order summary. Please try again.', variant: 'destructive' });
@@ -417,7 +458,6 @@ const InventoryManagement = () => {
         throw new Error(`Invalid check status: ${checkStatus}`);
       }
 
-      // Optimistic update
       setDevices((prevDevices) =>
         prevDevices.map((device) =>
           device.id === deviceId
@@ -439,7 +479,6 @@ const InventoryManagement = () => {
         .select();
 
       if (error) {
-        // Rollback optimistic update
         setDevices((prevDevices) =>
           prevDevices.map((device) =>
             device.id === deviceId ? { ...device, asset_check: device.asset_check || 'Unmatched' } : device
@@ -459,7 +498,6 @@ const InventoryManagement = () => {
           description: `Asset check set to ${validStatus} for device ${deviceId}.`,
         });
       } else {
-        // Rollback optimistic update
         setDevices((prevDevices) =>
           prevDevices.map((device) =>
             device.id === deviceId ? { ...device, asset_check: device.asset_check || 'Unmatched' } : device
@@ -622,44 +660,45 @@ const InventoryManagement = () => {
   };
 
   return (
-    <div className='min-h-screen bg-background flex flex-col'>
-      <div className='sticky top-0 z-30 bg-background border-b border-gray-200'>
-        <div className='container mx-auto p-0 flex justify-between items-center'>
+    <div className='min-h-screen max-h-screen overflow-hidden bg-gradient-to-br from-background to-secondary/20 flex flex-col'>
+      <div className='w-full bg-card/80 backdrop-blur-sm border-b border-border/50 fixed top-0 left-0 right-0 z-50 shadow-sm'>
+        <div className='container mx-auto px-4 py-3 flex justify-between items-center'>
           <div className='flex items-center space-x-4'>
             <img src='/logo.png' alt='Logo' className='h-11 w-auto' />
-            <h1 className='text-2xl font-bold'>Inventory Management</h1>
+            <h1 className='text-2xl font-bold bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent'>Lead Inventory Management</h1>
           </div>
           <div className='flex items-center space-x-4'>
             <UserProfile />
           </div>
         </div>
       </div>
-      <div className='flex-1 container mx-auto p-4 pt-12'>
-        <Tabs defaultValue='create' className='w-full'>
-          <TabsList className='grid w-full grid-cols-5 fixed top-12 left-0 right-0 bg-background z-20 border-b border-gray-200'>
-            <TabsTrigger value='create'>
-              <Package className='w-3 h-3 mr-1' />
+      <div className='flex-1 overflow-y-auto pt-[70px]'>
+        <div className='container mx-auto px-4 py-6 h-full'>
+          <Tabs defaultValue='create' className='w-full h-full flex flex-col'>
+            <TabsList className='grid w-full grid-cols-5 mb-6 bg-card/50 backdrop-blur-sm border border-border/50 flex-shrink-0'>
+            <TabsTrigger value='create' className='flex items-center gap-2 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground'>
+              <Package className='w-4 h-4' />
               Create Order
             </TabsTrigger>
-            <TabsTrigger value='view'>
-              <Archive className='w-3 h-3 mr-1' />
+            <TabsTrigger value='view' className='flex items-center gap-2 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground'>
+              <Archive className='w-4 h-4' />
               View Orders
             </TabsTrigger>
-            <TabsTrigger value='order'>
-              <BarChart3 className='w-3 h-3 mr-1' />
+            <TabsTrigger value='order' className='flex items-center gap-2 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground'>
+              <BarChart3 className='w-4 h-4' />
               Order Summary
             </TabsTrigger>
-            <TabsTrigger value='devices'>
-              <Archive className='w-3 h-3 mr-1' />
+            <TabsTrigger value='devices' className='flex items-center gap-2 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground'>
+              <Archive className='w-4 h-4' />
               Devices
             </TabsTrigger>
-            <TabsTrigger value='audit'>
-              <Archive className='w-3 h-3 mr-1' />
+            <TabsTrigger value='audit' className='flex items-center gap-2 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground'>
+              <Archive className='w-4 h-4' />
               Audit View
             </TabsTrigger>
           </TabsList>
-          <TabsContent value='create' className='space-y-4 mt-8'>
-            <CreateOrderForm
+          <TabsContent value='create' className='space-y-6 flex-1 overflow-y-auto'>
+            <UnifiedAssetForm
               orderType={orderType}
               setOrderType={setOrderType}
               salesOrder={salesOrder}
@@ -670,22 +709,18 @@ const InventoryManagement = () => {
               setNucleusId={setNucleusId}
               schoolName={schoolName}
               setSchoolName={setSchoolName}
-              tablets={tablets}
-              setTablets={setTablets}
-              tvs={tvs}
-              setTvs={setTvs}
               loading={loading}
               setLoading={setLoading}
               loadOrders={loadOrders}
               loadDevices={loadDevices}
               loadOrderSummary={loadOrderSummary}
-              openScanner={(itemId, index, type) => {
-                setCurrentSerialIndex({ itemId, index, type });
+              openScanner={(itemId, index, assetType) => {
+                setCurrentSerialIndex({ itemId, index, type: assetType as 'tablet' | 'tv' });
                 setShowScanner(true);
               }}
             />
           </TabsContent>
-          <TabsContent value='view' className='space-y-4 mt-8'>
+          <TabsContent value='view' className='flex-1 overflow-y-auto'>
             <OrdersTable
               orders={orders}
               setOrders={setOrders}
@@ -703,8 +738,8 @@ const InventoryManagement = () => {
               setSelectedProduct={setSelectedProduct}
               selectedStatus={selectedStatus}
               setSelectedStatus={setSelectedStatus}
-              fromDate={fromDate?.from?.toISOString().split('T')[0] || ''}
-              setFromDate={(date) => setFromDate(date ? { from: date, to: undefined } : undefined)}
+              fromDate={fromDate}
+              setFromDate={setFromDate}
               toDate={toDate}
               setToDate={setToDate}
               showDeleted={showDeleted}
@@ -718,7 +753,7 @@ const InventoryManagement = () => {
               loadOrderSummary={loadOrderSummary}
             />
           </TabsContent>
-          <TabsContent value='order' className='space-y-4 mt-8'>
+          <TabsContent value='order' className='flex-1 overflow-y-auto'>
             <OrderSummaryTable
               orderSummary={orderSummary}
               selectedWarehouse={selectedWarehouse}
@@ -737,7 +772,7 @@ const InventoryManagement = () => {
               setSearchQuery={setSearchQuery}
             />
           </TabsContent>
-          <TabsContent value='devices' className='space-y-4 mt-8'>
+          <TabsContent value='devices' className='flex-1 overflow-y-auto'>
             <DevicesTable
               devices={devices}
               selectedWarehouse={selectedWarehouse}
@@ -768,10 +803,9 @@ const InventoryManagement = () => {
               setSearchQuery={setSearchQuery}
             />
           </TabsContent>
-          <TabsContent value='audit' className='space-y-4 mt-8'>
+          <TabsContent value='audit' className='flex-1 overflow-y-auto'>
             <AuditTable
               devices={devices}
-              isClearing={isClearing}
               selectedWarehouse={selectedWarehouse}
               setSelectedWarehouse={setSelectedWarehouse}
               selectedAssetType={selectedAssetType}
@@ -784,16 +818,12 @@ const InventoryManagement = () => {
               setSelectedConfiguration={setSelectedConfiguration}
               selectedProduct={selectedProduct}
               setSelectedProduct={setSelectedProduct}
-              selectedStatus={selectedStatus}
-              setSelectedStatus={setSelectedStatus}
               selectedOrderType={selectedOrderType}
               setSelectedOrderType={setSelectedOrderType}
               selectedAssetGroup={selectedAssetGroup}
               setSelectedAssetGroup={setSelectedAssetGroup}
-              fromDate={fromDate}
-              setFromDate={setFromDate}
-              toDate={toDate}
-              setToDate={setToDate}
+              fromDate={fromDate ? { from: new Date(fromDate), to: undefined } : undefined}
+              setFromDate={(range) => setFromDate(range?.from?.toISOString().split('T')[0] || '')}
               searchQuery={searchQuery}
               setSearchQuery={setSearchQuery}
               onUpdateAssetCheck={handleUpdateAssetCheck}
@@ -802,18 +832,16 @@ const InventoryManagement = () => {
             />
           </TabsContent>
         </Tabs>
-        <EnhancedBarcodeScanner
-          isOpen={showScanner}
-          onClose={() => {
-            setShowScanner(false);
-            setCurrentSerialIndex(null);
-          }}
-          onScan={handleScanResult}
-        />
+        </div>
       </div>
-      <footer className='w-full bg-gray-100 text-gray-600 text-left py-1 fixed bottom-0 left-2 z-10'>
-        Crafted by 😊 IT Infra minds, for IT Infra needs
-      </footer>
+      <EnhancedBarcodeScanner
+        isOpen={showScanner}
+        onClose={() => {
+          setShowScanner(false);
+          setCurrentSerialIndex(null);
+        }}
+        onScan={handleScanResult}
+      />
     </div>
   );
 };
