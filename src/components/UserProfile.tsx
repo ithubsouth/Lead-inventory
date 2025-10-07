@@ -101,7 +101,7 @@ export const UserProfile = () => {
         setUsers([]);
         return;
       }
-      setUsers(data as AppUser[] || []);
+      setUsers(data || []);
     } catch (error) {
       setUsers([]);
     }
@@ -315,7 +315,7 @@ export const UserProfile = () => {
       if (insertError) {
         toast({ title: 'Success', description: 'User Created Successfully' });
       } else {
-        setUsers(prev => [...prev, insertedUser as AppUser]);
+        setUsers(prev => [...prev, insertedUser]);
         toast({ title: 'Success', description: 'User Created Successfully' });
         await fetchUsers();
       }

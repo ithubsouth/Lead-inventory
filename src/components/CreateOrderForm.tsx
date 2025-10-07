@@ -103,7 +103,7 @@ const CreateOrderForm: React.FC<CreateOrderFormProps> = ({
       if (allSerials.length > 0) {
         const { data: deviceData, error: deviceError } = await supabase
           .from('devices')
-          .select('*')
+          .select('serial_number, warehouse, material_type, sales_order, updated_at, is_deleted')
           .eq('asset_type', type === 'tablet' ? 'Tablet' : 'TV')
           .in('serial_number', allSerials)
           .order('updated_at', { ascending: false })
@@ -117,7 +117,7 @@ const CreateOrderForm: React.FC<CreateOrderFormProps> = ({
 
         // Group by serial and get the latest entry based on updated_at
         const latestBySerial: Record<string, any> = {};
-        (deviceData as any[])?.forEach((device: any) => {
+        deviceData.forEach(device => {
           if (!device.is_deleted && (!latestBySerial[device.serial_number] || new Date(device.updated_at) > new Date(latestBySerial[device.serial_number].updated_at))) {
             latestBySerial[device.serial_number] = device;
           }
@@ -252,7 +252,7 @@ const CreateOrderForm: React.FC<CreateOrderFormProps> = ({
   const removeTV = (id: string) => setTvs(tvs.filter(tv => tv.id !== id));
 
   const logHistory = async (tableName: string, recordId: string, fieldName: string, newData: string, userEmail: string, salesOrder: string | null) => {
-    const { error } = await (supabase as any)
+    const { error } = await supabase
       .from('history')
       .insert({
         record_id: recordId,
@@ -601,10 +601,7 @@ const CreateOrderForm: React.FC<CreateOrderFormProps> = ({
         return;
       }
 
-      const importedData: any[] = [];
-      const errors: string[] = [];
-      
-      lines.slice(1).forEach((line, index) => {
+      const importedData = lines.slice(1).map((line, index) => {
         const values = line.split(',').map(v => v.trim());
         const serialNumbers = values[9] ? values[9].split(';').map(s => s.trim()).filter(s => s) : [];
         const assetStatuses = values[12] ? values[12].split(';').map(s => s.trim()).filter(s => s) : Array(parseInt(values[3]) || 1).fill('Fresh');
@@ -613,28 +610,47 @@ const CreateOrderForm: React.FC<CreateOrderFormProps> = ({
         const sdCardSize = values[14] || '';
         const profileId = values[15] || '';
 
-        // Collect validation errors instead of showing toast for each
         if (values[1] === 'TV' && configuration && !tvConfigurations.includes(configuration)) {
-          errors.push(`Row ${index + 2}: Invalid TV Configuration "${configuration}"`);
-          return;
+          toast({
+            title: 'Invalid TV Configuration',
+            description: `Configuration "${configuration}" is not valid for TVs. Valid options are: ${tvConfigurations.join(', ')}`,
+            variant: 'destructive',
+          });
+          return null;
         } else if (values[1] === 'Tablet' && configuration && !configurations.includes(configuration)) {
-          errors.push(`Row ${index + 2}: Invalid Tablet Configuration "${configuration}"`);
-          return;
+          toast({
+            title: 'Invalid Tablet Configuration',
+            description: `Configuration "${configuration}" is not valid for Tablets. Valid options are: ${configurations.join(', ')}`,
+            variant: 'destructive',
+          });
+          return null;
         }
-        if (assetGroups.some(group => !assetStatuses.includes(group))) {
-          errors.push(`Row ${index + 2}: Invalid Asset Group`);
-          return;
+        if (assetGroups.some(group => !assetGroups.includes(group))) {
+          toast({
+            title: 'Invalid Asset Group',
+            description: `Asset groups must be one of: ${assetGroups.join(', ')}`,
+            variant: 'destructive',
+          });
+          return null;
         }
         if (assetGroups.length !== (parseInt(values[3]) || 1)) {
-          errors.push(`Row ${index + 2}: Asset groups count (${assetGroups.length}) doesn't match quantity (${parseInt(values[3]) || 1})`);
-          return;
+          toast({
+            title: 'Invalid Asset Groups',
+            description: `Number of asset groups (${assetGroups.length}) does not match quantity (${parseInt(values[3]) || 1})`,
+            variant: 'destructive',
+          });
+          return null;
         }
         if (values[1] === 'Tablet' && sdCardSize && !sdCardSizes.includes(sdCardSize)) {
-          errors.push(`Row ${index + 2}: Invalid SD Card Size "${sdCardSize}"`);
-          return;
+          toast({
+            title: 'Invalid SD Card Size',
+            description: `SD Card Size "${sdCardSize}" is not valid for Tablets. Valid options are: ${sdCardSizes.join(', ')}`,
+            variant: 'destructive',
+          });
+          return null;
         }
 
-        importedData.push({
+        return {
           order_type: values[0],
           asset_type: values[1] as 'Tablet' | 'TV',
           model: values[2],
@@ -651,26 +667,8 @@ const CreateOrderForm: React.FC<CreateOrderFormProps> = ({
           asset_groups: assetGroups,
           sd_card_size: sdCardSize,
           profile_id: profileId,
-        });
-      });
-
-      // Show all errors at once if any
-      if (errors.length > 0) {
-        toast({
-          title: 'CSV Import Errors',
-          description: `${errors.length} row(s) had errors. First few: ${errors.slice(0, 3).join(', ')}`,
-          variant: 'destructive',
-        });
-      }
-
-      if (importedData.length === 0) {
-        toast({
-          title: 'No Valid Data',
-          description: 'No valid rows found in CSV file',
-          variant: 'destructive',
-        });
-        return;
-      }
+        };
+      }).filter((data): data is NonNullable<typeof importedData[0]> => data !== null);
 
       console.log('Imported CSV data:', importedData);
       importedData.forEach(data => {

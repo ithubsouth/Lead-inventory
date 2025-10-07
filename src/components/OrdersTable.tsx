@@ -800,6 +800,20 @@ useEffect(() => {
                         </li>
                       ))}
                     </ul>
+                    {viewingOrder.editHistory && viewingOrder.editHistory.length > 0 && (
+                      <>
+                        <p><strong>Edit History:</strong></p>
+                        <ul style={{ listStyleType: 'disc', paddingLeft: '20px' }}>
+                          {[...viewingOrder.editHistory]
+                            .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+                            .map((entry, index) => (
+                              <li key={index} style={{ fontSize: '12px' }}>
+                                {formatDate(entry.timestamp)}: {entry.changes}
+                              </li>
+                            ))}
+                        </ul>
+                      </>
+                    )}
                     <p><strong>Deleted:</strong> {viewingOrder.is_deleted ? 'Yes' : 'No'}</p>
                   </div>
                   <button
