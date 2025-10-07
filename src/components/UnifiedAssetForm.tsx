@@ -421,7 +421,7 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
             serial_numbers: assetSerials,
             order_date: new Date().toISOString(),
             configuration: asset.configuration || null,
-            product: asset.product || null,
+            product: asset.product || 'Lead',
             sd_card_size: asset.sdCardSize || null,
             profile_id: asset.profileId || null,
             created_by: userEmail,
@@ -434,7 +434,7 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
 
         // Create devices
         for (let i = 0; i < asset.quantity; i++) {
-          const serialNumber = asset.hasSerials ? (asset.serialNumbers[i] || '') : null;
+          const serialNumber = asset.hasSerials ? (asset.serialNumbers[i] || '') : '';
           const assetStatus = asset.assetStatuses[i] || 'Fresh';
           const assetGroup = asset.assetGroups[i] || 'NFA';
           const assetCondition = asset.asset_conditions[i] || null;
@@ -452,7 +452,7 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
             material_type: materialType,
             order_id: orderData.id,
             configuration: asset.configuration || null,
-            product: asset.product || null,
+            product: asset.product || 'Lead',
             sd_card_size: asset.sdCardSize || null,
             profile_id: asset.profileId || null,
             asset_status: assetStatus,
