@@ -85,9 +85,11 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
   const generateId = () => Math.random().toString(36).substr(2, 9);
 
   const generateSalesOrder = () => {
-    const digit = Math.floor(Math.random() * 10);
-    const randomString = Math.random().toString(36).substr(2, 5);
-    return `SO-${digit}-${randomString}`;
+    // Generate alphanumeric pattern like "7054AS52"
+    const digits = Math.floor(1000 + Math.random() * 9000); // 4 digits
+    const letters = Math.random().toString(36).substr(2, 2).toUpperCase(); // 2 letters
+    const finalDigits = Math.floor(10 + Math.random() * 90); // 2 digits
+    return `${digits}${letters}${finalDigits}`;
   };
 
   const defaultHasSerials = (assetType: string) => {
@@ -375,10 +377,16 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
         let salesOrderId = salesOrder;
         if (!salesOrderId) {
           if (dealId) {
-            salesOrderId = `SO-${dealId}-${Math.random().toString(36).substr(2, 4)}`;
+            // Mix deal_id with alphanumeric pattern
+            const randomNum = Math.floor(10 + Math.random() * 90);
+            const randomLetters = Math.random().toString(36).substr(2, 2).toUpperCase();
+            salesOrderId = `${dealId}${randomLetters}${randomNum}`;
           } else if (schoolName) {
+            // Use school name initials with alphanumeric pattern
             const schoolCode = schoolName.substring(0, 3).toUpperCase();
-            salesOrderId = `SO-${schoolCode}-${Math.random().toString(36).substr(2, 5)}`;
+            const randomNum = Math.floor(100 + Math.random() * 900);
+            const randomLetters = Math.random().toString(36).substr(2, 2).toUpperCase();
+            salesOrderId = `${schoolCode}${randomNum}${randomLetters}`;
           } else {
             salesOrderId = generateSalesOrder();
           }
