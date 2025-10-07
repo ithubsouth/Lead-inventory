@@ -291,7 +291,6 @@ const InventoryManagement = () => {
           asset_group: device.asset_group?.trim() || '',
           asset_condition: device.asset_condition?.trim() || '',
           status,
-          created_at: device.created_at || '',
           updated_at: device.updated_at ? new Date(device.updated_at).toISOString() : '',
           updated_by: device.updated_by?.trim() || '',
           is_deleted: device.is_deleted || false,
