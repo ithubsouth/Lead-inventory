@@ -23,6 +23,9 @@ import {
   locations,
   assetStatuses,
   assetGroups,
+  coverModels,
+  pendriveSizes,
+  otherMaterials,
 } from './constants';
 
 interface EditOrderFormProps {
@@ -70,23 +73,20 @@ const EditOrderForm: React.FC<EditOrderFormProps> = ({ order, onSave, onCancel }
     fetchDevices();
   }, [order.id, toast]);
 
-  // Reset model, configuration, sd_card_size, and profile_id when asset_type changes
+  // Reset fields when asset_type changes (keep model for all types)
   useEffect(() => {
-    if (formData.asset_type && !['Tablet', 'TV'].includes(formData.asset_type)) {
-      setFormData(prev => ({
-        ...prev,
-        model: '',
-        configuration: '',
-        sd_card_size: '',
-        profile_id: '',
-      }));
-      setDevices(prev => prev.map(device => ({
-        ...device,
-        model: '',
-        configuration: null,
-        sd_card_size: null,
-        profile_id: null,
-      })));
+    if (formData.asset_type) {
+      // Only reset configuration for non-Tablet/TV types
+      if (!['Tablet', 'TV'].includes(formData.asset_type)) {
+        setFormData(prev => ({
+          ...prev,
+          configuration: '',
+        }));
+        setDevices(prev => prev.map(device => ({
+          ...device,
+          configuration: null,
+        })));
+      }
     }
   }, [formData.asset_type]);
 
@@ -247,8 +247,8 @@ const EditOrderForm: React.FC<EditOrderFormProps> = ({ order, onSave, onCancel }
         material_type: orderTypes.includes(formData.order_type) && ['Stock', 'Return'].includes(formData.order_type) ? 'Inward' : 'Outward',
         configuration: formData.configuration || null,
         product: formData.product || null,
-        sd_card_size: formData.asset_type === 'Tablet' ? formData.sd_card_size || null : null,
-        profile_id: formData.asset_type === 'Tablet' ? formData.profile_id || null : null,
+        sd_card_size: formData.sd_card_size || null,
+        profile_id: formData.profile_id || null,
         asset_status: 'Fresh',
         asset_group: 'NFA',
         created_at: new Date().toISOString(),
@@ -287,10 +287,7 @@ const EditOrderForm: React.FC<EditOrderFormProps> = ({ order, onSave, onCancel }
       toast({ title: 'Error', description: `Warehouse must be one of: ${locations.join(', ')}`, variant: 'destructive' });
       return false;
     }
-    if (!['Tablet', 'TV'].includes(formData.asset_type)) {
-      toast({ title: 'Error', description: 'Asset Type must be Tablet or TV', variant: 'destructive' });
-      return false;
-    }
+    // Validate model based on asset type
     if (formData.model && formData.asset_type === 'Tablet' && !tabletModels.includes(formData.model)) {
       toast({ title: 'Error', description: `Tablet model must be one of: ${tabletModels.join(', ')}`, variant: 'destructive' });
       return false;
@@ -311,7 +308,7 @@ const EditOrderForm: React.FC<EditOrderFormProps> = ({ order, onSave, onCancel }
       toast({ title: 'Error', description: `Product must be one of: ${products.join(', ')}`, variant: 'destructive' });
       return false;
     }
-    if (formData.asset_type === 'Tablet' && formData.sd_card_size && !sdCardSizes.includes(formData.sd_card_size)) {
+    if (formData.sd_card_size && !sdCardSizes.includes(formData.sd_card_size)) {
       toast({ title: 'Error', description: `SD Card Size must be one of: ${sdCardSizes.join(', ')}`, variant: 'destructive' });
       return false;
     }
@@ -412,8 +409,8 @@ const EditOrderForm: React.FC<EditOrderFormProps> = ({ order, onSave, onCancel }
         serial_numbers: devices.map(d => d.serial_number || ''),
         configuration: formData.configuration || null,
         product: formData.product || null,
-        sd_card_size: formData.asset_type === 'Tablet' ? formData.sd_card_size || null : null,
-        profile_id: formData.asset_type === 'Tablet' ? formData.profile_id || null : null,
+        sd_card_size: formData.sd_card_size || null,
+        profile_id: formData.profile_id || null,
         updated_at: new Date().toISOString(),
         updated_by: userEmail,
       };
@@ -486,8 +483,8 @@ const EditOrderForm: React.FC<EditOrderFormProps> = ({ order, onSave, onCancel }
           order_id: formData.id,
           configuration: formData.configuration || null,
           product: formData.product || null,
-          sd_card_size: formData.asset_type === 'Tablet' ? formData.sd_card_size || null : null,
-          profile_id: formData.asset_type === 'Tablet' ? formData.profile_id || null : null,
+          sd_card_size: formData.sd_card_size || null,
+          profile_id: formData.profile_id || null,
           asset_status: device.asset_status || 'Fresh',
           asset_group: device.asset_group || 'NFA',
           updated_at: new Date().toISOString(),
@@ -536,8 +533,10 @@ const EditOrderForm: React.FC<EditOrderFormProps> = ({ order, onSave, onCancel }
           await logHistory('devices', newDevice.id, 'serial_number', '', device.serial_number || '', userEmail, formData.sales_order, 'INSERT');
           await logHistory('devices', newDevice.id, 'asset_status', '', device.asset_status || 'Fresh', userEmail, formData.sales_order, 'INSERT');
           await logHistory('devices', newDevice.id, 'asset_group', '', device.asset_group || 'NFA', userEmail, formData.sales_order, 'INSERT');
-          if (formData.asset_type === 'Tablet') {
+          if (formData.sd_card_size) {
             await logHistory('devices', newDevice.id, 'sd_card_size', '', device.sd_card_size || '', userEmail, formData.sales_order, 'INSERT');
+          }
+          if (formData.profile_id) {
             await logHistory('devices', newDevice.id, 'profile_id', '', device.profile_id || '', userEmail, formData.sales_order, 'INSERT');
           }
         }
@@ -683,7 +682,7 @@ const EditOrderForm: React.FC<EditOrderFormProps> = ({ order, onSave, onCancel }
                     <SelectValue placeholder='Select asset type' />
                   </SelectTrigger>
                   <SelectContent className='z-[1000] bg-white shadow-lg border min-w-[150px]'>
-                    {['Tablet', 'TV'].map(type => (
+                    {['Tablet', 'TV', 'Cover', 'Pendrive', 'SD Card', 'Other'].map(type => (
                       <SelectItem key={type} value={type} className='text-xs'>{type}</SelectItem>
                     ))}
                   </SelectContent>
@@ -691,37 +690,100 @@ const EditOrderForm: React.FC<EditOrderFormProps> = ({ order, onSave, onCancel }
               </div>
               <div>
                 <Label className='text-xs font-medium text-gray-700'>Model</Label>
-                <Select
-                  value={formData.model || ''}
-                  onValueChange={(value) => setFormData(prev => ({ ...prev, model: value }))}
-                  disabled={!formData.asset_type}
-                >
-                  <SelectTrigger className='text-xs bg-white border-gray-300'>
-                    <SelectValue placeholder='Select model' />
-                  </SelectTrigger>
-                  <SelectContent className='z-[1000] bg-white shadow-lg border min-w-[150px]'>
-                    {(formData.asset_type === 'Tablet' ? tabletModels : formData.asset_type === 'TV' ? tvModels : []).map(model => (
-                      <SelectItem key={model} value={model} className='text-xs'>{model}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                {formData.asset_type === 'Tablet' || formData.asset_type === 'TV' || formData.asset_type === 'Cover' ? (
+                  <Select
+                    value={formData.model || ''}
+                    onValueChange={(value) => setFormData(prev => ({ ...prev, model: value }))}
+                    disabled={!formData.asset_type}
+                  >
+                    <SelectTrigger className='text-xs bg-white border-gray-300'>
+                      <SelectValue placeholder='Select model' />
+                    </SelectTrigger>
+                    <SelectContent className='z-[1000] bg-white shadow-lg border min-w-[150px]'>
+                      {(formData.asset_type === 'Tablet' ? tabletModels : 
+                        formData.asset_type === 'TV' ? tvModels : 
+                        formData.asset_type === 'Cover' ? coverModels : []).map(model => (
+                        <SelectItem key={model} value={model} className='text-xs'>{model}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                ) : formData.asset_type === 'SD Card' ? (
+                  <Select
+                    value={formData.model || ''}
+                    onValueChange={(value) => setFormData(prev => ({ ...prev, model: value }))}
+                  >
+                    <SelectTrigger className='text-xs bg-white border-gray-300'>
+                      <SelectValue placeholder='Select size' />
+                    </SelectTrigger>
+                    <SelectContent className='z-[1000] bg-white shadow-lg border min-w-[150px]'>
+                      {sdCardSizes.map(size => (
+                        <SelectItem key={size} value={size} className='text-xs'>{size}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                ) : formData.asset_type === 'Pendrive' ? (
+                  <Select
+                    value={formData.model || ''}
+                    onValueChange={(value) => setFormData(prev => ({ ...prev, model: value }))}
+                  >
+                    <SelectTrigger className='text-xs bg-white border-gray-300'>
+                      <SelectValue placeholder='Select size' />
+                    </SelectTrigger>
+                    <SelectContent className='z-[1000] bg-white shadow-lg border min-w-[150px]'>
+                      {pendriveSizes.map(size => (
+                        <SelectItem key={size} value={size} className='text-xs'>{size}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                ) : formData.asset_type === 'Other' ? (
+                  <Select
+                    value={formData.model || ''}
+                    onValueChange={(value) => setFormData(prev => ({ ...prev, model: value }))}
+                  >
+                    <SelectTrigger className='text-xs bg-white border-gray-300'>
+                      <SelectValue placeholder='Select material' />
+                    </SelectTrigger>
+                    <SelectContent className='z-[1000] bg-white shadow-lg border min-w-[150px]'>
+                      {otherMaterials.map(material => (
+                        <SelectItem key={material} value={material} className='text-xs'>{material}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                ) : (
+                  <Input
+                    value={formData.model || ''}
+                    onChange={(e) => setFormData(prev => ({ ...prev, model: e.target.value }))}
+                    className='text-xs bg-white border-gray-300'
+                    placeholder='Enter model'
+                  />
+                )}
               </div>
               <div>
                 <Label className='text-xs font-medium text-gray-700'>Configuration</Label>
-                <Select
-                  value={formData.configuration || ''}
-                  onValueChange={(value) => setFormData(prev => ({ ...prev, configuration: value }))}
-                  disabled={!formData.asset_type}
-                >
-                  <SelectTrigger className='text-xs bg-white border-gray-300'>
-                    <SelectValue placeholder='Select configuration' />
-                  </SelectTrigger>
-                  <SelectContent className='z-[1000] bg-white shadow-lg border min-w-[150px]'>
-                    {(formData.asset_type === 'Tablet' ? configurations : formData.asset_type === 'TV' ? tvConfigurations : []).map(config => (
-                      <SelectItem key={config} value={config} className='text-xs'>{config}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                {formData.asset_type === 'Tablet' || formData.asset_type === 'TV' ? (
+                  <Select
+                    value={formData.configuration || ''}
+                    onValueChange={(value) => setFormData(prev => ({ ...prev, configuration: value }))}
+                    disabled={!formData.asset_type}
+                  >
+                    <SelectTrigger className='text-xs bg-white border-gray-300'>
+                      <SelectValue placeholder='Select configuration' />
+                    </SelectTrigger>
+                    <SelectContent className='z-[1000] bg-white shadow-lg border min-w-[150px]'>
+                      {(formData.asset_type === 'Tablet' ? configurations : formData.asset_type === 'TV' ? tvConfigurations : []).map(config => (
+                        <SelectItem key={config} value={config} className='text-xs'>{config}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                ) : (
+                  <Input
+                    value={formData.configuration || ''}
+                    onChange={(e) => setFormData(prev => ({ ...prev, configuration: e.target.value }))}
+                    className='text-xs bg-white border-gray-300'
+                    placeholder='Optional'
+                    disabled={!formData.asset_type}
+                  />
+                )}
               </div>
               <div>
                 <Label className='text-xs font-medium text-gray-700'>Quantity</Label>
@@ -796,35 +858,31 @@ const EditOrderForm: React.FC<EditOrderFormProps> = ({ order, onSave, onCancel }
                   </SelectContent>
                 </Select>
               </div>
-              {formData.asset_type === 'Tablet' && (
-                <>
-                  <div>
-                    <Label className='text-xs font-medium text-gray-700'>SD Card Size</Label>
-                    <Select
-                      value={formData.sd_card_size || ''}
-                      onValueChange={updateSdCardSize}
-                    >
-                      <SelectTrigger className='text-xs bg-white border-gray-300'>
-                        <SelectValue placeholder='Select SD card size' />
-                      </SelectTrigger>
-                      <SelectContent className='z-[1000] bg-white shadow-lg border min-w-[150px]'>
-                        {sdCardSizes.map(size => (
-                          <SelectItem key={size} value={size} className='text-xs'>{size}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div>
-                    <Label className='text-xs font-medium text-gray-700'>Profile ID</Label>
-                    <Input
-                      value={formData.profile_id || ''}
-                      onChange={(e) => updateProfileId(e.target.value)}
-                      className='text-xs bg-white border-gray-300'
-                      placeholder='Optional'
-                    />
-                  </div>
-                </>
-              )}
+              <div>
+                <Label className='text-xs font-medium text-gray-700'>SD Card Size</Label>
+                <Select
+                  value={formData.sd_card_size || ''}
+                  onValueChange={updateSdCardSize}
+                >
+                  <SelectTrigger className='text-xs bg-white border-gray-300'>
+                    <SelectValue placeholder='Select SD card size' />
+                  </SelectTrigger>
+                  <SelectContent className='z-[1000] bg-white shadow-lg border min-w-[150px]'>
+                    {sdCardSizes.map(size => (
+                      <SelectItem key={size} value={size} className='text-xs'>{size}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label className='text-xs font-medium text-gray-700'>Profile ID</Label>
+                <Input
+                  value={formData.profile_id || ''}
+                  onChange={(e) => updateProfileId(e.target.value)}
+                  className='text-xs bg-white border-gray-300'
+                  placeholder='Optional'
+                />
+              </div>
               <div>
                 <Label className='text-xs font-medium text-gray-700'>Order Date</Label>
                 <p className='text-xs text-gray-800'>{formatDate(formData.order_date)}</p>
