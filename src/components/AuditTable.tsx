@@ -36,7 +36,6 @@ interface AuditTableProps {
   setSearchQuery: (value: string) => void;
   onUpdateAssetCheck: (deviceId: string, checkStatus: string) => Promise<void>;
   onClearAllChecks: (ids: string[]) => Promise<void>;
-  onUpdateAssetCondition: (deviceId: string, condition: string) => Promise<void>;
   userRole: string;
 }
 
@@ -64,7 +63,6 @@ const AuditTable: React.FC<AuditTableProps> = ({
   setSearchQuery,
   onUpdateAssetCheck,
   onClearAllChecks,
-  onUpdateAssetCondition,
   userRole,
 }) => {
   const [scannerInput, setScannerInput] = useState('');
@@ -496,14 +494,13 @@ const AuditTable: React.FC<AuditTableProps> = ({
               <TableHead style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', textAlign: 'left', position: 'sticky', top: 0, background: '#fff', zIndex: '20' }}>Asset Status</TableHead>
               <TableHead style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', textAlign: 'left', position: 'sticky', top: 0, background: '#fff', zIndex: '20' }}>Asset Group</TableHead>
               <TableHead style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', textAlign: 'left', position: 'sticky', top: 0, background: '#fff', zIndex: '20' }}>Warehouse</TableHead>
-              <TableHead style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', textAlign: 'left', position: 'sticky', top: 0, background: '#fff', zIndex: '20' }}>Asset Condition</TableHead>
               <TableHead style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', textAlign: 'left', position: 'sticky', top: 0, background: '#fff', zIndex: '20' }}>Asset Check</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {paginatedDevices.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={11} style={{ textAlign: 'center', fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db' }}>
+                <TableCell colSpan={10} style={{ textAlign: 'center', fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db' }}>
                   No devices found with current filters.
                 </TableCell>
               </TableRow>
@@ -522,7 +519,6 @@ const AuditTable: React.FC<AuditTableProps> = ({
                     <TableCell style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db' }}>{d.asset_status}</TableCell>
                     <TableCell style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db' }}>{d.asset_group}</TableCell>
                     <TableCell style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db' }}>{d.warehouse}</TableCell>
-                    <TableCell style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db' }}>{d.asset_condition || '-'}</TableCell>
                     <TableCell style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                         <Checkbox

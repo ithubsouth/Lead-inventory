@@ -31,7 +31,6 @@ interface DevicesTableProps {
   setShowDeleted: (value: boolean) => void;
   searchQuery: string;
   setSearchQuery: (value: string) => void;
-  onUpdateAssetCondition: (deviceId: string, condition: string) => Promise<void>;
 }
 
 const DevicesTable: React.FC<DevicesTableProps> = ({
@@ -62,7 +61,6 @@ const DevicesTable: React.FC<DevicesTableProps> = ({
   setShowDeleted,
   searchQuery,
   setSearchQuery,
-  onUpdateAssetCondition,
 }) => {
   const [currentDevicesPage, setCurrentDevicesPage] = useState(1);
   const [devicesPerPage] = useState(20);
@@ -650,7 +648,6 @@ useEffect(() => {
                     <th style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', textAlign: 'left', position: 'sticky', top: 0, background: '#fff', zIndex: 10, width: columnWidths.product }}>Product</th>
                     <th style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', textAlign: 'left', position: 'sticky', top: 0, background: '#fff', zIndex: 10, width: columnWidths.asset_status }}>Asset Status</th>
                     <th style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', textAlign: 'left', position: 'sticky', top: 0, background: '#fff', zIndex: 10, width: columnWidths.asset_group }}>Asset Group</th>
-                    <th style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', textAlign: 'left', position: 'sticky', top: 0, background: '#fff', zIndex: 10, width: '120px' }}>Asset Condition</th>
                     <th style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', textAlign: 'left', position: 'sticky', top: 0, background: '#fff', zIndex: 10, width: columnWidths.status }}>Status</th>
                     <th style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', textAlign: 'left', position: 'sticky', top: 0, background: '#fff', zIndex: 10, width: columnWidths.updated_at }}>Updated At</th>
                     <th style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', textAlign: 'left', position: 'sticky', top: 0, background: '#fff', zIndex: 10, width: columnWidths.updated_by }}>Updated By</th>
@@ -660,7 +657,7 @@ useEffect(() => {
                 <tbody>
                   {paginatedDevices.length === 0 ? (
                     <tr>
-                      <td colSpan={20} style={{ textAlign: 'center', fontSize: '12px', padding: '8px' }}>
+                      <td colSpan={19} style={{ textAlign: 'center', fontSize: '12px', padding: '8px' }}>
                         No devices found with current filters. Try adjusting the filters or check data loading.
                       </td>
                     </tr>
@@ -682,28 +679,6 @@ useEffect(() => {
                         <td style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', width: columnWidths.product }}>{device.product || ''}</td>
                         <td style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', width: columnWidths.asset_status }}>{device.asset_status || ''}</td>
                         <td style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', width: columnWidths.asset_group }}>{device.asset_group || ''}</td>
-                        <td style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', width: '120px' }}>
-                          <input
-                            type="text"
-                            value={device.asset_condition || ''}
-                            onChange={(e) => {
-                              e.stopPropagation();
-                            }}
-                            onBlur={(e) => {
-                              const newValue = e.target.value.trim();
-                              if (newValue !== device.asset_condition) {
-                                onUpdateAssetCondition(device.id, newValue);
-                              }
-                            }}
-                            style={{ 
-                              fontSize: '12px', 
-                              padding: '4px', 
-                              border: '1px solid #d1d5db', 
-                              borderRadius: '4px', 
-                              width: '100%' 
-                            }}
-                          />
-                        </td>
                         <td style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', width: columnWidths.status }}>
                           <span
                             style={{
