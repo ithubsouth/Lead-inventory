@@ -64,30 +64,14 @@ const OrderSummaryTable: React.FC<OrderSummaryTableProps> = ({
     })));
   }, [orderSummary, selectedWarehouse, selectedAssetType, selectedModel, showDeleted, searchQuery]);
 
-  const warehouseOptions = ['All', 'Trichy', 'Bangalore', 'Hyderabad', 'Kolkata', 'Bhiwandi', 'Ghaziabad', 'Zirakpur', 'Indore', 'Jaipur'];
-  const assetTypeOptions = ['All', 'Tablet', 'TV', 'SD Card', 'Pendrive'];
-  const modelOptions = [
-    'All',
-    'Lenovo TB301XU',
-    'Lenovo TB301FU',
-    'Lenovo TB-8505F',
-    'Lenovo TB-7306F',
-    'Lenovo TB-7306X',
-    'Lenovo TB-7305X',
-    'IRA T811',
-    'Hyundai TV - 39"',
-    'Hyundai TV - 43"',
-    'Hyundai TV - 50"',
-    'Hyundai TV - 55"',
-    'Hyundai TV - 65"',
-    'Xentec TV - 39"',
-    'Xentec TV - 43"',
-    '64 GB',
-    '128 GB',
-    '256 GB',
-    '512 GB',
-    'Pendrive',
-  ];
+  // Generate dynamic filter options from orderSummary data
+  const warehouseOptions = ['All', ...[...new Set(orderSummary.map(s => s.warehouse))].filter(w => w).sort()];
+  const assetTypeOptions = ['All', ...[...new Set(orderSummary.map(s => s.asset_type))].filter(a => a).sort()];
+  const modelOptions = ['All', ...[...new Set(
+    selectedAssetType === 'All'
+      ? orderSummary.map(s => s.model)
+      : orderSummary.filter(s => s.asset_type === selectedAssetType).map(s => s.model)
+  )].filter(m => m).sort()];
 
   const filteredSummary = orderSummary.filter((summary) => {
     const matchesDeleted = showDeleted || (summary.inward !== 0 || summary.outward !== 0);

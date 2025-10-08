@@ -246,7 +246,9 @@ const InventoryManagement = () => {
             is_deleted,
             order_id,
             orders!left(id, material_type),
-            asset_check
+            asset_check,
+            audited_by,
+            audited_at
           `)
           .order('updated_at', { ascending: false })
           .range(page * batchSize, (page + 1) * batchSize - 1);
@@ -298,6 +300,8 @@ const InventoryManagement = () => {
           order_id: device.order_id || null,
           material_type: materialType,
           asset_check: device.asset_check?.trim() || 'Unmatched',
+          audited_by: device.audited_by?.trim() || null,
+          audited_at: device.audited_at || null,
         } as Device;
       });
 
@@ -461,15 +465,15 @@ const InventoryManagement = () => {
       setDevices((prevDevices) =>
         prevDevices.map((device) =>
           device.id === deviceId
-            ? { ...device, asset_check: validStatus, updated_at: new Date().toISOString(), updated_by: userEmail }
+            ? { ...device, asset_check: validStatus, audited_at: new Date().toISOString(), audited_by: userEmail }
             : device
         )
       );
 
       const updates = { 
         asset_check: validStatus,
-        updated_at: new Date().toISOString(),
-        updated_by: userEmail,
+        audited_at: new Date().toISOString(),
+        audited_by: userEmail,
       };
 
       const { data, error } = await supabase
@@ -659,6 +663,55 @@ const InventoryManagement = () => {
     }
   };
 
+  const handleUpdateAssetCondition = async (deviceId: string, condition: string) => {
+    try {
+      if (!userEmail) {
+        throw new Error('No authenticated user found. Please log in.');
+      }
+      if (!['Super Admin', 'Admin', 'Operator'].includes(userRole || '')) {
+        throw new Error('Insufficient permissions to update asset condition. Super Admin, Admin, or Operator role required.');
+      }
+
+      // Update local state
+      setDevices((prevDevices) =>
+        prevDevices.map((device) =>
+          device.id === deviceId
+            ? { ...device, asset_condition: condition }
+            : device
+        )
+      );
+
+      // Update database WITHOUT touching updated_at or updated_by
+      const { error } = await supabase
+        .from('devices')
+        .update({ asset_condition: condition } as any)
+        .eq('id', deviceId);
+
+      if (error) {
+        // Revert on error
+        setDevices((prevDevices) =>
+          prevDevices.map((device) =>
+            device.id === deviceId ? { ...device, asset_condition: device.asset_condition } : device
+          )
+        );
+        console.error('Supabase update error:', error);
+        throw error;
+      }
+
+      toast({ 
+        title: 'Success', 
+        description: 'Asset condition updated successfully.',
+      });
+    } catch (error: any) {
+      console.error('Error updating asset condition:', error);
+      toast({ 
+        title: 'Error', 
+        description: `Failed to update asset condition: ${error.message}`, 
+        variant: 'destructive' 
+      });
+    }
+  };
+
   return (
     <div className='min-h-screen max-h-screen overflow-hidden bg-gradient-to-br from-background to-secondary/20 flex flex-col'>
       <div className='w-full bg-card/80 backdrop-blur-sm border-b border-border/50 fixed top-0 left-0 right-0 z-50 shadow-sm'>
@@ -801,6 +854,7 @@ const InventoryManagement = () => {
               setShowDeleted={setShowDeleted}
               searchQuery={searchQuery}
               setSearchQuery={setSearchQuery}
+              onUpdateAssetCondition={handleUpdateAssetCondition}
             />
           </TabsContent>
           <TabsContent value='audit' className='flex-1 overflow-y-auto'>
@@ -828,6 +882,7 @@ const InventoryManagement = () => {
               setSearchQuery={setSearchQuery}
               onUpdateAssetCheck={handleUpdateAssetCheck}
               onClearAllChecks={handleClearAllChecks}
+              onUpdateAssetCondition={handleUpdateAssetCondition}
               userRole={userRole || 'unknown'}
             />
           </TabsContent>

@@ -106,7 +106,10 @@ export interface Device {
   product?: string | null;
   asset_status?: string | null;
   asset_group?: string | null;
+  asset_condition?: string | null;
   asset_check?: string | null;
+  audited_by?: string | null;
+  audited_at?: string | null;
   status: 'Stock' | 'Assigned' | 'Available';
   created_at: string;
   created_by?: string;
