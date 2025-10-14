@@ -67,9 +67,6 @@ const EditOrderForm: React.FC<EditOrderFormProps> = ({ order, onSave, onCancel }
         ...prev,
         serial_numbers: fetchedDevices.map(d => d.serial_number || ''),
         quantity: fetchedDevices.length,
-        asset_statuses: fetchedDevices.map(d => d.asset_status || 'Fresh'),
-        asset_groups: fetchedDevices.map(d => d.asset_group || 'NFA'),
-        product: fetchedDevices.map(() => prev.product || 'Lead'), // Initialize as array
       }));
       validateSerials(fetchedDevices);
     };
@@ -167,11 +164,6 @@ const EditOrderForm: React.FC<EditOrderFormProps> = ({ order, onSave, onCancel }
 
       if (hasUpdates) {
         setDevices(updatedDevices);
-        setFormData(prev => ({
-          ...prev,
-          asset_statuses: updatedDevices.map(d => d.asset_status || 'Fresh'),
-          asset_groups: updatedDevices.map(d => d.asset_group || 'NFA'),
-        }));
       }
     }
 
@@ -184,13 +176,6 @@ const EditOrderForm: React.FC<EditOrderFormProps> = ({ order, onSave, onCancel }
 
   const removeSerialNumber = (index: number) => {
     setDevices(prev => prev.filter((_, i) => i !== index));
-    setFormData(prev => ({
-      ...prev,
-      serial_numbers: prev.serial_numbers.filter((_, i) => i !== index),
-      asset_statuses: prev.asset_statuses.filter((_, i) => i !== index),
-      asset_groups: prev.asset_groups.filter((_, i) => i !== index),
-      product: prev.product.filter((_, i) => i !== index),
-    }));
   };
 
   const updateSerialNumber = (index: number, value: string) => {
@@ -200,10 +185,6 @@ const EditOrderForm: React.FC<EditOrderFormProps> = ({ order, onSave, onCancel }
       newDevices[index] = { ...newDevices[index], serial_number: trimmedValue };
       return newDevices;
     });
-    setFormData(prev => ({
-      ...prev,
-      serial_numbers: prev.serial_numbers.map((sn, i) => (i === index ? trimmedValue : sn)),
-    }));
   };
 
   const updateAssetStatus = (index: number, value: string) => {
@@ -212,10 +193,6 @@ const EditOrderForm: React.FC<EditOrderFormProps> = ({ order, onSave, onCancel }
       newDevices[index] = { ...newDevices[index], asset_status: value };
       return newDevices;
     });
-    setFormData(prev => ({
-      ...prev,
-      asset_statuses: prev.asset_statuses.map((status, i) => (i === index ? value : status)),
-    }));
   };
 
   const updateAssetGroup = (index: number, value: string) => {
@@ -224,10 +201,6 @@ const EditOrderForm: React.FC<EditOrderFormProps> = ({ order, onSave, onCancel }
       newDevices[index] = { ...newDevices[index], asset_group: value };
       return newDevices;
     });
-    setFormData(prev => ({
-      ...prev,
-      asset_groups: prev.asset_groups.map((group, i) => (i === index ? value : group)),
-    }));
   };
 
   const updateAssetCondition = (index: number, value: string) => {
@@ -238,25 +211,12 @@ const EditOrderForm: React.FC<EditOrderFormProps> = ({ order, onSave, onCancel }
     });
   };
 
-  const updateProduct = (value: string) => {
-    setFormData(prev => ({
-      ...prev,
-      product: Array(prev.quantity).fill(value || 'Lead'),
-    }));
-    setDevices(prev => prev.map(device => ({
-      ...device,
-      product: value || 'Lead',
-    })));
-  };
-
   const updateSdCardSize = (value: string) => {
     setFormData(prev => ({ ...prev, sd_card_size: value }));
-    setDevices(prev => prev.map(device => ({ ...device, sd_card_size: value })));
   };
 
   const updateProfileId = (value: string) => {
     setFormData(prev => ({ ...prev, profile_id: value }));
-    setDevices(prev => prev.map(device => ({ ...device, profile_id: value })));
   };
 
   const handleScanSuccess = (result: string) => {
@@ -286,7 +246,7 @@ const EditOrderForm: React.FC<EditOrderFormProps> = ({ order, onSave, onCancel }
         status: isInward ? 'Available' : 'Assigned',
         material_type: isInward ? 'Inward' : 'Outward',
         configuration: formData.configuration || null,
-        product: formData.product[0] || 'Lead',
+        product: formData.product || null,
         sd_card_size: formData.sd_card_size || null,
         profile_id: formData.profile_id || null,
         asset_status: 'Fresh',
@@ -297,25 +257,11 @@ const EditOrderForm: React.FC<EditOrderFormProps> = ({ order, onSave, onCancel }
         created_by: '',
         updated_by: '',
         is_deleted: false,
-        order_type: formData.order_type,
+        order_type: order.order_type,
       }));
       setDevices([...currentDevices, ...newDevices] as Device[]);
-      setFormData(prev => ({
-        ...prev,
-        serial_numbers: [...prev.serial_numbers, ...Array(newQuantity - currentDevices.length).fill('')],
-        asset_statuses: [...prev.asset_statuses, ...Array(newQuantity - currentDevices.length).fill('Fresh')],
-        asset_groups: [...prev.asset_groups, ...Array(newQuantity - currentDevices.length).fill('NFA')],
-        product: [...prev.product, ...Array(newQuantity - currentDevices.length).fill(prev.product[0] || 'Lead')],
-      }));
     } else {
       setDevices(currentDevices.slice(0, newQuantity));
-      setFormData(prev => ({
-        ...prev,
-        serial_numbers: prev.serial_numbers.slice(0, newQuantity),
-        asset_statuses: prev.asset_statuses.slice(0, newQuantity),
-        asset_groups: prev.asset_groups.slice(0, newQuantity),
-        product: prev.product.slice(0, newQuantity),
-      }));
     }
   };
 
@@ -341,18 +287,6 @@ const EditOrderForm: React.FC<EditOrderFormProps> = ({ order, onSave, onCancel }
       toast({ title: 'Error', description: `TV model must be one of: ${tvModels.join(', ')}`, variant: 'destructive' });
       return false;
     }
-    if (formData.model && formData.asset_type === 'Cover' && !coverModels.includes(formData.model)) {
-      toast({ title: 'Error', description: `Cover model must be one of: ${coverModels.join(', ')}`, variant: 'destructive' });
-      return false;
-    }
-    if (formData.model && formData.asset_type === 'Pendrive' && !pendriveSizes.includes(formData.model)) {
-      toast({ title: 'Error', description: `Pendrive size must be one of: ${pendriveSizes.join(', ')}`, variant: 'destructive' });
-      return false;
-    }
-    if (formData.model && formData.asset_type === 'Other' && !otherMaterials.includes(formData.model)) {
-      toast({ title: 'Error', description: `Material must be one of: ${otherMaterials.join(', ')}`, variant: 'destructive' });
-      return false;
-    }
     if (formData.configuration && formData.asset_type === 'Tablet' && !configurations.includes(formData.configuration)) {
       toast({ title: 'Error', description: `Tablet configuration must be one of: ${configurations.join(', ')}`, variant: 'destructive' });
       return false;
@@ -361,7 +295,7 @@ const EditOrderForm: React.FC<EditOrderFormProps> = ({ order, onSave, onCancel }
       toast({ title: 'Error', description: `TV configuration must be one of: ${tvConfigurations.join(', ')}`, variant: 'destructive' });
       return false;
     }
-    if (formData.product[0] && !products.includes(formData.product[0])) {
+    if (formData.product && !products.includes(formData.product)) {
       toast({ title: 'Error', description: `Product must be one of: ${products.join(', ')}`, variant: 'destructive' });
       return false;
     }
@@ -402,26 +336,6 @@ const EditOrderForm: React.FC<EditOrderFormProps> = ({ order, onSave, onCancel }
           return false;
         }
       }
-    }
-    if (formData.quantity !== devices.length) {
-      toast({ title: 'Error', description: `Quantity (${formData.quantity}) must match number of devices (${devices.length})`, variant: 'destructive' });
-      return false;
-    }
-    if (formData.serial_numbers.length !== devices.length) {
-      toast({ title: 'Error', description: `Serial numbers count (${formData.serial_numbers.length}) must match devices (${devices.length})`, variant: 'destructive' });
-      return false;
-    }
-    if (formData.asset_statuses.length !== devices.length) {
-      toast({ title: 'Error', description: `Asset statuses count (${formData.asset_statuses.length}) must match devices (${devices.length})`, variant: 'destructive' });
-      return false;
-    }
-    if (formData.asset_groups.length !== devices.length) {
-      toast({ title: 'Error', description: `Asset groups count (${formData.asset_groups.length}) must match devices (${devices.length})`, variant: 'destructive' });
-      return false;
-    }
-    if (formData.product.length !== devices.length) {
-      toast({ title: 'Error', description: `Product count (${formData.product.length}) must match devices (${devices.length})`, variant: 'destructive' });
-      return false;
     }
     return true;
   };
@@ -486,34 +400,24 @@ const EditOrderForm: React.FC<EditOrderFormProps> = ({ order, onSave, onCancel }
         'school_name',
         'nucleus_id',
         'configuration',
-        'product', // Note: product is now an array, handled below
+        'product',
         'sd_card_size',
         'profile_id',
       ];
 
       orderFields.forEach(field => {
-        if (field !== 'product' && formData[field as keyof Order] !== originalOrder[field as keyof Order]) {
+        if (formData[field as keyof Order] !== originalOrder[field as keyof Order]) {
           orderChanges[field as keyof Order] = formData[field as keyof Order];
         }
       });
 
       orderChanges.quantity = devices.length;
       orderChanges.serial_numbers = devices.map(d => d.serial_number || '');
-      orderChanges.asset_statuses = devices.map(d => d.asset_status || 'Fresh');
-      orderChanges.asset_groups = devices.map(d => d.asset_group || 'NFA');
-      orderChanges.product = formData.product;
       orderChanges.material_type = newMaterialType;
       orderChanges.updated_at = new Date().toISOString();
       orderChanges.updated_by = userEmail;
 
-      if (
-        Object.keys(orderChanges).length > 2 || // >2 for updated_at and updated_by
-        orderChanges.quantity !== originalOrder.quantity ||
-        JSON.stringify(orderChanges.serial_numbers) !== JSON.stringify(originalOrder.serial_numbers) ||
-        JSON.stringify(orderChanges.asset_statuses) !== JSON.stringify(originalOrder.asset_statuses || []) ||
-        JSON.stringify(orderChanges.asset_groups) !== JSON.stringify(originalOrder.asset_groups || []) ||
-        JSON.stringify(orderChanges.product) !== JSON.stringify(originalOrder.product || [])
-      ) {
+      if (Object.keys(orderChanges).length > 2 || orderChanges.quantity !== originalOrder.quantity || JSON.stringify(orderChanges.serial_numbers) !== JSON.stringify(originalOrder.serial_numbers)) { // >2 for updated_at and updated_by
         const { error: orderError } = await supabase
           .from('orders')
           .update(orderChanges)
@@ -526,7 +430,7 @@ const EditOrderForm: React.FC<EditOrderFormProps> = ({ order, onSave, onCancel }
 
         // Log order changes
         orderFields.forEach(field => {
-          if (field !== 'product' && formData[field as keyof Order] !== originalOrder[field as keyof Order]) {
+          if (formData[field as keyof Order] !== originalOrder[field as keyof Order]) {
             logHistory('orders', formData.id, field, String(originalOrder[field as keyof Order] || ''), String(formData[field as keyof Order] || ''), userEmail, formData.sales_order, 'UPDATE');
           }
         });
@@ -536,17 +440,9 @@ const EditOrderForm: React.FC<EditOrderFormProps> = ({ order, onSave, onCancel }
         if (orderChanges.quantity !== originalOrder.quantity) {
           logHistory('orders', formData.id, 'quantity', String(originalOrder.quantity), String(orderChanges.quantity), userEmail, formData.sales_order, 'UPDATE');
         }
+        // For serial_numbers, log if changed
         if (JSON.stringify(orderChanges.serial_numbers) !== JSON.stringify(originalOrder.serial_numbers)) {
           logHistory('orders', formData.id, 'serial_numbers', JSON.stringify(originalOrder.serial_numbers), JSON.stringify(orderChanges.serial_numbers), userEmail, formData.sales_order, 'UPDATE');
-        }
-        if (JSON.stringify(orderChanges.asset_statuses) !== JSON.stringify(originalOrder.asset_statuses || [])) {
-          logHistory('orders', formData.id, 'asset_statuses', JSON.stringify(originalOrder.asset_statuses || []), JSON.stringify(orderChanges.asset_statuses), userEmail, formData.sales_order, 'UPDATE');
-        }
-        if (JSON.stringify(orderChanges.asset_groups) !== JSON.stringify(originalOrder.asset_groups || [])) {
-          logHistory('orders', formData.id, 'asset_groups', JSON.stringify(originalOrder.asset_groups || []), JSON.stringify(orderChanges.asset_groups), userEmail, formData.sales_order, 'UPDATE');
-        }
-        if (JSON.stringify(orderChanges.product) !== JSON.stringify(originalOrder.product || [])) {
-          logHistory('orders', formData.id, 'product', JSON.stringify(originalOrder.product || []), JSON.stringify(orderChanges.product), userEmail, formData.sales_order, 'UPDATE');
         }
       }
 
@@ -580,7 +476,7 @@ const EditOrderForm: React.FC<EditOrderFormProps> = ({ order, onSave, onCancel }
           if (formData.profile_id !== originalDevice.profile_id) changes.profile_id = formData.profile_id;
           if (formData.model !== originalDevice.model) changes.model = formData.model;
           if (formData.configuration !== originalDevice.configuration) changes.configuration = formData.configuration;
-          if (formData.product[0] !== originalDevice.product) changes.product = formData.product[0];
+          if (formData.product !== originalDevice.product) changes.product = formData.product;
           if (formData.warehouse !== originalDevice.warehouse) changes.warehouse = formData.warehouse;
           if (formData.sales_order !== originalDevice.sales_order) changes.sales_order = formData.sales_order;
           if (formData.deal_id !== originalDevice.deal_id) changes.deal_id = formData.deal_id;
@@ -624,7 +520,7 @@ const EditOrderForm: React.FC<EditOrderFormProps> = ({ order, onSave, onCancel }
             material_type: newMaterialType,
             order_id: formData.id,
             configuration: formData.configuration || null,
-            product: formData.product[0] || 'Lead',
+            product: formData.product || 'Lead',
             sd_card_size: formData.sd_card_size || null,
             profile_id: formData.profile_id || null,
             asset_status: device.asset_status || 'Fresh',
@@ -662,9 +558,7 @@ const EditOrderForm: React.FC<EditOrderFormProps> = ({ order, onSave, onCancel }
           if (deviceData.profile_id) {
             await logHistory('devices', newDevice.id, 'profile_id', '', deviceData.profile_id, userEmail, formData.sales_order, 'INSERT');
           }
-          if (deviceData.product) {
-            await logHistory('devices', newDevice.id, 'product', '', deviceData.product, userEmail, formData.sales_order, 'INSERT');
-          }
+          // Add logs for other inserted fields if necessary
         }
       }
       devicesUpdated = true;
@@ -974,8 +868,8 @@ const EditOrderForm: React.FC<EditOrderFormProps> = ({ order, onSave, onCancel }
               <div>
                 <Label className='text-xs font-medium text-gray-700'>Product</Label>
                 <Select
-                  value={formData.product[0] || ''}
-                  onValueChange={updateProduct}
+                  value={formData.product || ''}
+                  onValueChange={(value) => setFormData(prev => ({ ...prev, product: value }))}
                 >
                   <SelectTrigger className='text-xs bg-white border-gray-300'>
                     <SelectValue placeholder='Select product' />

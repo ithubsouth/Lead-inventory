@@ -395,9 +395,6 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
           }
         }
         const assetSerials = asset.hasSerials ? asset.serialNumbers.filter(sn => sn && sn.trim()) : [];
-        const assetStatuses = asset.assetStatuses || Array(asset.quantity).fill('Fresh');
-        const assetGroups = asset.assetGroups || Array(asset.quantity).fill('NFA');
-        const productArray = Array(asset.quantity).fill(asset.product || 'Lead');
 
         const { data: orderData, error: orderError } = await supabase
           .from('orders')
@@ -413,11 +410,9 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
             school_name: schoolName,
             nucleus_id: nucleusId || null,
             serial_numbers: assetSerials,
-            asset_statuses: assetStatuses,
-            asset_groups: assetGroups,
-            product: productArray,
             order_date: new Date().toISOString(),
             configuration: asset.configuration || null,
+            product: asset.product || 'Lead',
             sd_card_size: asset.sdCardSize || null,
             profile_id: asset.profileId || null,
             created_by: userEmail,
