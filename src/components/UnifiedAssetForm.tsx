@@ -77,18 +77,27 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
 }) => {
   const [assets, setAssets] = useState<AssetItem[]>([]);
   const [assetErrors, setAssetErrors] = useState<Record<string, (string | null)[]>>({});
+  const [userEmail, setUserEmail] = useState<string | null>(null);
+  const [showBulk, setShowBulk] = useState(false);
 
   const toast = ({ title, description, variant }: { title: string; description: string; variant?: 'destructive' }) => {
     alert(`${title}: ${description}`);
   };
 
+  useEffect(() => {
+    const fetchUser = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      setUserEmail(user?.email || null);
+    };
+    fetchUser();
+  }, []);
+
   const generateId = () => Math.random().toString(36).substr(2, 9);
 
   const generateSalesOrder = () => {
-    // Generate alphanumeric pattern like "7054AS52"
-    const digits = Math.floor(1000 + Math.random() * 9000); // 4 digits
-    const letters = Math.random().toString(36).substr(2, 2).toUpperCase(); // 2 letters
-    const finalDigits = Math.floor(10 + Math.random() * 90); // 2 digits
+    const digits = Math.floor(1000 + Math.random() * 9000);
+    const letters = Math.random().toString(36).substr(2, 2).toUpperCase();
+    const finalDigits = Math.floor(10 + Math.random() * 90);
     return `${digits}${letters}${finalDigits}`;
   };
 
@@ -184,7 +193,6 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
       const serialErrors: (string | null)[] = Array(asset.quantity).fill(null);
       const allSerials = asset.serialNumbers.filter(sn => sn && sn.trim());
 
-      // Check for duplicates within the form
       for (let i = 0; i < asset.serialNumbers.length; i++) {
         const serial = asset.serialNumbers[i]?.trim();
         if (serial && allSerials.filter(s => s === serial).length > 1) {
@@ -192,7 +200,6 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
         }
       }
 
-      // Validate against database and auto-populate status/group for outward orders
       if (allSerials.length > 0) {
         const { data: deviceData, error: deviceError } = await supabase
           .from('devices')
@@ -209,7 +216,6 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
             }
           });
 
-          // Auto-populate asset_status and asset_group for outward orders
           if (!isInward) {
             const newStatuses = [...asset.assetStatuses];
             const newGroups = [...asset.assetGroups];
@@ -373,16 +379,13 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
       const materialType = ['Stock', 'Return'].includes(orderType) ? 'Inward' : 'Outward';
 
       for (const asset of assets) {
-        // Generate sales order from sales_order, deal_id, or school_name
         let salesOrderId = salesOrder;
         if (!salesOrderId) {
           if (dealId) {
-            // Mix deal_id with alphanumeric pattern
             const randomNum = Math.floor(10 + Math.random() * 90);
             const randomLetters = Math.random().toString(36).substr(2, 2).toUpperCase();
             salesOrderId = `${dealId}${randomLetters}${randomNum}`;
           } else if (schoolName) {
-            // Use school name initials with alphanumeric pattern
             const schoolCode = schoolName.substring(0, 3).toUpperCase();
             const randomNum = Math.floor(100 + Math.random() * 900);
             const randomLetters = Math.random().toString(36).substr(2, 2).toUpperCase();
@@ -393,25 +396,13 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
         }
         const assetSerials = asset.hasSerials ? asset.serialNumbers.filter(sn => sn && sn.trim()) : [];
 
-        // Determine model based on asset type
-        let model = '';
-        if (asset.assetType === 'Tablet' || asset.assetType === 'TV' || asset.assetType === 'Cover') {
-          model = asset.model || '';
-        } else if (asset.assetType === 'SD Card') {
-          model = asset.sdCardSize || '';
-        } else if (asset.assetType === 'Pendrive') {
-          model = asset.size || '';
-        } else if (asset.assetType === 'Other') {
-          model = asset.material || '';
-        }
-
         const { data: orderData, error: orderError } = await supabase
           .from('orders')
           .insert({
             order_type: orderType,
             material_type: materialType,
             asset_type: asset.assetType,
-            model: model,
+            model: asset.model || asset.sdCardSize || asset.size || asset.material || '',
             quantity: asset.quantity,
             warehouse: asset.location,
             sales_order: salesOrderId,
@@ -432,7 +423,6 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
 
         if (orderError) throw new Error(`Order insertion failed: ${orderError.message}`);
 
-        // Create devices
         for (let i = 0; i < asset.quantity; i++) {
           const serialNumber = asset.hasSerials ? (asset.serialNumbers[i] || '') : '';
           const assetStatus = asset.assetStatuses[i] || 'Fresh';
@@ -441,7 +431,7 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
 
           await supabase.from('devices').insert({
             asset_type: asset.assetType,
-            model: model,
+            model: asset.model || asset.sdCardSize || asset.size || asset.material || '',
             serial_number: serialNumber,
             warehouse: asset.location,
             sales_order: salesOrderId,
@@ -455,9 +445,12 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
             product: asset.product || 'Lead',
             sd_card_size: asset.sdCardSize || null,
             profile_id: asset.profileId || null,
+            size: asset.size || null,
+            material: asset.material || null,
             asset_status: assetStatus,
             asset_group: assetGroup,
             asset_condition: assetCondition,
+            far_code: null,
             created_by: userEmail,
             updated_by: userEmail,
           });
@@ -486,6 +479,7 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
     const isMandatorySerial = ['Tablet', 'TV'].includes(asset.assetType);
     const showSerialSection = isMandatorySerial || asset.hasSerials;
     const isInward = ['Stock', 'Return'].includes(orderType);
+    const isOutward = !isInward;
 
     return (
       <div key={asset.id} style={{ border: '1px solid #e5e7eb', borderRadius: '8px', padding: '16px', marginBottom: '16px', background: '#f9fafb' }}>
@@ -509,7 +503,6 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
         </div>
 
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '12px' }}>
-          {/* Tablet Fields */}
           {asset.assetType === 'Tablet' && (
             <>
               <div>
@@ -568,7 +561,6 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
             </>
           )}
 
-          {/* TV Fields */}
           {asset.assetType === 'TV' && (
             <>
               <div>
@@ -607,7 +599,6 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
             </>
           )}
 
-          {/* SD Card Fields */}
           {asset.assetType === 'SD Card' && (
             <>
               <div>
@@ -644,7 +635,6 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
             </>
           )}
 
-          {/* Cover Fields */}
           {asset.assetType === 'Cover' && (
             <>
               <div>
@@ -672,7 +662,6 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
             </>
           )}
 
-          {/* Pendrive Fields */}
           {asset.assetType === 'Pendrive' && (
             <>
               <div>
@@ -700,7 +689,6 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
             </>
           )}
 
-          {/* Other Fields */}
           {asset.assetType === 'Other' && (
             <>
               <div>
@@ -728,7 +716,6 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
             </>
           )}
 
-          {/* Common Fields */}
           <div>
             <label style={{ fontSize: '12px', display: 'block', marginBottom: '4px' }}>Location *</label>
             <select
@@ -760,51 +747,75 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
           </div>
           {!showSerialSection && (
             <>
-              <div>
-                <label style={{ fontSize: '12px', display: 'block', marginBottom: '4px' }}>Asset Status</label>
-                <select
-                  value={asset.assetStatuses[0] || 'Fresh'}
-                  onChange={(e) => {
-                    const newStatuses = Array(asset.quantity).fill(e.target.value);
-                    updateAsset(asset.id, 'assetStatuses', newStatuses);
-                  }}
-                  style={{ width: '100%', padding: '8px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '14px' }}
-                >
-                  {assetStatuses.map(s => <option key={s} value={s}>{s}</option>)}
-                </select>
-              </div>
-              <div>
-                <label style={{ fontSize: '12px', display: 'block', marginBottom: '4px' }}>Asset Group</label>
-                <select
-                  value={asset.assetGroups[0] || 'NFA'}
-                  onChange={(e) => {
-                    const newGroups = Array(asset.quantity).fill(e.target.value);
-                    updateAsset(asset.id, 'assetGroups', newGroups);
-                  }}
-                  style={{ width: '100%', padding: '8px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '14px' }}
-                >
-                  {assetGroups.map(g => <option key={g} value={g}>{g}</option>)}
-                </select>
-              </div>
-              {isInward && (asset.assetStatuses[0] || 'Fresh') === 'Scrap' && (
-                <div>
-                  <label style={{ fontSize: '12px', display: 'block', marginBottom: '4px' }}>Asset Condition</label>
-                  <input
-                    type="text"
-                    value={asset.asset_conditions[0] || ''}
-                    onChange={(e) => {
-                      const newConditions = Array(asset.quantity).fill(e.target.value);
-                      updateAsset(asset.id, 'asset_conditions', newConditions);
-                    }}
-                    style={{ width: '100%', padding: '8px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '14px' }}
-                  />
-                </div>
+              {isInward ? (
+                <>
+                  <div>
+                    <label style={{ fontSize: '12px', display: 'block', marginBottom: '4px' }}>Asset Status</label>
+                    <select
+                      value={asset.assetStatuses[0] || 'Fresh'}
+                      onChange={(e) => {
+                        const newStatuses = Array(asset.quantity).fill(e.target.value);
+                        updateAsset(asset.id, 'assetStatuses', newStatuses);
+                      }}
+                      style={{ width: '100%', padding: '8px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '14px' }}
+                    >
+                      {assetStatuses.map(s => <option key={s} value={s}>{s}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label style={{ fontSize: '12px', display: 'block', marginBottom: '4px' }}>Asset Group</label>
+                    <select
+                      value={asset.assetGroups[0] || 'NFA'}
+                      onChange={(e) => {
+                        const newGroups = Array(asset.quantity).fill(e.target.value);
+                        updateAsset(asset.id, 'assetGroups', newGroups);
+                      }}
+                      style={{ width: '100%', padding: '8px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '14px' }}
+                    >
+                      {assetGroups.map(g => <option key={g} value={g}>{g}</option>)}
+                    </select>
+                  </div>
+                  {(asset.assetStatuses[0] || 'Fresh') === 'Scrap' && (
+                    <div>
+                      <label style={{ fontSize: '12px', display: 'block', marginBottom: '4px' }}>Asset Condition</label>
+                      <input
+                        type="text"
+                        value={asset.asset_conditions[0] || ''}
+                        onChange={(e) => {
+                          const newConditions = Array(asset.quantity).fill(e.target.value);
+                          updateAsset(asset.id, 'asset_conditions', newConditions);
+                        }}
+                        style={{ width: '100%', padding: '8px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '14px' }}
+                      />
+                    </div>
+                  )}
+                </>
+              ) : (
+                <>
+                  <div>
+                    <label style={{ fontSize: '12px', display: 'block', marginBottom: '4px' }}>Asset Status</label>
+                    <input
+                      type="text"
+                      value={asset.assetStatuses[0] || 'Fresh'}
+                      disabled
+                      style={{ width: '100%', padding: '8px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '14px', background: '#f3f4f6' }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ fontSize: '12px', display: 'block', marginBottom: '4px' }}>Asset Group</label>
+                    <input
+                      type="text"
+                      value={asset.assetGroups[0] || 'NFA'}
+                      disabled
+                      style={{ width: '100%', padding: '8px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '14px', background: '#f3f4f6' }}
+                    />
+                  </div>
+                </>
               )}
             </>
           )}
         </div>
 
-        {/* Serial Numbers Section */}
         {showSerialSection && (
           <div style={{ marginTop: '16px' }}>
             <h5 style={{ fontSize: '12px', fontWeight: 'bold', marginBottom: '8px' }}>Serial Numbers</h5>
@@ -821,11 +832,12 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
                     }}
                     placeholder={`Serial ${index + 1}`}
                     style={{
-                      flex: 1,
+                      width: '200px',
                       padding: '8px',
                       border: `1px solid ${assetErrors[asset.id]?.[index] ? '#ef4444' : '#d1d5db'}`,
                       borderRadius: '4px',
-                      fontSize: '14px'
+                      fontSize: '14px',
+                      resize: 'none'
                     }}
                   />
                   <button
@@ -834,40 +846,60 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
                   >
                     <Camera size={16} />
                   </button>
-                  <select
-                    value={asset.assetStatuses[index] || 'Fresh'}
-                    onChange={(e) => {
-                      const newStatuses = [...asset.assetStatuses];
-                      newStatuses[index] = e.target.value;
-                      updateAsset(asset.id, 'assetStatuses', newStatuses);
-                    }}
-                    style={{ padding: '8px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '14px' }}
-                  >
-                    {assetStatuses.map(s => <option key={s} value={s}>{s}</option>)}
-                  </select>
-                  <select
-                    value={asset.assetGroups[index] || 'NFA'}
-                    onChange={(e) => {
-                      const newGroups = [...asset.assetGroups];
-                      newGroups[index] = e.target.value;
-                      updateAsset(asset.id, 'assetGroups', newGroups);
-                    }}
-                    style={{ padding: '8px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '14px' }}
-                  >
-                    {assetGroups.map(g => <option key={g} value={g}>{g}</option>)}
-                  </select>
-                  {isInward && asset.assetStatuses[index] === 'Scrap' && (
-                    <input
-                      type="text"
-                      value={asset.asset_conditions[index] || ''}
-                      onChange={(e) => {
-                        const newConditions = [...asset.asset_conditions];
-                        newConditions[index] = e.target.value;
-                        updateAsset(asset.id, 'asset_conditions', newConditions);
-                      }}
-                      placeholder="Asset Condition"
-                      style={{ padding: '8px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '14px' }}
-                    />
+                  {isInward && (
+                    <>
+                      <select
+                        value={asset.assetStatuses[index] || 'Fresh'}
+                        onChange={(e) => {
+                          const newStatuses = [...asset.assetStatuses];
+                          newStatuses[index] = e.target.value;
+                          updateAsset(asset.id, 'assetStatuses', newStatuses);
+                        }}
+                        style={{ width: '120px', padding: '8px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '14px', resize: 'none' }}
+                      >
+                        {assetStatuses.map(s => <option key={s} value={s}>{s}</option>)}
+                      </select>
+                      <select
+                        value={asset.assetGroups[index] || 'NFA'}
+                        onChange={(e) => {
+                          const newGroups = [...asset.assetGroups];
+                          newGroups[index] = e.target.value;
+                          updateAsset(asset.id, 'assetGroups', newGroups);
+                        }}
+                        style={{ width: '80px', padding: '8px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '14px', resize: 'none' }}
+                      >
+                        {assetGroups.map(g => <option key={g} value={g}>{g}</option>)}
+                      </select>
+                      {asset.assetStatuses[index] === 'Scrap' && (
+                        <input
+                          type="text"
+                          value={asset.asset_conditions[index] || ''}
+                          onChange={(e) => {
+                            const newConditions = [...asset.asset_conditions];
+                            newConditions[index] = e.target.value;
+                            updateAsset(asset.id, 'asset_conditions', newConditions);
+                          }}
+                          placeholder="Asset Condition"
+                          style={{ width: '200px', padding: '8px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '14px', resize: 'none' }}
+                        />
+                      )}
+                    </>
+                  )}
+                  {isOutward && (
+                    <>
+                      <input
+                        type="text"
+                        value={asset.assetStatuses[index] || 'Fresh'}
+                        disabled
+                        style={{ width: '120px', padding: '8px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '14px', background: '#f3f4f6', resize: 'none' }}
+                      />
+                      <input
+                        type="text"
+                        value={asset.assetGroups[index] || 'NFA'}
+                        disabled
+                        style={{ width: '80px', padding: '8px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '14px', background: '#f3f4f6', resize: 'none' }}
+                      />
+                    </>
                   )}
                   {assetErrors[asset.id]?.[index] && (
                     <span style={{ color: '#ef4444', fontSize: '12px' }}>{assetErrors[asset.id][index]}</span>
@@ -881,137 +913,14 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
     );
   };
 
+  const quoteCsvValue = (value: string) => {
+    return `"${value.replace(/"/g, '""')}"`;
+  };
+
   return (
     <div style={{ padding: '16px', maxWidth: '1200px', margin: '0 auto' }}>
       <h2 style={{ fontSize: '20px', fontWeight: 'bold', marginBottom: '16px' }}>Create Order</h2>
 
-      {/* Bulk Upload Section */}
-      <div style={{ border: '1px solid #e5e7eb', borderRadius: '8px', padding: '16px', marginBottom: '16px', background: '#fff' }}>
-        <h3 style={{ fontSize: '16px', fontWeight: 'bold', marginBottom: '12px' }}>Bulk Upload (CSV)</h3>
-        <div style={{ marginTop: '16px', padding: '12px', background: '#f9fafb', borderRadius: '4px' }}>
-          <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginBottom: '8px' }}>
-            <label style={{ fontSize: '14px', fontWeight: 'bold' }}>Bulk Upload (CSV)</label>
-            <button
-              onClick={() => {
-                const csvTemplate = `Sales Order,Deal ID,School Name,Nucleus ID,Order Type,Asset Type,Model,Configuration,Product,SD Card Size,Profile ID,Size,Material,Location,Quantity,Serial Number,Asset Status,Asset Group
-SO-1-abcde,DEAL123,School A,NUC001,Hardware,Tablet,Lenovo TB301XU,2G+32 GB (Android-10),Lead,128 GB,Profile 1,,,Trichy,1,SN001,Fresh,NFA
-SO-1-abcde,DEAL123,School A,NUC001,Stock,TV,Hyundai TV - 43",Smart TV,Propel,,,,,Bangalore,1,SN003,Fresh,NFA
-SO-1-abcde,DEAL123,School A,NUC001,Hardware,SD Card,,,,256 GB,Profile 2,,,Hyderabad,5,,Fresh,NFA
-SO-1-abcde,DEAL123,School A,NUC001,Hardware,Cover,M8 Flap Cover 4th gen - Lead,,Lead,,,,, Trichy,3,,Fresh,NFA
-SO-1-abcde,DEAL123,School A,NUC001,Hardware,Pendrive,,,,,,32 GB,,Kolkata,1,SN004,Fresh,NFA
-SO-1-abcde,DEAL123,School A,NUC001,Hardware,Other,,,Lead,,,, Dongle,Indore,1,,Fresh,NFA`;
-                const blob = new Blob([csvTemplate], { type: 'text/csv' });
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = 'bulk_upload_template.csv';
-                a.click();
-                URL.revokeObjectURL(url);
-              }}
-              style={{ padding: '6px 12px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '12px', background: '#fff', cursor: 'pointer' }}
-            >
-              Download Template
-            </button>
-          </div>
-          <input
-            type="file"
-            accept=".csv"
-            onChange={(e) => {
-              const file = e.target.files?.[0];
-              if (!file) return;
-
-              const reader = new FileReader();
-              reader.onload = async (evt) => {
-                try {
-                  const text = evt.target?.result as string;
-                  const lines = text.split('\n').filter(line => line.trim());
-                  const headers = lines[0].split(',').map(h => h.trim());
-
-                  const newAssets: AssetItem[] = [];
-                  for (let i = 1; i < lines.length; i++) {
-                    const values = lines[i].split(',').map((v: string) => v.trim().replace(/^"|"$/g, ''));
-                    const salesOrderVal = values[headers.indexOf('Sales Order')];
-                    const dealIdVal = values[headers.indexOf('Deal ID')];
-                    const schoolNameVal = values[headers.indexOf('School Name')];
-                    const nucleusIdVal = values[headers.indexOf('Nucleus ID')];
-                    const orderTypeVal = values[headers.indexOf('Order Type')];
-                    const assetTypeVal = values[headers.indexOf('Asset Type')];
-                    const modelVal = values[headers.indexOf('Model')];
-                    const configVal = values[headers.indexOf('Configuration')];
-                    const productVal = values[headers.indexOf('Product')];
-                    const sdCardVal = values[headers.indexOf('SD Card Size')];
-                    const profileVal = values[headers.indexOf('Profile ID')];
-                    const sizeVal = values[headers.indexOf('Size')];
-                    const materialVal = values[headers.indexOf('Material')];
-                    const locationVal = values[headers.indexOf('Location')];
-                    const quantityVal = parseInt(values[headers.indexOf('Quantity')]) || 1;
-                    const serialVal = values[headers.indexOf('Serial Number')];
-                    const statusVal = values[headers.indexOf('Asset Status')];
-                    const groupVal = values[headers.indexOf('Asset Group')];
-
-                    let quantity = quantityVal;
-                    let serialNumbers: string[] = [];
-                    let hasSerials = defaultHasSerials(assetTypeVal);
-                    if (serialVal) {
-                      serialNumbers = [serialVal];
-                      quantity = 1;
-                      hasSerials = true;
-                    } else {
-                      serialNumbers = hasSerials ? Array(quantity).fill('') : [];
-                    }
-
-                    newAssets.push({
-                      id: generateId(),
-                      assetType: assetTypeVal,
-                      model: modelVal || '',
-                      configuration: configVal || '',
-                      product: productVal || '',
-                      sdCardSize: sdCardVal || '',
-                      profileId: profileVal || '',
-                      size: sizeVal || '',
-                      material: materialVal || '',
-                      quantity: quantity,
-                      location: locationVal,
-                      serialNumbers,
-                      assetStatuses: Array(quantity).fill(statusVal || 'Fresh'),
-                      assetGroups: Array(quantity).fill(groupVal || 'NFA'),
-                      asset_conditions: Array(quantity).fill(''),
-                      hasSerials,
-                    });
-
-                    // Set order details if from CSV and not already set
-                    if (salesOrderVal && !salesOrder) {
-                      setSalesOrder(salesOrderVal);
-                    }
-                    if (dealIdVal && !dealId) {
-                      setDealId(dealIdVal);
-                    }
-                    if (schoolNameVal && !schoolName) {
-                      setSchoolName(schoolNameVal);
-                    }
-                    if (nucleusIdVal && !nucleusId) {
-                      setNucleusId(nucleusIdVal);
-                    }
-                    // Set order type if from CSV
-                    if (orderTypeVal && !orderType) {
-                      setOrderType(orderTypeVal);
-                    }
-                  }
-
-                  setAssets([...assets, ...newAssets]);
-                  toast({ title: 'Success', description: `Imported ${newAssets.length} assets from CSV` });
-                } catch (error) {
-                  toast({ title: 'Error', description: 'Failed to parse CSV file. Please check format.', variant: 'destructive' });
-                }
-              };
-              reader.readAsText(file);
-            }}
-            style={{ width: '100%', padding: '8px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '14px' }}
-          />
-        </div>
-      </div>
-
-      {/* Order Details */}
       <div style={{ border: '1px solid #e5e7eb', borderRadius: '8px', padding: '16px', marginBottom: '16px', background: '#fff' }}>
         <h3 style={{ fontSize: '16px', fontWeight: 'bold', marginBottom: '12px' }}>Order Details</h3>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '12px' }}>
@@ -1066,7 +975,6 @@ SO-1-abcde,DEAL123,School A,NUC001,Hardware,Other,,,Lead,,,, Dongle,Indore,1,,Fr
         </div>
       </div>
 
-      {/* Asset Type Selection */}
       <div style={{ border: '1px solid #e5e7eb', borderRadius: '8px', padding: '16px', marginBottom: '16px', background: '#fff' }}>
         <h3 style={{ fontSize: '16px', fontWeight: 'bold', marginBottom: '12px' }}>Add Assets</h3>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
@@ -1090,12 +998,294 @@ SO-1-abcde,DEAL123,School A,NUC001,Hardware,Other,,,Lead,,,, Dongle,Indore,1,,Fr
         </div>
       </div>
 
-      {/* Assets List */}
       <div>
         {assets.map(asset => renderAssetFields(asset))}
       </div>
 
-      {/* Submit Button */}
+      <div style={{ marginBottom: '16px' }}>
+        <button 
+          onClick={() => setShowBulk(!showBulk)} 
+          style={{ 
+            padding: '12px 24px', 
+            border: 'none', 
+            borderRadius: '4px', 
+            background: '#3b82f6', 
+            color: '#fff', 
+            fontSize: '16px', 
+            fontWeight: 'bold', 
+            cursor: 'pointer' 
+          }}
+        >
+          {showBulk ? 'Hide Bulk Operations' : 'Bulk Operations'}
+        </button>
+      </div>
+
+      {showBulk && (
+        <div style={{ display: 'flex', gap: '16px', marginBottom: '16px' }}>
+          {/* Bulk Upload Section */}
+          <div style={{ flex: 1, border: '1px solid #e5e7eb', borderRadius: '8px', padding: '16px', background: '#fff' }}>
+            <h3 style={{ fontSize: '16px', fontWeight: 'bold', marginBottom: '12px' }}>Bulk Upload (CSV)</h3>
+            <div style={{ marginTop: '16px', padding: '12px', background: '#f9fafb', borderRadius: '4px' }}>
+              <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginBottom: '8px' }}>
+                <label style={{ fontSize: '14px', fontWeight: 'bold' }}>Bulk Upload (CSV)</label>
+                <button
+                  onClick={() => {
+                    const headers = ['Sales Order', 'Deal ID', 'School Name', 'Nucleus ID', 'Order Type', 'Asset Type', 'Model', 'Configuration', 'Product', 'SD Card Size', 'Profile ID', 'Size', 'Material', 'Location', 'Quantity', 'Serial Number', 'Asset Status', 'Asset Group'];
+                    const rows = [
+                      ['SO-1-abcde', 'DEAL123', 'School A', 'NUC001', 'Hardware', 'Tablet', 'Lenovo TB301XU', '2G+32 GB (Android-10)', 'Lead', '128 GB', 'Profile 1', '', '', 'Trichy', '1', 'SN001', 'Fresh', 'NFA'],
+                      ['SO-1-abcde', 'DEAL123', 'School A', 'NUC001', 'Stock', 'TV', 'Hyundai TV - 43"', 'Smart TV', 'Propel', '', '', '', '', 'Bangalore', '1', 'SN003', 'Fresh', 'NFA'],
+                      ['SO-1-abcde', 'DEAL123', 'School A', 'NUC001', 'Hardware', 'SD Card', '', '', '', '256 GB', 'Profile 2', '', '', 'Hyderabad', '5', '', 'Fresh', 'NFA'],
+                      ['SO-1-abcde', 'DEAL123', 'School A', 'NUC001', 'Hardware', 'Cover', 'M8 Flap Cover 4th gen - Lead', '', 'Lead', '', '', '', '', 'Trichy', '3', '', 'Fresh', 'NFA'],
+                      ['SO-1-abcde', 'DEAL123', 'School A', 'NUC001', 'Hardware', 'Pendrive', '', '', '', '', '', '32 GB', '', 'Kolkata', '1', 'SN004', 'Fresh', 'NFA'],
+                      ['SO-1-abcde', 'DEAL123', 'School A', 'NUC001', 'Hardware', 'Other', '', '', 'Lead', '', '', '', 'Dongle', 'Indore', '1', '', 'Fresh', 'NFA']
+                    ];
+                    const csvTemplate = headers.map(quoteCsvValue).join(',') + '\n' + rows.map(row => row.map(quoteCsvValue).join(',')).join('\n');
+                    const blob = new Blob([csvTemplate], { type: 'text/csv' });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = 'bulk_upload_template.csv';
+                    a.click();
+                    URL.revokeObjectURL(url);
+                  }}
+                  style={{ padding: '6px 12px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '12px', background: '#fff', cursor: 'pointer' }}
+                >
+                  Download Template
+                </button>
+              </div>
+              <input
+                type="file"
+                accept=".csv"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (!file) return;
+
+                  const reader = new FileReader();
+                  reader.onload = async (evt) => {
+                    try {
+                      const text = evt.target?.result as string;
+                      const lines = text.split('\n').filter(line => line.trim());
+                      const headers = lines[0].split(',').map(h => h.trim().replace(/^"|"$/g, ''));
+
+                      const newAssets: AssetItem[] = [];
+                      for (let i = 1; i < lines.length; i++) {
+                        const values = lines[i].split(',').map((v: string) => v.trim().replace(/^"|"$/g, ''));
+                        const salesOrderVal = values[headers.indexOf('Sales Order')];
+                        const dealIdVal = values[headers.indexOf('Deal ID')];
+                        const schoolNameVal = values[headers.indexOf('School Name')];
+                        const nucleusIdVal = values[headers.indexOf('Nucleus ID')];
+                        const orderTypeVal = values[headers.indexOf('Order Type')];
+                        const assetTypeVal = values[headers.indexOf('Asset Type')];
+                        const modelVal = values[headers.indexOf('Model')];
+                        const configVal = values[headers.indexOf('Configuration')];
+                        const productVal = values[headers.indexOf('Product')];
+                        const sdCardVal = values[headers.indexOf('SD Card Size')];
+                        const profileVal = values[headers.indexOf('Profile ID')];
+                        const sizeVal = values[headers.indexOf('Size')];
+                        const materialVal = values[headers.indexOf('Material')];
+                        const locationVal = values[headers.indexOf('Location')];
+                        const quantityVal = parseInt(values[headers.indexOf('Quantity')]) || 1;
+                        const serialVal = values[headers.indexOf('Serial Number')];
+                        const statusVal = values[headers.indexOf('Asset Status')];
+                        const groupVal = values[headers.indexOf('Asset Group')];
+
+                        let quantity = quantityVal;
+                        let serialNumbers: string[] = [];
+                        let hasSerials = defaultHasSerials(assetTypeVal);
+                        if (serialVal) {
+                          serialNumbers = [serialVal];
+                          quantity = 1;
+                          hasSerials = true;
+                        } else {
+                          serialNumbers = hasSerials ? Array(quantity).fill('') : [];
+                        }
+
+                        newAssets.push({
+                          id: generateId(),
+                          assetType: assetTypeVal,
+                          model: modelVal || '',
+                          configuration: configVal || '',
+                          product: productVal || '',
+                          sdCardSize: sdCardVal || '',
+                          profileId: profileVal || '',
+                          size: sizeVal || '',
+                          material: materialVal || '',
+                          quantity: quantity,
+                          location: locationVal,
+                          serialNumbers,
+                          assetStatuses: Array(quantity).fill(statusVal || 'Fresh'),
+                          assetGroups: Array(quantity).fill(groupVal || 'NFA'),
+                          asset_conditions: Array(quantity).fill(''),
+                          hasSerials,
+                        });
+
+                        if (salesOrderVal && !salesOrder) {
+                          setSalesOrder(salesOrderVal);
+                        }
+                        if (dealIdVal && !dealId) {
+                          setDealId(dealIdVal);
+                        }
+                        if (schoolNameVal && !schoolName) {
+                          setSchoolName(schoolNameVal);
+                        }
+                        if (nucleusIdVal && !nucleusId) {
+                          setNucleusId(nucleusIdVal);
+                        }
+                        if (orderTypeVal && !orderType) {
+                          setOrderType(orderTypeVal);
+                        }
+                      }
+
+                      setAssets([...assets, ...newAssets]);
+                      toast({ title: 'Success', description: `Imported ${newAssets.length} assets from CSV` });
+                    } catch (error) {
+                      toast({ title: 'Error', description: 'Failed to parse CSV file. Please check format.', variant: 'destructive' });
+                    }
+                  };
+                  reader.readAsText(file);
+                }}
+                style={{ width: '100%', padding: '8px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '14px' }}
+              />
+            </div>
+          </div>
+
+          {/* Bulk Update Section */}
+          <div style={{ flex: 1, border: '1px solid #e5e7eb', borderRadius: '8px', padding: '16px', background: '#fff' }}>
+            <h3 style={{ fontSize: '16px', fontWeight: 'bold', marginBottom: '12px' }}>Bulk Update Asset Group and FAR Code (CSV)</h3>
+            <div style={{ marginTop: '16px', padding: '12px', background: '#f9fafb', borderRadius: '4px' }}>
+              <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginBottom: '8px' }}>
+                <label style={{ fontSize: '14px', fontWeight: 'bold' }}>Bulk Update (CSV)</label>
+                <button
+                  onClick={() => {
+                    const headers = ['Serial number', 'Location', 'Asset group', 'FAR Code'];
+                    const rows = [
+                      ['SN001', 'Trichy', 'NFA', 'FAR001'],
+                      ['SN002', 'Bangalore', 'NFA', 'FAR002']
+                    ];
+                    const csvTemplate = headers.map(quoteCsvValue).join(',') + '\n' + rows.map(row => row.map(quoteCsvValue).join(',')).join('\n');
+                    const blob = new Blob([csvTemplate], { type: 'text/csv' });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = 'asset_details_template.csv';
+                    a.click();
+                    URL.revokeObjectURL(url);
+                  }}
+                  style={{ padding: '6px 12px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '12px', background: '#fff', cursor: 'pointer' }}
+                >
+                  Download Template
+                </button>
+              </div>
+              <input
+                type="file"
+                accept=".csv"
+                onChange={async (e) => {
+                  const file = e.target.files?.[0];
+                  if (!file) return;
+
+                  const reader = new FileReader();
+                  reader.onload = async (evt) => {
+                    try {
+                      const text = evt.target?.result as string;
+                      const lines = text.split('\n').filter(line => line.trim());
+                      const headers = lines[0].split(',').map(h => h.trim().replace(/^"|"$/g, ''));
+
+                      const errors: { values: string[], error: string }[] = [];
+                      const updatedSerials: string[] = [];
+
+                      for (let i = 1; i < lines.length; i++) {
+                        const values = lines[i].split(',').map((v: string) => v.trim().replace(/^"|"$/g, ''));
+                        const serial = values[headers.indexOf('Serial number')];
+                        const location = values[headers.indexOf('Location')];
+                        const asset_group = values[headers.indexOf('Asset group')];
+                        const far_code = values[headers.indexOf('FAR Code')];
+
+                        if (!serial) {
+                          errors.push({ values, error: 'Missing serial number' });
+                          continue;
+                        }
+
+                        const { data: deviceData, error: fetchError } = await supabase
+                          .from('devices')
+                          .select('*')
+                          .eq('serial_number', serial)
+                          .eq('is_deleted', false)
+                          .order('updated_at', { ascending: false })
+                          .limit(1);
+
+                        if (fetchError || !deviceData || deviceData.length === 0) {
+                          errors.push({ values, error: 'Serial number not available' });
+                          continue;
+                        }
+
+                        const device = deviceData[0];
+
+                        if (device.material_type !== 'Inward') {
+                          errors.push({ values, error: 'Not inward material type' });
+                          continue;
+                        }
+
+                        if (device.warehouse !== location) {
+                          errors.push({ values, error: 'Location not matched' });
+                          continue;
+                        }
+
+                        if (device.far_code) {
+                          errors.push({ values, error: 'FAR Code already available' });
+                          continue;
+                        }
+
+                        const { error: updateError } = await supabase
+                          .from('devices')
+                          .update({
+                            asset_group,
+                            far_code,
+                            updated_at: new Date().toISOString(),
+                            updated_by: userEmail,
+                          })
+                          .eq('id', device.id);
+
+                        if (updateError) {
+                          errors.push({ values, error: `Update failed: ${updateError.message}` });
+                        } else {
+                          updatedSerials.push(serial);
+                        }
+                      }
+
+                      if (errors.length > 0) {
+                        const confirmDownload = window.confirm(`There are ${errors.length} errors. Download error CSV? (OK to download, Cancel to skip)`);
+                        if (confirmDownload) {
+                          let errorCsv = [...headers, 'Error'].map(quoteCsvValue).join(',') + '\n';
+                          errors.forEach(({ values, error }) => {
+                            const row = [...values, error].map(quoteCsvValue).join(',');
+                            errorCsv += row + '\n';
+                          });
+                          const blob = new Blob([errorCsv], { type: 'text/csv' });
+                          const url = URL.createObjectURL(blob);
+                          const a = document.createElement('a');
+                          a.href = url;
+                          a.download = 'update_errors.csv';
+                          a.click();
+                          URL.revokeObjectURL(url);
+                        }
+                      } else {
+                        toast({ title: 'Success', description: `Updated ${updatedSerials.length} devices successfully` });
+                      }
+
+                      await loadDevices();
+                    } catch (error) {
+                      toast({ title: 'Error', description: 'Failed to process update CSV. Please check format.', variant: 'destructive' });
+                    }
+                  };
+                  reader.readAsText(file);
+                }}
+                style={{ width: '100%', padding: '8px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '14px' }}
+              />
+            </div>
+          </div>
+        </div>
+      )}
+
       <button
         onClick={createOrder}
         disabled={loading || assets.length === 0}

@@ -46,6 +46,8 @@ const EditOrderForm: React.FC<EditOrderFormProps> = ({ order, onSave, onCancel }
   const [serialErrors, setSerialErrors] = useState<(string | null)[]>([]);
   const { toast } = useToast();
 
+  const isInward = ['Stock', 'Return'].includes(formData.order_type);
+
   // Fetch devices for the order on mount
   useEffect(() => {
     const fetchDevices = async () => {
@@ -64,14 +66,17 @@ const EditOrderForm: React.FC<EditOrderFormProps> = ({ order, onSave, onCancel }
       setFormData(prev => ({
         ...prev,
         serial_numbers: fetchedDevices.map(d => d.serial_number || ''),
-        quantity: fetchedDevices.length || 1,
-        sd_card_size: fetchedDevices[0]?.sd_card_size || '',
-        profile_id: fetchedDevices[0]?.profile_id || '',
+        quantity: fetchedDevices.length,
       }));
       validateSerials(fetchedDevices);
     };
     fetchDevices();
   }, [order.id, toast]);
+
+  // Sync quantity with devices length
+  useEffect(() => {
+    setFormData(prev => ({ ...prev, quantity: devices.length }));
+  }, [devices]);
 
   // Reset fields when asset_type changes (keep model for all types)
   useEffect(() => {
@@ -93,7 +98,6 @@ const EditOrderForm: React.FC<EditOrderFormProps> = ({ order, onSave, onCancel }
   // Validate serial numbers for duplicates and stock availability
   const validateSerials = async (devicesToValidate: Device[]) => {
     const errors = Array(devicesToValidate.length).fill(null);
-    const isInward = orderTypes.includes(formData.order_type) && ['Stock', 'Return'].includes(formData.order_type);
     const allSerials = devicesToValidate.map(d => d.serial_number?.trim() || '').filter(sn => sn);
 
     // Check for duplicates within the form
@@ -172,11 +176,6 @@ const EditOrderForm: React.FC<EditOrderFormProps> = ({ order, onSave, onCancel }
 
   const removeSerialNumber = (index: number) => {
     setDevices(prev => prev.filter((_, i) => i !== index));
-    setFormData(prev => ({
-      ...prev,
-      serial_numbers: prev.serial_numbers.filter((_, i) => i !== index),
-      quantity: Math.max(1, prev.quantity - 1),
-    }));
   };
 
   const updateSerialNumber = (index: number, value: string) => {
@@ -186,10 +185,6 @@ const EditOrderForm: React.FC<EditOrderFormProps> = ({ order, onSave, onCancel }
       newDevices[index] = { ...newDevices[index], serial_number: trimmedValue };
       return newDevices;
     });
-    setFormData(prev => ({
-      ...prev,
-      serial_numbers: prev.serial_numbers.map((sn, i) => (i === index ? trimmedValue : sn)),
-    }));
   };
 
   const updateAssetStatus = (index: number, value: string) => {
@@ -208,14 +203,20 @@ const EditOrderForm: React.FC<EditOrderFormProps> = ({ order, onSave, onCancel }
     });
   };
 
+  const updateAssetCondition = (index: number, value: string) => {
+    setDevices(prev => {
+      const newDevices = [...prev];
+      newDevices[index] = { ...newDevices[index], asset_condition: value };
+      return newDevices;
+    });
+  };
+
   const updateSdCardSize = (value: string) => {
     setFormData(prev => ({ ...prev, sd_card_size: value }));
-    setDevices(prev => prev.map(device => ({ ...device, sd_card_size: value })));
   };
 
   const updateProfileId = (value: string) => {
     setFormData(prev => ({ ...prev, profile_id: value }));
-    setDevices(prev => prev.map(device => ({ ...device, profile_id: value })));
   };
 
   const handleScanSuccess = (result: string) => {
@@ -229,7 +230,6 @@ const EditOrderForm: React.FC<EditOrderFormProps> = ({ order, onSave, onCancel }
   const handleQuantityChange = (value: number) => {
     const newQuantity = Math.max(1, value);
     const currentDevices = [...devices];
-    const currentSerials = formData.serial_numbers || [];
 
     if (newQuantity > currentDevices.length) {
       const newDevices = Array(newQuantity - currentDevices.length).fill(null).map(() => ({
@@ -243,14 +243,15 @@ const EditOrderForm: React.FC<EditOrderFormProps> = ({ order, onSave, onCancel }
         deal_id: formData.deal_id || null,
         school_name: formData.school_name,
         nucleus_id: formData.nucleus_id || null,
-        status: orderTypes.includes(formData.order_type) && ['Stock', 'Return'].includes(formData.order_type) ? 'Available' : 'Assigned',
-        material_type: orderTypes.includes(formData.order_type) && ['Stock', 'Return'].includes(formData.order_type) ? 'Inward' : 'Outward',
+        status: isInward ? 'Available' : 'Assigned',
+        material_type: isInward ? 'Inward' : 'Outward',
         configuration: formData.configuration || null,
         product: formData.product || null,
         sd_card_size: formData.sd_card_size || null,
         profile_id: formData.profile_id || null,
         asset_status: 'Fresh',
         asset_group: 'NFA',
+        asset_condition: '',
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
         created_by: '',
@@ -259,18 +260,8 @@ const EditOrderForm: React.FC<EditOrderFormProps> = ({ order, onSave, onCancel }
         order_type: order.order_type,
       }));
       setDevices([...currentDevices, ...newDevices] as Device[]);
-      setFormData(prev => ({
-        ...prev,
-        quantity: newQuantity,
-        serial_numbers: [...currentSerials, ...Array(newQuantity - currentSerials.length).fill('')],
-      }));
     } else {
       setDevices(currentDevices.slice(0, newQuantity));
-      setFormData(prev => ({
-        ...prev,
-        quantity: newQuantity,
-        serial_numbers: currentSerials.slice(0, newQuantity),
-      }));
     }
   };
 
@@ -312,14 +303,6 @@ const EditOrderForm: React.FC<EditOrderFormProps> = ({ order, onSave, onCancel }
       toast({ title: 'Error', description: `SD Card Size must be one of: ${sdCardSizes.join(', ')}`, variant: 'destructive' });
       return false;
     }
-    if (devices.length !== formData.quantity) {
-      toast({
-        title: 'Validation Error',
-        description: `Number of devices (${devices.length}) does not match quantity (${formData.quantity})`,
-        variant: 'destructive',
-      });
-      return false;
-    }
     const invalidStatuses = devices.some(device => !assetStatuses.includes(device.asset_status));
     if (invalidStatuses) {
       toast({
@@ -345,6 +328,14 @@ const EditOrderForm: React.FC<EditOrderFormProps> = ({ order, onSave, onCancel }
         variant: 'destructive',
       });
       return false;
+    }
+    if (isInward) {
+      for (let i = 0; i < devices.length; i++) {
+        if (devices[i].asset_status === 'Scrap' && !devices[i].asset_condition?.trim()) {
+          toast({ title: 'Error', description: `Asset condition is required for scrapped item at position ${i + 1}`, variant: 'destructive' });
+          return false;
+        }
+      }
     }
     return true;
   };
@@ -394,43 +385,15 @@ const EditOrderForm: React.FC<EditOrderFormProps> = ({ order, onSave, onCancel }
       }
       const userEmail = userData.user.email;
 
-      // Update order in the orders table
-      const orderUpdates: Partial<Order> = {
-        order_type: formData.order_type,
-        material_type: orderTypes.includes(formData.order_type) && ['Stock', 'Return'].includes(formData.order_type) ? 'Inward' : 'Outward',
-        asset_type: formData.asset_type,
-        model: formData.model || null,
-        quantity: formData.quantity,
-        warehouse: formData.warehouse,
-        sales_order: formData.sales_order || null,
-        deal_id: formData.deal_id || null,
-        school_name: formData.school_name,
-        nucleus_id: formData.nucleus_id || null,
-        serial_numbers: devices.map(d => d.serial_number || ''),
-        configuration: formData.configuration || null,
-        product: formData.product || 'Lead',
-        sd_card_size: formData.sd_card_size || null,
-        profile_id: formData.profile_id || null,
-        updated_at: new Date().toISOString(),
-        updated_by: userEmail,
-      };
+      const newMaterialType = isInward ? 'Inward' : 'Outward';
+      const newStatus = newMaterialType === 'Inward' ? 'Available' : 'Assigned';
 
-      const { error: orderError } = await supabase
-        .from('orders')
-        .update(orderUpdates)
-        .eq('id', formData.id);
-
-      if (orderError) {
-        throw new Error(`Failed to update order: ${orderError.message}`);
-      }
-      orderUpdated = true;
-
-      // Log order changes
-      const fieldsToCompare = [
+      // Update order if changed
+      const orderChanges: Partial<Order> = {};
+      const orderFields = [
         'order_type',
         'asset_type',
         'model',
-        'quantity',
         'warehouse',
         'sales_order',
         'deal_id',
@@ -442,18 +405,50 @@ const EditOrderForm: React.FC<EditOrderFormProps> = ({ order, onSave, onCancel }
         'profile_id',
       ];
 
-      for (const field of fieldsToCompare) {
-        const oldValue = String(originalOrder[field as keyof Order] || '');
-        const newValue = String(formData[field as keyof Order] || '');
-        if (oldValue !== newValue) {
-          await logHistory('orders', formData.id, field, oldValue, newValue, userEmail, formData.sales_order, 'UPDATE');
+      orderFields.forEach(field => {
+        if (formData[field as keyof Order] !== originalOrder[field as keyof Order]) {
+          orderChanges[field as keyof Order] = formData[field as keyof Order];
+        }
+      });
+
+      orderChanges.quantity = devices.length;
+      orderChanges.serial_numbers = devices.map(d => d.serial_number || '');
+      orderChanges.material_type = newMaterialType;
+      orderChanges.updated_at = new Date().toISOString();
+      orderChanges.updated_by = userEmail;
+
+      if (Object.keys(orderChanges).length > 2 || orderChanges.quantity !== originalOrder.quantity || JSON.stringify(orderChanges.serial_numbers) !== JSON.stringify(originalOrder.serial_numbers)) { // >2 for updated_at and updated_by
+        const { error: orderError } = await supabase
+          .from('orders')
+          .update(orderChanges)
+          .eq('id', formData.id);
+
+        if (orderError) {
+          throw new Error(`Failed to update order: ${orderError.message}`);
+        }
+        orderUpdated = true;
+
+        // Log order changes
+        orderFields.forEach(field => {
+          if (formData[field as keyof Order] !== originalOrder[field as keyof Order]) {
+            logHistory('orders', formData.id, field, String(originalOrder[field as keyof Order] || ''), String(formData[field as keyof Order] || ''), userEmail, formData.sales_order, 'UPDATE');
+          }
+        });
+        if (newMaterialType !== originalOrder.material_type) {
+          logHistory('orders', formData.id, 'material_type', originalOrder.material_type || '', newMaterialType, userEmail, formData.sales_order, 'UPDATE');
+        }
+        if (orderChanges.quantity !== originalOrder.quantity) {
+          logHistory('orders', formData.id, 'quantity', String(originalOrder.quantity), String(orderChanges.quantity), userEmail, formData.sales_order, 'UPDATE');
+        }
+        // For serial_numbers, log if changed
+        if (JSON.stringify(orderChanges.serial_numbers) !== JSON.stringify(originalOrder.serial_numbers)) {
+          logHistory('orders', formData.id, 'serial_numbers', JSON.stringify(originalOrder.serial_numbers), JSON.stringify(orderChanges.serial_numbers), userEmail, formData.sales_order, 'UPDATE');
         }
       }
 
-      // Mark deleted devices
-      devicesToDelete = originalDevices.filter(
-        od => !devices.some(d => d.id === od.id)
-      );
+      // Identify deleted devices
+      devicesToDelete = originalDevices.filter(od => !devices.some(d => d.id === od.id));
+
       for (const device of devicesToDelete) {
         const { error } = await supabase
           .from('devices')
@@ -465,80 +460,105 @@ const EditOrderForm: React.FC<EditOrderFormProps> = ({ order, onSave, onCancel }
         await logHistory('devices', device.id, 'is_deleted', 'false', 'true', userEmail, formData.sales_order, 'DELETE');
       }
 
-      // Update or insert devices
+      // Update or insert devices only if changed
       for (let i = 0; i < devices.length; i++) {
         const device = devices[i];
         const originalDevice = originalDevices.find(od => od.id === device.id);
-        const deviceData = {
-          asset_type: formData.asset_type,
-          model: formData.model || null,
-          serial_number: device.serial_number || '',
-          warehouse: formData.warehouse,
-          sales_order: formData.sales_order || null,
-          deal_id: formData.deal_id || null,
-          school_name: formData.school_name,
-          nucleus_id: formData.nucleus_id || null,
-          status: orderTypes.includes(formData.order_type) && ['Stock', 'Return'].includes(formData.order_type) ? 'Available' : 'Assigned',
-          material_type: orderTypes.includes(formData.order_type) && ['Stock', 'Return'].includes(formData.order_type) ? 'Inward' : 'Outward',
-          order_id: formData.id,
-          configuration: formData.configuration || null,
-          product: formData.product || 'Lead',
-          sd_card_size: formData.sd_card_size || null,
-          profile_id: formData.profile_id || null,
-          asset_status: device.asset_status || 'Fresh',
-          asset_group: device.asset_group || 'NFA',
-          updated_at: new Date().toISOString(),
-          updated_by: userEmail,
-          is_deleted: false,
-        };
+        const changes: Partial<Device> = {};
 
         if (originalDevice) {
-          // Update existing device
-          const { error } = await supabase
-            .from('devices')
-            .update(deviceData)
-            .eq('id', device.id);
-          if (error) {
-            throw new Error(`Failed to update device: ${error.message}`);
-          }
+          // Check for changes
+          if (device.serial_number !== originalDevice.serial_number) changes.serial_number = device.serial_number;
+          if (device.asset_status !== originalDevice.asset_status) changes.asset_status = device.asset_status;
+          if (device.asset_group !== originalDevice.asset_group) changes.asset_group = device.asset_group;
+          if (device.asset_condition !== originalDevice.asset_condition) changes.asset_condition = device.asset_condition;
+          if (formData.sd_card_size !== originalDevice.sd_card_size) changes.sd_card_size = formData.sd_card_size;
+          if (formData.profile_id !== originalDevice.profile_id) changes.profile_id = formData.profile_id;
+          if (formData.model !== originalDevice.model) changes.model = formData.model;
+          if (formData.configuration !== originalDevice.configuration) changes.configuration = formData.configuration;
+          if (formData.product !== originalDevice.product) changes.product = formData.product;
+          if (formData.warehouse !== originalDevice.warehouse) changes.warehouse = formData.warehouse;
+          if (formData.sales_order !== originalDevice.sales_order) changes.sales_order = formData.sales_order;
+          if (formData.deal_id !== originalDevice.deal_id) changes.deal_id = formData.deal_id;
+          if (formData.school_name !== originalDevice.school_name) changes.school_name = formData.school_name;
+          if (formData.nucleus_id !== originalDevice.nucleus_id) changes.nucleus_id = formData.nucleus_id;
+          if (newMaterialType !== originalDevice.material_type) changes.material_type = newMaterialType;
+          if (newStatus !== originalDevice.status) changes.status = newStatus;
 
-          // Log device changes
-          const deviceFields = [
-            'serial_number',
-            'asset_status',
-            'asset_group',
-            'sd_card_size',
-            'profile_id',
-          ];
-          for (const field of deviceFields) {
-            const oldValue = String(originalDevice[field as keyof Device] || '');
-            const newValue = String(device[field as keyof Device] || '');
-            if (oldValue !== newValue) {
-              await logHistory('devices', device.id, field, oldValue, newValue, userEmail, formData.sales_order, 'UPDATE');
+          if (Object.keys(changes).length > 0) {
+            changes.updated_at = new Date().toISOString();
+            changes.updated_by = userEmail;
+
+            const { error } = await supabase
+              .from('devices')
+              .update(changes)
+              .eq('id', device.id);
+
+            if (error) {
+              throw new Error(`Failed to update device: ${error.message}`);
+            }
+
+            // Log changes
+            for (const field in changes) {
+              if (field !== 'updated_at' && field !== 'updated_by') {
+                await logHistory('devices', device.id, field, String(originalDevice[field as keyof Device] || ''), String(changes[field as keyof Device] || ''), userEmail, formData.sales_order, 'UPDATE');
+              }
             }
           }
         } else {
           // Insert new device
+          const deviceData = {
+            asset_type: formData.asset_type,
+            model: formData.model || null,
+            serial_number: device.serial_number || '',
+            warehouse: formData.warehouse,
+            sales_order: formData.sales_order || null,
+            deal_id: formData.deal_id || null,
+            school_name: formData.school_name,
+            nucleus_id: formData.nucleus_id || null,
+            status: newStatus,
+            material_type: newMaterialType,
+            order_id: formData.id,
+            configuration: formData.configuration || null,
+            product: formData.product || 'Lead',
+            sd_card_size: formData.sd_card_size || null,
+            profile_id: formData.profile_id || null,
+            asset_status: device.asset_status || 'Fresh',
+            asset_group: device.asset_group || 'NFA',
+            asset_condition: device.asset_condition || null,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+            created_by: userEmail,
+            updated_by: userEmail,
+            is_deleted: false,
+          };
+
           const { data: newDevice, error } = await supabase
             .from('devices')
-            .insert({ ...deviceData, created_at: new Date().toISOString(), created_by: userEmail })
+            .insert(deviceData)
             .select()
             .single();
+
           if (error) {
             throw new Error(`Failed to insert device: ${error.message}`);
           }
+
           devices[i].id = newDevice.id;
 
           // Log new device fields
-          await logHistory('devices', newDevice.id, 'serial_number', '', device.serial_number || '', userEmail, formData.sales_order, 'INSERT');
-          await logHistory('devices', newDevice.id, 'asset_status', '', device.asset_status || 'Fresh', userEmail, formData.sales_order, 'INSERT');
-          await logHistory('devices', newDevice.id, 'asset_group', '', device.asset_group || 'NFA', userEmail, formData.sales_order, 'INSERT');
-          if (formData.sd_card_size) {
-            await logHistory('devices', newDevice.id, 'sd_card_size', '', device.sd_card_size || '', userEmail, formData.sales_order, 'INSERT');
+          await logHistory('devices', newDevice.id, 'serial_number', '', deviceData.serial_number, userEmail, formData.sales_order, 'INSERT');
+          await logHistory('devices', newDevice.id, 'asset_status', '', deviceData.asset_status, userEmail, formData.sales_order, 'INSERT');
+          await logHistory('devices', newDevice.id, 'asset_group', '', deviceData.asset_group, userEmail, formData.sales_order, 'INSERT');
+          if (deviceData.asset_condition) {
+            await logHistory('devices', newDevice.id, 'asset_condition', '', deviceData.asset_condition, userEmail, formData.sales_order, 'INSERT');
           }
-          if (formData.profile_id) {
-            await logHistory('devices', newDevice.id, 'profile_id', '', device.profile_id || '', userEmail, formData.sales_order, 'INSERT');
+          if (deviceData.sd_card_size) {
+            await logHistory('devices', newDevice.id, 'sd_card_size', '', deviceData.sd_card_size, userEmail, formData.sales_order, 'INSERT');
           }
+          if (deviceData.profile_id) {
+            await logHistory('devices', newDevice.id, 'profile_id', '', deviceData.profile_id, userEmail, formData.sales_order, 'INSERT');
+          }
+          // Add logs for other inserted fields if necessary
         }
       }
       devicesUpdated = true;
@@ -572,13 +592,16 @@ const EditOrderForm: React.FC<EditOrderFormProps> = ({ order, onSave, onCancel }
               .eq('id', device.id);
           }
           // Revert to original devices
-          await supabase
-            .from('devices')
-            .upsert((originalDevices as any[]).map((device: any) => ({
-              ...device,
-              updated_at: new Date().toISOString(),
-              updated_by: userEmail,
-            })));
+          for (const originalDevice of originalDevices) {
+            await supabase
+              .from('devices')
+              .update({
+                ...originalDevice,
+                updated_at: new Date().toISOString(),
+                updated_by: userEmail,
+              })
+              .eq('id', originalDevice.id);
+          }
         }
       } catch (rollbackError) {
         console.error('Rollback failed:', rollbackError);
@@ -925,7 +948,8 @@ const EditOrderForm: React.FC<EditOrderFormProps> = ({ order, onSave, onCancel }
             const serial = device.serial_number || '';
             const shouldShow = !searchQuery || serial.toLowerCase().includes(searchQuery.toLowerCase());
             return shouldShow ? (
-              <div key={index} className='flex items-center gap-2 bg-white p-2 rounded-lg border border-gray-200'>
+              <div key={index} className='flex items-center gap-2 bg-white p-2 rounded-lg border border-gray-200 flex-wrap'>
+                <span className="w-8 text-xs font-bold text-gray-600">{index + 1}.</span>
                 <Input
                   value={serial}
                   onChange={(e) => updateSerialNumber(index, e.target.value)}
@@ -958,6 +982,15 @@ const EditOrderForm: React.FC<EditOrderFormProps> = ({ order, onSave, onCancel }
                     ))}
                   </SelectContent>
                 </Select>
+                {isInward && device.asset_status === 'Scrap' && (
+                  <Input
+                    type="text"
+                    value={device.asset_condition || ''}
+                    onChange={(e) => updateAssetCondition(index, e.target.value)}
+                    placeholder="Asset Condition *"
+                    className='text-xs w-48 bg-white border-gray-300'
+                  />
+                )}
                 <Button
                   variant='outline'
                   size='sm'
@@ -968,8 +1001,8 @@ const EditOrderForm: React.FC<EditOrderFormProps> = ({ order, onSave, onCancel }
                   className='bg-white border-gray-300 flex items-center'
                 >
                   <Camera className='w-4 h-4' />
-                  {serialErrors[index] && <Badge variant="destructive" className='text-xs ml-2'>{serialErrors[index]}</Badge>}
                 </Button>
+                {serialErrors[index] && <Badge variant="destructive" className='text-xs'>{serialErrors[index]}</Badge>}
                 <Button
                   variant='ghost'
                   size='sm'

@@ -86,33 +86,33 @@ const OrdersTable: React.FC<OrdersTableProps> = ({
     alert(`${title}: ${description}`);
   };
 
-useEffect(() => {
-  const container = tableContainerRef.current;
-  if (!container) return;
+  useEffect(() => {
+    const container = tableContainerRef.current;
+    if (!container) return;
 
-  const handleKeyDown = (e: KeyboardEvent) => {
-    if (e.key === 'ArrowLeft') {
-      container.scrollBy({ left: -50, behavior: 'smooth' });
-    } else if (e.key === 'ArrowRight') {
-      container.scrollBy({ left: 50, behavior: 'smooth' });
-    }
-  };
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'ArrowLeft') {
+        container.scrollBy({ left: -50, behavior: 'smooth' });
+      } else if (e.key === 'ArrowRight') {
+        container.scrollBy({ left: 50, behavior: 'smooth' });
+      }
+    };
 
-  const handleWheel = (e: WheelEvent) => {
-    if (e.deltaY !== 0) {
-      container.scrollBy({ top: e.deltaY * 2, behavior: 'smooth' });
-      e.preventDefault();
-    }
-  };
+    const handleWheel = (e: WheelEvent) => {
+      if (e.deltaY !== 0) {
+        container.scrollBy({ top: e.deltaY * 2, behavior: 'smooth' });
+        e.preventDefault();
+      }
+    };
 
-  container.addEventListener('keydown', handleKeyDown);
-  container.addEventListener('wheel', handleWheel);
+    container.addEventListener('keydown', handleKeyDown);
+    container.addEventListener('wheel', handleWheel);
 
-  return () => {
-    container.removeEventListener('keydown', handleKeyDown);
-    container.removeEventListener('wheel', handleWheel);
-  };
-}, []);
+    return () => {
+      container.removeEventListener('keydown', handleKeyDown);
+      container.removeEventListener('wheel', handleWheel);
+    };
+  }, []);
 
   useEffect(() => {
     console.log('OrdersTable props:', {
@@ -165,22 +165,99 @@ useEffect(() => {
     searchQuery,
   ]);
 
-  // Dynamically generate dropdown options from orders table
-  const warehouseOptions = ['All', ...[...new Set(orders.map(o => o.warehouse || ''))].filter(w => w).sort()];
-  const assetTypeOptions = ['All', ...[...new Set(orders.map(o => o.asset_type || ''))].filter(a => a).sort()];
-  const modelOptions = ['All', ...[...new Set(
-    selectedAssetType === 'All'
-      ? orders.map(o => o.model || '')
-      : orders.filter(o => o.asset_type === selectedAssetType).map(o => o.model || '')
-  )].filter(m => m).sort()];
-  const configurationOptions = ['All', ...[...new Set(
-    selectedModel === 'All'
-      ? orders.map(o => o.configuration || '')
-      : orders.filter(o => o.model === selectedModel).map(o => o.configuration || '')
-  )].filter(c => c).sort()];
-  const orderTypeOptions = ['All', ...[...new Set(orders.map(o => o.order_type || ''))].filter(o => o).sort()];
-  const productOptions = ['All', ...[...new Set(orders.map(o => o.product || ''))].filter(p => p).sort()];
-  const statusOptions = ['All', ...[...new Set(orders.map(o => o.status || ''))].filter(s => s).sort()];
+  // Filter orders for dropdown options based on all active filters
+  const filteredOrdersForOptions = orders.filter((order) => {
+    const matchesDeleted = showDeleted ? true : !order.is_deleted;
+    const matchesWarehouse = selectedWarehouse === 'All' || (order.warehouse || '') === selectedWarehouse;
+    const matchesAssetType = selectedAssetType === 'All' || (order.asset_type || '') === selectedAssetType;
+    const matchesModel = selectedModel === 'All' || (order.model || '') === selectedModel;
+    const matchesConfiguration = selectedConfiguration === 'All' || (order.configuration || '') === selectedConfiguration;
+    const matchesOrderType = selectedOrderType === 'All' || (order.order_type || '') === selectedOrderType;
+    const matchesProduct = selectedProduct === 'All' || (order.product || '') === selectedProduct;
+    const matchesStatus = selectedStatus === 'All' || (order.status || '') === selectedStatus;
+    const matchesDateRange =
+      (!fromDate || !order.order_date || new Date(order.order_date) >= new Date(fromDate)) &&
+      (!toDate || !order.order_date || new Date(order.order_date) <= new Date(toDate));
+
+    return (
+      matchesDeleted &&
+      matchesWarehouse &&
+      matchesAssetType &&
+      matchesModel &&
+      matchesConfiguration &&
+      matchesOrderType &&
+      matchesProduct &&
+      matchesStatus &&
+      matchesDateRange
+    );
+  });
+
+  // Dynamically generate dropdown options from filtered orders
+  const warehouseOptions = ['All', ...[...new Set(filteredOrdersForOptions.map(o => o.warehouse || ''))].filter(w => w).sort()];
+  const assetTypeOptions = ['All', ...[...new Set(filteredOrdersForOptions.map(o => o.asset_type || ''))].filter(a => a).sort()];
+  const modelOptions = ['All', ...[...new Set(filteredOrdersForOptions.map(o => o.model || ''))].filter(m => m).sort()];
+  const configurationOptions = ['All', ...[...new Set(filteredOrdersForOptions.map(o => o.configuration || ''))].filter(c => c).sort()];
+  const orderTypeOptions = ['All', ...[...new Set(filteredOrdersForOptions.map(o => o.order_type || ''))].filter(o => o).sort()];
+  const productOptions = ['All', ...[...new Set(filteredOrdersForOptions.map(o => o.product || ''))].filter(p => p).sort()];
+  const statusOptions = ['All', ...[...new Set(filteredOrdersForOptions.map(o => o.status || ''))].filter(s => s).sort()];
+
+  // Reset dependent filters when any filter changes
+  useEffect(() => {
+    const validWarehouses = [...new Set(orders.filter(o => showDeleted ? true : !o.is_deleted).map(o => o.warehouse || ''))].filter(w => w);
+    if (selectedWarehouse !== 'All' && !validWarehouses.includes(selectedWarehouse)) {
+      setSelectedWarehouse('All');
+    }
+
+    const validAssetTypes = [...new Set(filteredOrdersForOptions.map(o => o.asset_type || ''))].filter(a => a);
+    if (selectedAssetType !== 'All' && !validAssetTypes.includes(selectedAssetType)) {
+      setSelectedAssetType('All');
+    }
+
+    const validModels = [...new Set(filteredOrdersForOptions.map(o => o.model || ''))].filter(m => m);
+    if (selectedModel !== 'All' && !validModels.includes(selectedModel)) {
+      setSelectedModel('All');
+    }
+
+    const validConfigurations = [...new Set(filteredOrdersForOptions.map(o => o.configuration || ''))].filter(c => c);
+    if (selectedConfiguration !== 'All' && !validConfigurations.includes(selectedConfiguration)) {
+      setSelectedConfiguration('All');
+    }
+
+    const validOrderTypes = [...new Set(filteredOrdersForOptions.map(o => o.order_type || ''))].filter(o => o);
+    if (selectedOrderType !== 'All' && !validOrderTypes.includes(selectedOrderType)) {
+      setSelectedOrderType('All');
+    }
+
+    const validProducts = [...new Set(filteredOrdersForOptions.map(o => o.product || ''))].filter(p => p);
+    if (selectedProduct !== 'All' && !validProducts.includes(selectedProduct)) {
+      setSelectedProduct('All');
+    }
+
+    const validStatuses = [...new Set(filteredOrdersForOptions.map(o => o.status || ''))].filter(s => s);
+    if (selectedStatus !== 'All' && !validStatuses.includes(selectedStatus)) {
+      setSelectedStatus('All');
+    }
+  }, [
+    filteredOrdersForOptions,
+    selectedWarehouse,
+    selectedAssetType,
+    selectedModel,
+    selectedConfiguration,
+    selectedOrderType,
+    selectedProduct,
+    selectedStatus,
+    fromDate,
+    toDate,
+    showDeleted,
+    orders,
+    setSelectedWarehouse,
+    setSelectedAssetType,
+    setSelectedModel,
+    setSelectedConfiguration,
+    setSelectedOrderType,
+    setSelectedProduct,
+    setSelectedStatus,
+  ]);
 
   const filteredOrders = orders.filter((order) => {
     const matchesDeleted = showDeleted ? order.is_deleted : !order.is_deleted;
@@ -201,6 +278,7 @@ useEffect(() => {
           order.school_name || '',
           order.nucleus_id || '',
           order.profile_id || '',
+          ...(order.serial_numbers || []).map(serial => serial || ''),
         ].some((field) => field.toLowerCase().includes(searchQuery.toLowerCase()))
       : true;
 
@@ -482,7 +560,7 @@ useEffect(() => {
                   id="search"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="Search by Sales Order, Deal ID, School, Nucleus ID, or Profile ID"
+                  placeholder="Search by Sales Order, Deal ID, School, Nucleus ID, Profile ID, or Serial Number"
                   style={{ paddingLeft: '28px', fontSize: '12px', width: '100%', border: '1px solid #d1d5db', borderRadius: '4px', padding: '6px' }}
                 />
               </div>
@@ -527,11 +605,7 @@ useEffect(() => {
               <select
                 id="assetTypeFilter"
                 value={selectedAssetType}
-                onChange={(e) => {
-                  setSelectedAssetType(e.target.value);
-                  setSelectedModel('All');
-                  setSelectedConfiguration('All');
-                }}
+                onChange={(e) => setSelectedAssetType(e.target.value)}
                 style={{ fontSize: '12px', width: '100%', border: '1px solid #d1d5db', borderRadius: '4px', padding: '6px', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}
               >
                 {assetTypeOptions.map(assetType => (
@@ -546,10 +620,7 @@ useEffect(() => {
               <select
                 id="modelFilter"
                 value={selectedModel}
-                onChange={(e) => {
-                  setSelectedModel(e.target.value);
-                  setSelectedConfiguration('All');
-                }}
+                onChange={(e) => setSelectedModel(e.target.value)}
                 style={{ fontSize: '12px', width: '100%', border: '1px solid #d1d5db', borderRadius: '4px', padding: '6px', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}
               >
                 {modelOptions.map(model => (

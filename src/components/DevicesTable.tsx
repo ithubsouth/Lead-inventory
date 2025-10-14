@@ -74,39 +74,39 @@ const DevicesTable: React.FC<DevicesTableProps> = ({
     alert(`${title}: ${description}`);
   };
 
-useEffect(() => {
-  const container = tableContainerRef.current;
-  if (!container) return;
+  useEffect(() => {
+    const container = tableContainerRef.current;
+    if (!container) return;
 
-  const handleKeyDown = (e: KeyboardEvent) => {
-    if (e.key === 'ArrowLeft') {
-      container.scrollBy({ left: -50, behavior: 'smooth' });
-    } else if (e.key === 'ArrowRight') {
-      container.scrollBy({ left: 50, behavior: 'smooth' });
-    }
-  };
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'ArrowLeft') {
+        container.scrollBy({ left: -50, behavior: 'smooth' });
+      } else if (e.key === 'ArrowRight') {
+        container.scrollBy({ left: 50, behavior: 'smooth' });
+      }
+    };
 
-  const handleWheel = (e: WheelEvent) => {
-    if (e.deltaY !== 0) {
-      container.scrollBy({ top: e.deltaY * 2, behavior: 'smooth' });
-      e.preventDefault();
-    }
-  };
+    const handleWheel = (e: WheelEvent) => {
+      if (e.deltaY !== 0) {
+        container.scrollBy({ top: e.deltaY * 2, behavior: 'smooth' });
+        e.preventDefault();
+      }
+    };
 
-  container.addEventListener('keydown', handleKeyDown);
-  container.addEventListener('wheel', handleWheel);
+    container.addEventListener('keydown', handleKeyDown);
+    container.addEventListener('wheel', handleWheel);
 
-  return () => {
-    container.removeEventListener('keydown', handleKeyDown);
-    container.removeEventListener('wheel', handleWheel);
-  };
-}, []);
+    return () => {
+      container.removeEventListener('keydown', handleKeyDown);
+      container.removeEventListener('wheel', handleWheel);
+    };
+  }, []);
 
   useEffect(() => {
     console.log('DevicesTable props:', {
-      devicesLength: devices.length,
-      deletedDevices: devices.filter(d => d.is_deleted).length,
-      activeDevices: devices.filter(d => !d.is_deleted).length,
+      devicesLength: devices?.length || 0,
+      deletedDevices: devices?.filter(d => d.is_deleted).length || 0,
+      activeDevices: devices?.filter(d => !d.is_deleted).length || 0,
       selectedWarehouse,
       selectedAssetType,
       selectedModel,
@@ -121,7 +121,7 @@ useEffect(() => {
       showDeleted,
       searchQuery,
     });
-    console.log('Raw devices (first 5):', devices.slice(0, 5).map(d => ({
+    console.log('Raw devices (first 5):', devices?.slice(0, 5).map(d => ({
       id: d.id,
       sales_order: d.sales_order || '',
       order_type: d.order_type || '',
@@ -141,26 +141,27 @@ useEffect(() => {
       status: d.status || '',
       updated_at: d.updated_at || '',
       updated_by: d.updated_by || '',
-    })));
-  }, [devices, selectedWarehouse, selectedAssetType, selectedModel, selectedAssetStatus, selectedConfiguration, selectedProduct, selectedStatus, selectedOrderType, selectedAssetGroup, fromDate, toDate, showDeleted, searchQuery]);
+    })) || []);
+  }, [
+    devices,
+    selectedWarehouse,
+    selectedAssetType,
+    selectedModel,
+    selectedAssetStatus,
+    selectedConfiguration,
+    selectedProduct,
+    selectedStatus,
+    selectedOrderType,
+    selectedAssetGroup,
+    fromDate,
+    toDate,
+    showDeleted,
+    searchQuery,
+  ]);
 
-  // Dynamically generate dropdown options from devices table
-  const warehouseOptions = ['All', ...[...new Set(devices.map(d => d.warehouse || ''))].filter(w => w).sort()];
-  const assetTypeOptions = ['All', ...[...new Set(devices.map(d => d.asset_type || ''))].filter(a => a).sort()];
-  const modelOptions = ['All', ...[...new Set(
-    selectedAssetType === 'All'
-      ? devices.map(d => d.model || '')
-      : devices.filter(d => d.asset_type === selectedAssetType).map(d => d.model || '')
-  )].filter(m => m).sort()];
-  const configurationOptions = ['All', ...[...new Set(devices.map(d => d.configuration || ''))].filter(c => c).sort()];
-  const orderTypeOptions = ['All', ...[...new Set(devices.map(d => d.order_type || ''))].filter(o => o).sort()];
-  const productOptions = ['All', ...[...new Set(devices.map(d => d.product || ''))].filter(p => p).sort()];
-  const assetStatusOptions = ['All', ...[...new Set(devices.map(d => d.asset_status || ''))].filter(s => s).sort()];
-  const assetGroupOptions = ['All', ...[...new Set(devices.map(d => d.asset_group || ''))].filter(g => g).sort()];
-  const statusOptions = ['All', ...[...new Set(devices.map(d => d.status || ''))].filter(s => s).sort()];
-
-  const filteredDevices = devices.filter((device) => {
-    const matchesDeleted = showDeleted ? device.is_deleted : !device.is_deleted;
+  // Filter devices for dropdown options based on all active filters
+  const filteredDevicesForOptions = devices?.filter((device) => {
+    const matchesDeleted = showDeleted ? true : !device.is_deleted;
     const matchesWarehouse = selectedWarehouse === 'All' || (device.warehouse || '') === selectedWarehouse;
     const matchesAssetType = selectedAssetType === 'All' || (device.asset_type || '') === selectedAssetType;
     const matchesModel = selectedModel === 'All' || (device.model || '') === selectedModel;
@@ -171,9 +172,123 @@ useEffect(() => {
     const matchesOrderType = selectedOrderType === 'All' || (device.order_type || '') === selectedOrderType;
     const matchesAssetGroup = selectedAssetGroup === 'All' || (device.asset_group || '') === selectedAssetGroup;
     const matchesDate =
-      (!fromDate || !toDate) ||
-      !device.updated_at ||
-      (new Date(device.updated_at) >= new Date(fromDate) && new Date(device.updated_at) <= new Date(toDate));
+      (!fromDate || !device.updated_at || new Date(device.updated_at) >= new Date(fromDate)) &&
+      (!toDate || !device.updated_at || new Date(device.updated_at) <= new Date(toDate));
+
+    return (
+      matchesDeleted &&
+      matchesWarehouse &&
+      matchesAssetType &&
+      matchesModel &&
+      matchesAssetStatus &&
+      matchesConfiguration &&
+      matchesProduct &&
+      matchesStatus &&
+      matchesOrderType &&
+      matchesAssetGroup &&
+      matchesDate
+    );
+  }) || [];
+
+  // Dynamically generate dropdown options from filtered devices
+  const warehouseOptions = ['All', ...[...new Set(filteredDevicesForOptions.map(d => d.warehouse || ''))].filter(w => w).sort()];
+  const assetTypeOptions = ['All', ...[...new Set(filteredDevicesForOptions.map(d => d.asset_type || ''))].filter(a => a).sort()];
+  const modelOptions = ['All', ...[...new Set(filteredDevicesForOptions.map(d => d.model || ''))].filter(m => m).sort()];
+  const configurationOptions = ['All', ...[...new Set(filteredDevicesForOptions.map(d => d.configuration || ''))].filter(c => c).sort()];
+  const orderTypeOptions = ['All', ...[...new Set(filteredDevicesForOptions.map(d => d.order_type || ''))].filter(o => o).sort()];
+  const productOptions = ['All', ...[...new Set(filteredDevicesForOptions.map(d => d.product || ''))].filter(p => p).sort()];
+  const assetStatusOptions = ['All', ...[...new Set(filteredDevicesForOptions.map(d => d.asset_status || ''))].filter(s => s).sort()];
+  const assetGroupOptions = ['All', ...[...new Set(filteredDevicesForOptions.map(d => d.asset_group || ''))].filter(g => g).sort()];
+  const statusOptions = ['All', ...[...new Set(filteredDevicesForOptions.map(d => d.status || ''))].filter(s => s).sort()];
+
+  // Reset dependent filters when any filter changes
+  useEffect(() => {
+    if (!devices) return;
+
+    const validWarehouses = [...new Set(devices.filter(d => showDeleted ? true : !d.is_deleted).map(d => d.warehouse || ''))].filter(w => w);
+    if (selectedWarehouse !== 'All' && !validWarehouses.includes(selectedWarehouse)) {
+      setSelectedWarehouse('All');
+    }
+
+    const validAssetTypes = [...new Set(filteredDevicesForOptions.map(d => d.asset_type || ''))].filter(a => a);
+    if (selectedAssetType !== 'All' && !validAssetTypes.includes(selectedAssetType)) {
+      setSelectedAssetType('All');
+    }
+
+    const validModels = [...new Set(filteredDevicesForOptions.map(d => d.model || ''))].filter(m => m);
+    if (selectedModel !== 'All' && !validModels.includes(selectedModel)) {
+      setSelectedModel('All');
+    }
+
+    const validAssetStatuses = [...new Set(filteredDevicesForOptions.map(d => d.asset_status || ''))].filter(s => s);
+    if (selectedAssetStatus !== 'All' && !validAssetStatuses.includes(selectedAssetStatus)) {
+      setSelectedAssetStatus('All');
+    }
+
+    const validConfigurations = [...new Set(filteredDevicesForOptions.map(d => d.configuration || ''))].filter(c => c);
+    if (selectedConfiguration !== 'All' && !validConfigurations.includes(selectedConfiguration)) {
+      setSelectedConfiguration('All');
+    }
+
+    const validProducts = [...new Set(filteredDevicesForOptions.map(d => d.product || ''))].filter(p => p);
+    if (selectedProduct !== 'All' && !validProducts.includes(selectedProduct)) {
+      setSelectedProduct('All');
+    }
+
+    const validStatuses = [...new Set(filteredDevicesForOptions.map(d => d.status || ''))].filter(s => s);
+    if (selectedStatus !== 'All' && !validStatuses.includes(selectedStatus)) {
+      setSelectedStatus('All');
+    }
+
+    const validOrderTypes = [...new Set(filteredDevicesForOptions.map(d => d.order_type || ''))].filter(o => o);
+    if (selectedOrderType !== 'All' && !validOrderTypes.includes(selectedOrderType)) {
+      setSelectedOrderType('All');
+    }
+
+    const validAssetGroups = [...new Set(filteredDevicesForOptions.map(d => d.asset_group || ''))].filter(g => g);
+    if (selectedAssetGroup !== 'All' && !validAssetGroups.includes(selectedAssetGroup)) {
+      setSelectedAssetGroup('All');
+    }
+  }, [
+    devices,
+    filteredDevicesForOptions,
+    selectedWarehouse,
+    selectedAssetType,
+    selectedModel,
+    selectedAssetStatus,
+    selectedConfiguration,
+    selectedProduct,
+    selectedStatus,
+    selectedOrderType,
+    selectedAssetGroup,
+    fromDate,
+    toDate,
+    showDeleted,
+    setSelectedWarehouse,
+    setSelectedAssetType,
+    setSelectedModel,
+    setSelectedAssetStatus,
+    setSelectedConfiguration,
+    setSelectedProduct,
+    setSelectedStatus,
+    setSelectedOrderType,
+    setSelectedAssetGroup,
+  ]);
+
+  const filteredDevices = devices?.filter((device) => {
+    const matchesDeleted = showDeleted ? true : !device.is_deleted;
+    const matchesWarehouse = selectedWarehouse === 'All' || (device.warehouse || '') === selectedWarehouse;
+    const matchesAssetType = selectedAssetType === 'All' || (device.asset_type || '') === selectedAssetType;
+    const matchesModel = selectedModel === 'All' || (device.model || '') === selectedModel;
+    const matchesAssetStatus = selectedAssetStatus === 'All' || (device.asset_status || '') === selectedAssetStatus;
+    const matchesConfiguration = selectedConfiguration === 'All' || (device.configuration || '') === selectedConfiguration;
+    const matchesProduct = selectedProduct === 'All' || (device.product || '') === selectedProduct;
+    const matchesStatus = selectedStatus === 'All' || (device.status || '') === selectedStatus;
+    const matchesOrderType = selectedOrderType === 'All' || (device.order_type || '') === selectedOrderType;
+    const matchesAssetGroup = selectedAssetGroup === 'All' || (device.asset_group || '') === selectedAssetGroup;
+    const matchesDate =
+      (!fromDate || !device.updated_at || new Date(device.updated_at) >= new Date(fromDate)) &&
+      (!toDate || !device.updated_at || new Date(device.updated_at) <= new Date(toDate));
     const matchesSearch = searchQuery
       ? [
           device.serial_number || '',
@@ -195,8 +310,21 @@ useEffect(() => {
         ].some((field) => field.toLowerCase().includes(searchQuery.toLowerCase()))
       : true;
 
-    return matchesDeleted && matchesWarehouse && matchesAssetType && matchesModel && matchesAssetStatus && matchesConfiguration && matchesProduct && matchesStatus && matchesOrderType && matchesAssetGroup && matchesDate && matchesSearch;
-  });
+    return (
+      matchesDeleted &&
+      matchesWarehouse &&
+      matchesAssetType &&
+      matchesModel &&
+      matchesAssetStatus &&
+      matchesConfiguration &&
+      matchesProduct &&
+      matchesStatus &&
+      matchesOrderType &&
+      matchesAssetGroup &&
+      matchesDate &&
+      matchesSearch
+    );
+  }) || [];
 
   const sortedDevices = [...filteredDevices].sort((a, b) => {
     const dateA = a.updated_at ? new Date(a.updated_at).getTime() : 0;
@@ -323,7 +451,21 @@ useEffect(() => {
 
   useEffect(() => {
     setCurrentDevicesPage(1);
-  }, [selectedWarehouse, selectedAssetType, selectedModel, selectedAssetStatus, selectedConfiguration, selectedProduct, selectedStatus, selectedOrderType, selectedAssetGroup, fromDate, toDate, showDeleted, searchQuery]);
+  }, [
+    selectedWarehouse,
+    selectedAssetType,
+    selectedModel,
+    selectedAssetStatus,
+    selectedConfiguration,
+    selectedProduct,
+    selectedStatus,
+    selectedOrderType,
+    selectedAssetGroup,
+    fromDate,
+    toDate,
+    showDeleted,
+    searchQuery,
+  ]);
 
   const paginatedDevices = sortedDevices.slice(
     (currentDevicesPage - 1) * devicesPerPage,
@@ -474,8 +616,8 @@ useEffect(() => {
               {showDeleted ? 'Show Active' : 'Show Deleted'}
             </button>
           </div>
-          <div style={{ display: 'flex', gap: '4px', marginTop: '4px', maxWidth: '1200px' }}>
-            <div style={{ flex: 1 }}>
+          <div style={{ display: 'flex', gap: '4px', marginTop: '4px', maxWidth: '1200px', overflowX: 'auto', whiteSpace: 'nowrap' }}>
+            <div style={{ flex: '1', minWidth: '120px' }}>
               <label htmlFor="warehouseFilter" style={{ fontSize: '12px', color: '#6b7280', display: 'block', marginBottom: '2px', whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' }}>Warehouse</label>
               <select
                 id="warehouseFilter"
@@ -490,15 +632,12 @@ useEffect(() => {
                 ))}
               </select>
             </div>
-            <div style={{ flex: 1 }}>
+            <div style={{ flex: '1', minWidth: '120px' }}>
               <label htmlFor="assetTypeFilter" style={{ fontSize: '12px', color: '#6b7280', display: 'block', marginBottom: '2px', whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' }}>Asset Type</label>
               <select
                 id="assetTypeFilter"
                 value={selectedAssetType}
-                onChange={(e) => {
-                  setSelectedAssetType(e.target.value);
-                  setSelectedModel('All');
-                }}
+                onChange={(e) => setSelectedAssetType(e.target.value)}
                 style={{ fontSize: '12px', width: '100%', border: '1px solid #d1d5db', borderRadius: '4px', padding: '6px', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}
               >
                 {assetTypeOptions.map(assetType => (
@@ -508,7 +647,7 @@ useEffect(() => {
                 ))}
               </select>
             </div>
-            <div style={{ flex: 1 }}>
+            <div style={{ flex: '1', minWidth: '120px' }}>
               <label htmlFor="modelFilter" style={{ fontSize: '12px', color: '#6b7280', display: 'block', marginBottom: '2px', whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' }}>Model</label>
               <select
                 id="modelFilter"
@@ -523,7 +662,7 @@ useEffect(() => {
                 ))}
               </select>
             </div>
-            <div style={{ flex: 1 }}>
+            <div style={{ flex: '1', minWidth: '120px' }}>
               <label htmlFor="configurationFilter" style={{ fontSize: '12px', color: '#6b7280', display: 'block', marginBottom: '2px', whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' }}>Configuration</label>
               <select
                 id="configurationFilter"
@@ -538,7 +677,7 @@ useEffect(() => {
                 ))}
               </select>
             </div>
-            <div style={{ flex: 1 }}>
+            <div style={{ flex: '1', minWidth: '120px' }}>
               <label htmlFor="orderTypeFilter" style={{ fontSize: '12px', color: '#6b7280', display: 'block', marginBottom: '2px', whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' }}>Order Type</label>
               <select
                 id="orderTypeFilter"
@@ -553,7 +692,7 @@ useEffect(() => {
                 ))}
               </select>
             </div>
-            <div style={{ flex: 1 }}>
+            <div style={{ flex: '1', minWidth: '120px' }}>
               <label htmlFor="productFilter" style={{ fontSize: '12px', color: '#6b7280', display: 'block', marginBottom: '2px', whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' }}>Product</label>
               <select
                 id="productFilter"
@@ -568,7 +707,7 @@ useEffect(() => {
                 ))}
               </select>
             </div>
-            <div style={{ flex: 1 }}>
+            <div style={{ flex: '1', minWidth: '120px' }}>
               <label htmlFor="assetStatusFilter" style={{ fontSize: '12px', color: '#6b7280', display: 'block', marginBottom: '2px', whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' }}>Asset Status</label>
               <select
                 id="assetStatusFilter"
@@ -583,7 +722,7 @@ useEffect(() => {
                 ))}
               </select>
             </div>
-            <div style={{ flex: 1 }}>
+            <div style={{ flex: '1', minWidth: '120px' }}>
               <label htmlFor="assetGroupFilter" style={{ fontSize: '12px', color: '#6b7280', display: 'block', marginBottom: '2px', whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' }}>Asset Group</label>
               <select
                 id="assetGroupFilter"
@@ -598,7 +737,7 @@ useEffect(() => {
                 ))}
               </select>
             </div>
-            <div style={{ flex: 1 }}>
+            <div style={{ flex: '1', minWidth: '120px' }}>
               <label htmlFor="statusFilter" style={{ fontSize: '12px', color: '#6b7280', display: 'block', marginBottom: '2px', whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' }}>Status</label>
               <select
                 id="statusFilter"
@@ -616,7 +755,7 @@ useEffect(() => {
           </div>
         </div>
 
-        {devices.length === 0 ? (
+        {!devices || devices.length === 0 ? (
           <div style={{ fontSize: '12px' }}>No devices available. Check your database or data loading logic.</div>
         ) : (
           <>
@@ -737,40 +876,41 @@ useEffect(() => {
             </div>
 
             {showViewDialog && viewingDevice && (
-              <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
-                <div style={{ background: '#fff', borderRadius: '8px', maxHeight: '80vh', overflowY: 'auto', padding: '8px', maxWidth: '600px', width: '100%' }}>
-                  <h2 style={{ fontSize: '14px', marginBottom: '8px' }}>Device Details</h2>
-                  <div style={{ fontSize: '12px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                    <p><strong>ID:</strong> {viewingDevice.id}</p>
-                    <p><strong>Sales Order:</strong> {viewingDevice.sales_order || ''}</p>
-                    <p><strong>Order Type:</strong> {viewingDevice.order_type || ''}</p>
-                    <p><strong>Warehouse:</strong> {viewingDevice.warehouse || ''}</p>
-                    <p><strong>Deal ID:</strong> {viewingDevice.deal_id || ''}</p>
-                    <p><strong>Nucleus ID:</strong> {viewingDevice.nucleus_id || ''}</p>
-                    <p><strong>School Name:</strong> {viewingDevice.school_name || ''}</p>
-                    <p><strong>Asset Type:</strong> {viewingDevice.asset_type || ''}</p>
-                    <p><strong>Model:</strong> {viewingDevice.model || ''}</p>
-                    <p><strong>Configuration:</strong> {viewingDevice.configuration || ''}</p>
-                    <p><strong>Serial Number:</strong> {viewingDevice.serial_number || ''}</p>
-                    <p><strong>SD Card Size:</strong> {viewingDevice.sd_card_size || ''}</p>
-                    <p><strong>Profile ID:</strong> {viewingDevice.profile_id || ''}</p>
-                    <p><strong>Product:</strong> {viewingDevice.product || ''}</p>
-                    <p><strong>Asset Status:</strong> {viewingDevice.asset_status || ''}</p>
-                    <p><strong>Asset Group:</strong> {viewingDevice.asset_group || ''}</p>
-                    <p><strong>Status:</strong> {viewingDevice.status || ''}</p>
-                    <p><strong>Updated At:</strong> {formatDate(viewingDevice.updated_at) || ''}</p>
-                    <p><strong>Updated By:</strong> {viewingDevice.updated_by || ''}</p>
-                    <p><strong>Deleted:</strong> {viewingDevice.is_deleted ? 'Yes' : 'No'}</p>
-                  </div>
-                  <button
-                    onClick={() => setShowViewDialog(false)}
-                    style={{ border: '1px solid #d1d5db', borderRadius: '4px', padding: '4px 8px', fontSize: '12px', marginTop: '8px' }}
-                  >
-                    Close
-                  </button>
-                </div>
-              </div>
-            )}
+  <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
+    <div style={{ background: '#fff', borderRadius: '8px', maxHeight: '80vh', overflowY: 'auto', padding: '8px', maxWidth: '600px', width: '100%' }}>
+      <h2 style={{ fontSize: '14px', marginBottom: '8px' }}>Device Details</h2>
+      <div style={{ fontSize: '12px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+        <p><strong>ID:</strong> {viewingDevice.id}</p>
+        <p><strong>Sales Order:</strong> {viewingDevice.sales_order || ''}</p>
+        <p><strong>Order Type:</strong> {viewingDevice.order_type || ''}</p>
+        <p><strong>Warehouse:</strong> {viewingDevice.warehouse || ''}</p>
+        <p><strong>Deal ID:</strong> {viewingDevice.deal_id || ''}</p>
+        <p><strong>Nucleus ID:</strong> {viewingDevice.nucleus_id || ''}</p>
+        <p><strong>School Name:</strong> {viewingDevice.school_name || ''}</p>
+        <p><strong>Asset Type:</strong> {viewingDevice.asset_type || ''}</p>
+        <p><strong>Model:</strong> {viewingDevice.model || ''}</p>
+        <p><strong>Configuration:</strong> {viewingDevice.configuration || ''}</p>
+        <p><strong>Serial Number:</strong> {viewingDevice.serial_number || ''}</p>
+        <p><strong>SD Card Size:</strong> {viewingDevice.sd_card_size || ''}</p>
+        <p><strong>Profile ID:</strong> {viewingDevice.profile_id || ''}</p>
+        <p><strong>Product:</strong> {viewingDevice.product || ''}</p>
+        <p><strong>Asset Status:</strong> {viewingDevice.asset_status || ''}</p>
+        <p><strong>Asset Condition:</strong> {viewingDevice.asset_condition || ''}</p>
+        <p><strong>Asset Group:</strong> {viewingDevice.asset_group || ''}</p>
+        <p><strong>Status:</strong> {viewingDevice.status || ''}</p>
+        <p><strong>Updated At:</strong> {formatDate(viewingDevice.updated_at) || ''}</p>
+        <p><strong>Updated By:</strong> {viewingDevice.updated_by || ''}</p>
+        <p><strong>Deleted:</strong> {viewingDevice.is_deleted ? 'Yes' : 'No'}</p>
+      </div>
+      <button
+        onClick={() => setShowViewDialog(false)}
+        style={{ border: '1px solid #d1d5db', borderRadius: '4px', padding: '4px 8px', fontSize: '12px', marginTop: '8px' }}
+      >
+        Close
+      </button>
+    </div>
+  </div>
+)}
 
             {showDatePickerDialog && (
               <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>

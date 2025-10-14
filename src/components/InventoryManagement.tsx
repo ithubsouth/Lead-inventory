@@ -108,6 +108,7 @@ const InventoryManagement = () => {
         const { data, error } = await supabase
           .from('devices')
           .select('order_id, serial_number')
+          .eq('is_deleted', false)
           .range(page * batchSize, (page + 1) * batchSize - 1);
         if (error) throw error;
         allDevices = [...allDevices, ...data];
