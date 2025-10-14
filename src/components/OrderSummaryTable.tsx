@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Search, Download } from 'lucide-react';
 import { OrderSummary } from './types';
 import { formatDate } from './utils';
@@ -11,6 +11,10 @@ interface OrderSummaryTableProps {
   setSelectedAssetType: (value: string) => void;
   selectedModel: string;
   setSelectedModel: (value: string) => void;
+  selectedAssetStatus: string;
+  setSelectedAssetStatus: (value: string) => void;
+  selectedAssetGroup: string;
+  setSelectedAssetGroup: (value: string) => void;
   fromDate: string;
   setFromDate: (value: string) => void;
   toDate: string;
@@ -29,6 +33,10 @@ const OrderSummaryTable: React.FC<OrderSummaryTableProps> = ({
   setSelectedAssetType,
   selectedModel,
   setSelectedModel,
+  selectedAssetStatus,
+  setSelectedAssetStatus,
+  selectedAssetGroup,
+  setSelectedAssetGroup,
   fromDate,
   setFromDate,
   toDate,
@@ -46,6 +54,33 @@ const OrderSummaryTable: React.FC<OrderSummaryTableProps> = ({
     alert(`${title}: ${description}`);
   };
 
+  // Dynamic filter options for asset_status and asset_group
+  const assetStatusOptions = useMemo(() => {
+    const statuses = Array.from(
+      new Set(
+        orderSummary
+          .map(s => s.asset_status)
+          .filter(status => status != null && status.trim() !== '')
+      )
+    ).sort();
+    const options = ['All', ...statuses];
+    console.log('Asset Status Options:', options); // Debugging
+    return options;
+  }, [orderSummary]);
+
+  const assetGroupOptions = useMemo(() => {
+    const groups = Array.from(
+      new Set(
+        orderSummary
+          .map(s => s.asset_group)
+          .filter(group => group != null && group.trim() !== '')
+      )
+    ).sort();
+    const options = ['All', ...groups];
+    console.log('Asset Group Options:', options); // Debugging
+    return options;
+  }, [orderSummary]);
+
   useEffect(() => {
     console.log('OrderSummaryTable props:', {
       orderSummaryLength: orderSummary.length,
@@ -54,6 +89,8 @@ const OrderSummaryTable: React.FC<OrderSummaryTableProps> = ({
       selectedWarehouse,
       selectedAssetType,
       selectedModel,
+      selectedAssetStatus,
+      selectedAssetGroup,
       showDeleted,
       searchQuery,
     });
@@ -61,8 +98,10 @@ const OrderSummaryTable: React.FC<OrderSummaryTableProps> = ({
       warehouse: s.warehouse,
       asset_type: s.asset_type,
       model: s.model,
+      asset_status: s.asset_status,
+      asset_group: s.asset_group,
     })));
-  }, [orderSummary, selectedWarehouse, selectedAssetType, selectedModel, showDeleted, searchQuery]);
+  }, [orderSummary, selectedWarehouse, selectedAssetType, selectedModel, selectedAssetStatus, selectedAssetGroup, showDeleted, searchQuery]);
 
   const warehouseOptions = ['All', 'Trichy', 'Bangalore', 'Hyderabad', 'Kolkata', 'Bhiwandi', 'Ghaziabad', 'Zirakpur', 'Indore', 'Jaipur'];
   const assetTypeOptions = ['All', 'Tablet', 'TV', 'SD Card', 'Pendrive'];
@@ -94,14 +133,16 @@ const OrderSummaryTable: React.FC<OrderSummaryTableProps> = ({
     const matchesWarehouse = selectedWarehouse === 'All' || summary.warehouse === selectedWarehouse;
     const matchesAssetType = selectedAssetType === 'All' || summary.asset_type === selectedAssetType;
     const matchesModel = selectedModel === 'All' || summary.model === selectedModel;
+    const matchesAssetStatus = selectedAssetStatus === 'All' || summary.asset_status === selectedAssetStatus;
+    const matchesAssetGroup = selectedAssetGroup === 'All' || summary.asset_group === selectedAssetGroup;
     const matchesDateRange = true; // OrderSummary doesn't have order_date field
     const matchesSearch = searchQuery
-      ? [summary.warehouse, summary.asset_type, summary.model].some((field) =>
+      ? [summary.warehouse, summary.asset_type, summary.model, summary.asset_status, summary.asset_group].some((field) =>
           field?.toLowerCase().includes(searchQuery.toLowerCase())
         )
       : true;
 
-    return matchesDeleted && matchesWarehouse && matchesAssetType && matchesModel && matchesDateRange && matchesSearch;
+    return matchesDeleted && matchesWarehouse && matchesAssetType && matchesModel && matchesAssetStatus && matchesAssetGroup && matchesDateRange && matchesSearch;
   });
 
   const sortedSummary = [...filteredSummary].sort((a, b) => {
@@ -123,16 +164,19 @@ const OrderSummaryTable: React.FC<OrderSummaryTableProps> = ({
   });
 
   useEffect(() => {
-    // OrderSummary doesn't have order_date field
     console.log('Filtered summaries (first 5):', filteredSummary.slice(0, 5).map(s => ({
       warehouse: s.warehouse,
       asset_type: s.asset_type,
       model: s.model,
+      asset_status: s.asset_status,
+      asset_group: s.asset_group,
     })));
     console.log('Sorted summaries (first 5):', sortedSummary.slice(0, 5).map(s => ({
       warehouse: s.warehouse,
       asset_type: s.asset_type,
       model: s.model,
+      asset_status: s.asset_status,
+      asset_group: s.asset_group,
     })));
     console.log('Filtered and sorted summaries summary:', {
       filteredLength: filteredSummary.length,
@@ -152,6 +196,8 @@ const OrderSummaryTable: React.FC<OrderSummaryTableProps> = ({
       warehouse: s.warehouse,
       asset_type: s.asset_type,
       model: s.model,
+      asset_status: s.asset_status,
+      asset_group: s.asset_group,
     })));
     if (sortedSummary.length > 0 && paginatedSummary.length === 0) {
       setCurrentPage(1);
@@ -169,15 +215,15 @@ const OrderSummaryTable: React.FC<OrderSummaryTableProps> = ({
     const csvContent = [
       headers.join(','),
       ...data.map((row) =>
-          [
-            row.warehouse,
-            row.asset_type,
-            row.model,
-            row.inward,
-            row.outward,
-            row.stock,
-          ].map((value) => (typeof value === 'string' && value.includes(',') ? `"${value}"` : value ?? '')).join(',')
-        ),
+        [
+          row.warehouse,
+          row.asset_type,
+          row.model,
+          row.inward,
+          row.outward,
+          row.stock,
+        ].map((value) => (typeof value === 'string' && value.includes(',') ? `"${value}"` : value ?? '')).join(',')
+      ),
     ].join('\n');
     const blob = new Blob([csvContent], { type: 'text/csv' });
     const url = window.URL.createObjectURL(blob);
@@ -210,7 +256,7 @@ const OrderSummaryTable: React.FC<OrderSummaryTableProps> = ({
                   id="search"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="Search by Warehouse, Asset Type, or Model"
+                  placeholder="Search by Warehouse, Asset Type, Model, Status, or Group"
                   style={{ paddingLeft: '28px', fontSize: '12px', width: '100%', border: '1px solid #d1d5db', borderRadius: '4px', padding: '8px' }}
                 />
               </div>
@@ -275,6 +321,44 @@ const OrderSummaryTable: React.FC<OrderSummaryTableProps> = ({
                     {model}
                   </option>
                 ))}
+              </select>
+            </div>
+            <div style={{ flex: 1, minWidth: '150px' }}>
+              <label htmlFor="assetStatusFilter" style={{ fontSize: '12px', color: '#6b7280', display: 'block', marginBottom: '4px' }}>Asset Status</label>
+              <select
+                id="assetStatusFilter"
+                value={selectedAssetStatus}
+                onChange={(e) => setSelectedAssetStatus(e.target.value)}
+                style={{ fontSize: '12px', width: '100%', border: '1px solid #d1d5db', borderRadius: '4px', padding: '8px' }}
+              >
+                {assetStatusOptions.length <= 1 ? (
+                  <option value="All">No statuses available</option>
+                ) : (
+                  assetStatusOptions.map(status => (
+                    <option key={status} value={status} style={{ fontSize: '12px' }}>
+                      {status}
+                    </option>
+                  ))
+                )}
+              </select>
+            </div>
+            <div style={{ flex: 1, minWidth: '150px' }}>
+              <label htmlFor="assetGroupFilter" style={{ fontSize: '12px', color: '#6b7280', display: 'block', marginBottom: '4px' }}>Asset Group</label>
+              <select
+                id="assetGroupFilter"
+                value={selectedAssetGroup}
+                onChange={(e) => setSelectedAssetGroup(e.target.value)}
+                style={{ fontSize: '12px', width: '100%', border: '1px solid #d1d5db', borderRadius: '4px', padding: '8px' }}
+              >
+                {assetGroupOptions.length <= 1 ? (
+                  <option value="All">No groups available</option>
+                ) : (
+                  assetGroupOptions.map(group => (
+                    <option key={group} value={group} style={{ fontSize: '12px' }}>
+                      {group}
+                    </option>
+                  ))
+                )}
               </select>
             </div>
             <div style={{ flex: 1, minWidth: '150px' }}>
