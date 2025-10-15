@@ -1021,270 +1021,375 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
       </div>
 
       {showBulk && (
-        <div style={{ display: 'flex', gap: '16px', marginBottom: '16px' }}>
-          {/* Bulk Upload Section */}
-          <div style={{ flex: 1, border: '1px solid #e5e7eb', borderRadius: '8px', padding: '16px', background: '#fff' }}>
-            <h3 style={{ fontSize: '16px', fontWeight: 'bold', marginBottom: '12px' }}>Bulk Upload (CSV)</h3>
-            <div style={{ marginTop: '16px', padding: '12px', background: '#f9fafb', borderRadius: '4px' }}>
-              <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginBottom: '8px' }}>
-                <label style={{ fontSize: '14px', fontWeight: 'bold' }}>Bulk Upload (CSV)</label>
-                <button
-                  onClick={() => {
-                    const headers = ['Sales Order', 'Deal ID', 'School Name', 'Nucleus ID', 'Order Type', 'Asset Type', 'Model', 'Configuration', 'Product', 'SD Card Size', 'Profile ID', 'Size', 'Material', 'Location', 'Quantity', 'Serial Number', 'Asset Status', 'Asset Group'];
-                    const rows = [
-                      ['SO-1-abcde', 'DEAL123', 'School A', 'NUC001', 'Hardware', 'Tablet', 'Lenovo TB301XU', '2G+32 GB (Android-10)', 'Lead', '128 GB', 'Profile 1', '', '', 'Trichy', '1', 'SN001', 'Fresh', 'NFA'],
-                      ['SO-1-abcde', 'DEAL123', 'School A', 'NUC001', 'Stock', 'TV', 'Hyundai TV - 43"', 'Smart TV', 'Propel', '', '', '', '', 'Bangalore', '1', 'SN003', 'Fresh', 'NFA'],
-                      ['SO-1-abcde', 'DEAL123', 'School A', 'NUC001', 'Hardware', 'SD Card', '', '', '', '256 GB', 'Profile 2', '', '', 'Hyderabad', '5', '', 'Fresh', 'NFA'],
-                      ['SO-1-abcde', 'DEAL123', 'School A', 'NUC001', 'Hardware', 'Cover', 'M8 Flap Cover 4th gen - Lead', '', 'Lead', '', '', '', '', 'Trichy', '3', '', 'Fresh', 'NFA'],
-                      ['SO-1-abcde', 'DEAL123', 'School A', 'NUC001', 'Hardware', 'Pendrive', '', '', '', '', '', '32 GB', '', 'Kolkata', '1', 'SN004', 'Fresh', 'NFA'],
-                      ['SO-1-abcde', 'DEAL123', 'School A', 'NUC001', 'Hardware', 'Other', '', '', 'Lead', '', '', '', 'Dongle', 'Indore', '1', '', 'Fresh', 'NFA']
-                    ];
-                    const csvTemplate = headers.map(quoteCsvValue).join(',') + '\n' + rows.map(row => row.map(quoteCsvValue).join(',')).join('\n');
-                    const blob = new Blob([csvTemplate], { type: 'text/csv' });
-                    const url = URL.createObjectURL(blob);
-                    const a = document.createElement('a');
-                    a.href = url;
-                    a.download = 'bulk_upload_template.csv';
-                    a.click();
-                    URL.revokeObjectURL(url);
-                  }}
-                  style={{ padding: '6px 12px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '12px', background: '#fff', cursor: 'pointer' }}
-                >
-                  Download Template
-                </button>
-              </div>
-              <input
-                type="file"
-                accept=".csv"
-                onChange={(e) => {
-                  const file = e.target.files?.[0];
-                  if (!file) return;
-
-                  const reader = new FileReader();
-                  reader.onload = async (evt) => {
-                    try {
-                      const text = evt.target?.result as string;
-                      const lines = text.split('\n').filter(line => line.trim());
-                      const headers = lines[0].split(',').map(h => h.trim().replace(/^"|"$/g, ''));
-
-                      const newAssets: AssetItem[] = [];
-                      for (let i = 1; i < lines.length; i++) {
-                        const values = lines[i].split(',').map((v: string) => v.trim().replace(/^"|"$/g, ''));
-                        const salesOrderVal = values[headers.indexOf('Sales Order')];
-                        const dealIdVal = values[headers.indexOf('Deal ID')];
-                        const schoolNameVal = values[headers.indexOf('School Name')];
-                        const nucleusIdVal = values[headers.indexOf('Nucleus ID')];
-                        const orderTypeVal = values[headers.indexOf('Order Type')];
-                        const assetTypeVal = values[headers.indexOf('Asset Type')];
-                        const modelVal = values[headers.indexOf('Model')];
-                        const configVal = values[headers.indexOf('Configuration')];
-                        const productVal = values[headers.indexOf('Product')];
-                        const sdCardVal = values[headers.indexOf('SD Card Size')];
-                        const profileVal = values[headers.indexOf('Profile ID')];
-                        const sizeVal = values[headers.indexOf('Size')];
-                        const materialVal = values[headers.indexOf('Material')];
-                        const locationVal = values[headers.indexOf('Location')];
-                        const quantityVal = parseInt(values[headers.indexOf('Quantity')]) || 1;
-                        const serialVal = values[headers.indexOf('Serial Number')];
-                        const statusVal = values[headers.indexOf('Asset Status')];
-                        const groupVal = values[headers.indexOf('Asset Group')];
-
-                        let quantity = quantityVal;
-                        let serialNumbers: string[] = [];
-                        let hasSerials = defaultHasSerials(assetTypeVal);
-                        if (serialVal) {
-                          serialNumbers = [serialVal];
-                          quantity = 1;
-                          hasSerials = true;
-                        } else {
-                          serialNumbers = hasSerials ? Array(quantity).fill('') : [];
-                        }
-
-                        newAssets.push({
-                          id: generateId(),
-                          assetType: assetTypeVal,
-                          model: modelVal || '',
-                          configuration: configVal || '',
-                          product: productVal || '',
-                          sdCardSize: sdCardVal || '',
-                          profileId: profileVal || '',
-                          size: sizeVal || '',
-                          material: materialVal || '',
-                          quantity: quantity,
-                          location: locationVal,
-                          serialNumbers,
-                          assetStatuses: Array(quantity).fill(statusVal || 'Fresh'),
-                          assetGroups: Array(quantity).fill(groupVal || 'NFA'),
-                          asset_conditions: Array(quantity).fill(''),
-                          hasSerials,
-                        });
-
-                        if (salesOrderVal && !salesOrder) {
-                          setSalesOrder(salesOrderVal);
-                        }
-                        if (dealIdVal && !dealId) {
-                          setDealId(dealIdVal);
-                        }
-                        if (schoolNameVal && !schoolName) {
-                          setSchoolName(schoolNameVal);
-                        }
-                        if (nucleusIdVal && !nucleusId) {
-                          setNucleusId(nucleusIdVal);
-                        }
-                        if (orderTypeVal && !orderType) {
-                          setOrderType(orderTypeVal);
-                        }
-                      }
-
-                      setAssets([...assets, ...newAssets]);
-                      toast({ title: 'Success', description: `Imported ${newAssets.length} assets from CSV` });
-                    } catch (error) {
-                      toast({ title: 'Error', description: 'Failed to parse CSV file. Please check format.', variant: 'destructive' });
-                    }
-                  };
-                  reader.readAsText(file);
-                }}
-                style={{ width: '100%', padding: '8px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '14px' }}
-              />
-            </div>
-          </div>
-
-          {/* Bulk Update Section */}
-          <div style={{ flex: 1, border: '1px solid #e5e7eb', borderRadius: '8px', padding: '16px', background: '#fff' }}>
-            <h3 style={{ fontSize: '16px', fontWeight: 'bold', marginBottom: '12px' }}>Bulk Update Asset Group and FAR Code (CSV)</h3>
-            <div style={{ marginTop: '16px', padding: '12px', background: '#f9fafb', borderRadius: '4px' }}>
-              <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginBottom: '8px' }}>
-                <label style={{ fontSize: '14px', fontWeight: 'bold' }}>Bulk Update (CSV)</label>
-                <button
-                  onClick={() => {
-                    const headers = ['Serial number', 'Location', 'Asset group', 'FAR Code'];
-                    const rows = [
-                      ['SN001', 'Trichy', 'NFA', 'FAR001'],
-                      ['SN002', 'Bangalore', 'NFA', 'FAR002']
-                    ];
-                    const csvTemplate = headers.map(quoteCsvValue).join(',') + '\n' + rows.map(row => row.map(quoteCsvValue).join(',')).join('\n');
-                    const blob = new Blob([csvTemplate], { type: 'text/csv' });
-                    const url = URL.createObjectURL(blob);
-                    const a = document.createElement('a');
-                    a.href = url;
-                    a.download = 'asset_details_template.csv';
-                    a.click();
-                    URL.revokeObjectURL(url);
-                  }}
-                  style={{ padding: '6px 12px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '12px', background: '#fff', cursor: 'pointer' }}
-                >
-                  Download Template
-                </button>
-              </div>
-              <input
-                type="file"
-                accept=".csv"
-                onChange={async (e) => {
-                  const file = e.target.files?.[0];
-                  if (!file) return;
-
-                  const reader = new FileReader();
-                  reader.onload = async (evt) => {
-                    try {
-                      const text = evt.target?.result as string;
-                      const lines = text.split('\n').filter(line => line.trim());
-                      const headers = lines[0].split(',').map(h => h.trim().replace(/^"|"$/g, ''));
-
-                      const errors: { values: string[], error: string }[] = [];
-                      const updatedSerials: string[] = [];
-
-                      for (let i = 1; i < lines.length; i++) {
-                        const values = lines[i].split(',').map((v: string) => v.trim().replace(/^"|"$/g, ''));
-                        const serial = values[headers.indexOf('Serial number')];
-                        const location = values[headers.indexOf('Location')];
-                        const asset_group = values[headers.indexOf('Asset group')];
-                        const far_code = values[headers.indexOf('FAR Code')];
-
-                        if (!serial) {
-                          errors.push({ values, error: 'Missing serial number' });
-                          continue;
-                        }
-
-                        const { data: deviceData, error: fetchError } = await supabase
-                          .from('devices')
-                          .select('*')
-                          .eq('serial_number', serial)
-                          .eq('is_deleted', false)
-                          .order('updated_at', { ascending: false })
-                          .limit(1);
-
-                        if (fetchError || !deviceData || deviceData.length === 0) {
-                          errors.push({ values, error: 'Serial number not available' });
-                          continue;
-                        }
-
-                        const device = deviceData[0];
-
-                        if (device.material_type !== 'Inward') {
-                          errors.push({ values, error: 'Not inward material type' });
-                          continue;
-                        }
-
-                        if (device.warehouse !== location) {
-                          errors.push({ values, error: 'Location not matched' });
-                          continue;
-                        }
-
-                        if (device.far_code) {
-                          errors.push({ values, error: 'FAR Code already available' });
-                          continue;
-                        }
-
-                        const { error: updateError } = await supabase
-                          .from('devices')
-                          .update({
-                            asset_group,
-                            far_code,
-                            updated_at: new Date().toISOString(),
-                            updated_by: userEmail,
-                          })
-                          .eq('id', device.id);
-
-                        if (updateError) {
-                          errors.push({ values, error: `Update failed: ${updateError.message}` });
-                        } else {
-                          updatedSerials.push(serial);
-                        }
-                      }
-
-                      if (errors.length > 0) {
-                        const confirmDownload = window.confirm(`There are ${errors.length} errors. Download error CSV? (OK to download, Cancel to skip)`);
-                        if (confirmDownload) {
-                          let errorCsv = [...headers, 'Error'].map(quoteCsvValue).join(',') + '\n';
-                          errors.forEach(({ values, error }) => {
-                            const row = [...values, error].map(quoteCsvValue).join(',');
-                            errorCsv += row + '\n';
-                          });
-                          const blob = new Blob([errorCsv], { type: 'text/csv' });
-                          const url = URL.createObjectURL(blob);
-                          const a = document.createElement('a');
-                          a.href = url;
-                          a.download = 'update_errors.csv';
-                          a.click();
-                          URL.revokeObjectURL(url);
-                        }
-                      } else {
-                        toast({ title: 'Success', description: `Updated ${updatedSerials.length} devices successfully` });
-                      }
-
-                      await loadDevices();
-                    } catch (error) {
-                      toast({ title: 'Error', description: 'Failed to process update CSV. Please check format.', variant: 'destructive' });
-                    }
-                  };
-                  reader.readAsText(file);
-                }}
-                style={{ width: '100%', padding: '8px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '14px' }}
-              />
-            </div>
-          </div>
+  <div style={{ display: 'flex', gap: '16px', marginBottom: '16px' }}>
+    {/* Bulk Upload Section */}
+    <div style={{ flex: 1, border: '1px solid #e5e7eb', borderRadius: '8px', padding: '16px', background: '#fff' }}>
+      <h3 style={{ fontSize: '16px', fontWeight: 'bold', marginBottom: '12px' }}>Bulk Upload (CSV)</h3>
+      <div style={{ marginTop: '16px', padding: '12px', background: '#f9fafb', borderRadius: '4px' }}>
+        <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginBottom: '8px' }}>
+          <label style={{ fontSize: '14px', fontWeight: 'bold' }}>Bulk Upload (CSV)</label>
+          <button
+            onClick={() => {
+              const headers = ['Sales Order', 'Deal ID', 'School Name', 'Nucleus ID', 'Order Type', 'Asset Type', 'Model', 'Configuration', 'Product', 'SD Card Size', 'Profile ID', 'Size', 'Material', 'Location', 'Quantity', 'Serial Number', 'Asset Status', 'Asset Group'];
+              const rows = [
+                ['SO-1-abcde', 'DEAL123', 'School A', 'NUC001', 'Hardware', 'Tablet', 'Lenovo TB301XU', '4G+64 GB (Android-13)', 'Lead', '128 GB', 'Profile 1', '', '', 'Trichy', '3', 'SN001', 'Fresh', 'NFA'],
+                ['SO-1-abcde', 'DEAL123', 'School A', 'NUC001', 'Hardware', 'Tablet', 'Lenovo TB301XU', '4G+64 GB (Android-13)', 'Lead', '128 GB', 'Profile 1', '', '', 'Trichy', '', 'SN002', 'Fresh', 'NFA'],
+                ['SO-1-abcde', 'DEAL123', 'School A', 'NUC001', 'Hardware', 'Tablet', 'Lenovo TB301XU', '4G+64 GB (Android-13)', 'Lead', '128 GB', 'Profile 1', '', '', 'Trichy', '', 'SN003', 'Fresh', 'NFA'],
+                ['SO-1-abcde', 'DEAL123', 'School A', 'NUC001', 'Stock', 'TV', 'Hyundai TV - 43"', 'Smart TV', 'Propel', '', '', '', '', 'Bangalore', '1', 'SN004', 'Fresh', 'NFA'],
+                ['SO-1-abcde', 'DEAL123', 'School A', 'NUC001', 'Hardware', 'SD Card', '', '', '', '256 GB', 'Profile 2', '', '', 'Hyderabad', '1', '', 'Fresh', 'NFA'],
+                ['SO-1-abcde', 'DEAL123', 'School A', 'NUC001', 'Hardware', 'Cover', 'M8 Flap Cover 4th gen - Lead', '', 'Lead', '', '', '', '', 'Trichy', '1', '', 'Fresh', 'NFA'],
+              ];
+              const csvTemplate = headers.map(quoteCsvValue).join(',') + '\n' + rows.map(row => row.map(quoteCsvValue).join(',')).join('\n');
+              const blob = new Blob([csvTemplate], { type: 'text/csv' });
+              const url = URL.createObjectURL(blob);
+              const a = document.createElement('a');
+              a.href = url;
+              a.download = 'bulk_upload_template.csv';
+              a.click();
+              URL.revokeObjectURL(url);
+            }}
+            style={{ padding: '6px 12px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '12px', background: '#fff', cursor: 'pointer' }}
+          >
+            Download Template
+          </button>
         </div>
-      )}
+        <input
+          type="file"
+          accept=".csv"
+          onChange={(e) => {
+            const file = e.target.files?.[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = async (evt) => {
+              try {
+                const text = evt.target?.result as string;
+                const lines = text.trim().split('\n').filter(line => line.trim());
+                if (lines.length < 2) throw new Error('CSV must contain at least a header and one data row');
+
+                const parseCsvLine = (line: string) => {
+                  const values: string[] = [];
+                  let current = '';
+                  let inQuotes = false;
+                  let escaped = false;
+
+                  for (let i = 0; i < line.length; i++) {
+                    const char = line[i];
+                    if (char === '"' && !escaped) {
+                      inQuotes = !inQuotes;
+                    } else if (char === '"' && escaped) {
+                      current += char;
+                      escaped = false;
+                    } else if (char === '\\' && inQuotes && !escaped) {
+                      escaped = true;
+                    } else if (char === ',' && !inQuotes) {
+                      values.push(current.trim());
+                      current = '';
+                    } else {
+                      current += char;
+                      escaped = false;
+                    }
+                  }
+                  values.push(current.trim());
+                  return values.map(v => v.replace(/^"|"$/g, '').replace(/""/g, '"'));
+                };
+
+                const headers = parseCsvLine(lines[0]);
+                const expectedHeaders = ['Sales Order', 'Deal ID', 'School Name', 'Nucleus ID', 'Order Type', 'Asset Type', 'Model', 'Configuration', 'Product', 'SD Card Size', 'Profile ID', 'Size', 'Material', 'Location', 'Quantity', 'Serial Number', 'Asset Status', 'Asset Group'];
+                if (headers.length !== expectedHeaders.length || !headers.every((h, i) => h === expectedHeaders[i])) {
+                  throw new Error('CSV header mismatch. Please use the provided template.');
+                }
+
+                const errors: { values: string[], error: string }[] = [];
+                const groupedAssets: Record<string, AssetItem> = {};
+
+                for (let i = 1; i < lines.length; i++) {
+                  const values = parseCsvLine(lines[i]);
+                  if (values.length !== headers.length) {
+                    errors.push({ values, error: 'Incorrect number of columns' });
+                    continue;
+                  }
+
+                  const salesOrderVal = values[headers.indexOf('Sales Order')] || '';
+                  const dealIdVal = values[headers.indexOf('Deal ID')] || '';
+                  const schoolNameVal = values[headers.indexOf('School Name')] || '';
+                  const nucleusIdVal = values[headers.indexOf('Nucleus ID')] || '';
+                  const orderTypeVal = values[headers.indexOf('Order Type')] || '';
+                  const assetTypeVal = values[headers.indexOf('Asset Type')] || '';
+                  const modelVal = values[headers.indexOf('Model')] || '';
+                  const configVal = values[headers.indexOf('Configuration')] || '';
+                  const productVal = values[headers.indexOf('Product')] || '';
+                  const sdCardVal = values[headers.indexOf('SD Card Size')] || '';
+                  const profileVal = values[headers.indexOf('Profile ID')] || '';
+                  const sizeVal = values[headers.indexOf('Size')] || '';
+                  const materialVal = values[headers.indexOf('Material')] || '';
+                  const locationVal = values[headers.indexOf('Location')] || '';
+                  const quantityVal = parseInt(values[headers.indexOf('Quantity')]) || 0;
+                  const serialVal = values[headers.indexOf('Serial Number')] || '';
+                  const statusVal = values[headers.indexOf('Asset Status')] || 'Fresh';
+                  const groupVal = values[headers.indexOf('Asset Group')] || 'NFA';
+
+                  if (!locationVal || !assetTypeVal) {
+                    errors.push({ values, error: 'Location and Asset Type are required' });
+                    continue;
+                  }
+
+                  const key = `${assetTypeVal}_${modelVal}_${configVal}_${productVal}_${sdCardVal}_${profileVal}_${sizeVal}_${materialVal}_${locationVal}`;
+                  if (!groupedAssets[key]) {
+                    groupedAssets[key] = {
+                      id: generateId(),
+                      assetType: assetTypeVal,
+                      model: modelVal,
+                      configuration: configVal,
+                      product: productVal,
+                      sdCardSize: sdCardVal,
+                      profileId: profileVal,
+                      size: sizeVal,
+                      material: materialVal,
+                      quantity: 0,
+                      location: locationVal,
+                      serialNumbers: [],
+                      assetStatuses: [],
+                      assetGroups: [],
+                      asset_conditions: [],
+                      hasSerials: !!serialVal || defaultHasSerials(assetTypeVal),
+                    };
+                  }
+
+                  if (quantityVal > 0 && !serialVal) {
+                    groupedAssets[key].quantity += quantityVal;
+                  } else {
+                    groupedAssets[key].quantity += 1;
+                  }
+
+                  if (serialVal) {
+                    groupedAssets[key].serialNumbers.push(serialVal);
+                    groupedAssets[key].assetStatuses.push(statusVal);
+                    groupedAssets[key].assetGroups.push(groupVal);
+                    groupedAssets[key].asset_conditions.push('');
+                  } else if (groupedAssets[key].serialNumbers.length === 0) {
+                    groupedAssets[key].assetStatuses[0] = statusVal;
+                    groupedAssets[key].assetGroups[0] = groupVal;
+                  }
+
+                  // Update state within the loop if not already set
+                  if (salesOrderVal && !salesOrder) setSalesOrder(salesOrderVal);
+                  if (dealIdVal && !dealId) setDealId(dealIdVal);
+                  if (schoolNameVal && !schoolName) setSchoolName(schoolNameVal);
+                  if (nucleusIdVal && !nucleusId) setNucleusId(nucleusIdVal);
+                  if (orderTypeVal && !orderType) setOrderType(orderTypeVal);
+                }
+
+                const newAssets = Object.values(groupedAssets).map(asset => {
+                  const quantity = asset.serialNumbers.length || asset.quantity;
+                  return {
+                    ...asset,
+                    quantity,
+                    serialNumbers: asset.serialNumbers.length ? asset.serialNumbers : Array(quantity).fill(''),
+                    assetStatuses: asset.assetStatuses.length ? asset.assetStatuses : Array(quantity).fill(asset.assetStatuses[0] || 'Fresh'),
+                    assetGroups: asset.assetGroups.length ? asset.assetGroups : Array(quantity).fill(asset.assetGroups[0] || 'NFA'),
+                    asset_conditions: Array(quantity).fill(''),
+                  };
+                });
+
+                if (errors.length > 0) {
+                  const confirmDownload = window.confirm(`There are ${errors.length} errors. Download error CSV? (OK to download, Cancel to skip)`);
+                  if (confirmDownload) {
+                    let errorCsv = [...headers, 'Error'].map(quoteCsvValue).join(',') + '\n';
+                    errors.forEach(({ values, error }) => {
+                      const row = [...values, error].map(quoteCsvValue).join(',');
+                      errorCsv += row + '\n';
+                    });
+                    const blob = new Blob([errorCsv], { type: 'text/csv' });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = 'bulk_upload_errors.csv';
+                    a.click();
+                    URL.revokeObjectURL(url);
+                  }
+                } else {
+                  setAssets([...assets, ...newAssets]);
+                  toast({ title: 'Success', description: `Imported ${newAssets.length} assets from CSV` });
+                }
+              } catch (error) {
+                toast({ title: 'Error', description: `Failed to parse CSV file. Please check format. Details: ${error.message}`, variant: 'destructive' });
+              }
+            };
+            reader.readAsText(file);
+          }}
+          style={{ width: '100%', padding: '8px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '14px' }}
+        />
+      </div>
+    </div>
+
+    {/* Bulk Update Section remains unchanged */}
+    <div style={{ flex: 1, border: '1px solid #e5e7eb', borderRadius: '8px', padding: '16px', background: '#fff' }}>
+      <h3 style={{ fontSize: '16px', fontWeight: 'bold', marginBottom: '12px' }}>Bulk Update Asset Group and FAR Code (CSV)</h3>
+      <div style={{ marginTop: '16px', padding: '12px', background: '#f9fafb', borderRadius: '4px' }}>
+        <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginBottom: '8px' }}>
+          <label style={{ fontSize: '14px', fontWeight: 'bold' }}>Bulk Update (CSV)</label>
+          <button
+            onClick={() => {
+              const headers = ['Serial number', 'Location', 'Asset group', 'FAR Code'];
+              const rows = [
+                ['SN001', 'Trichy', 'NFA', 'FAR001'],
+                ['SN002', 'Bangalore', 'NFA', 'FAR002']
+              ];
+              const csvTemplate = headers.map(quoteCsvValue).join(',') + '\n' + rows.map(row => row.map(quoteCsvValue).join(',')).join('\n');
+              const blob = new Blob([csvTemplate], { type: 'text/csv' });
+              const url = URL.createObjectURL(blob);
+              const a = document.createElement('a');
+              a.href = url;
+              a.download = 'asset_details_template.csv';
+              a.click();
+              URL.revokeObjectURL(url);
+            }}
+            style={{ padding: '6px 12px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '12px', background: '#fff', cursor: 'pointer' }}
+          >
+            Download Template
+          </button>
+        </div>
+        <input
+          type="file"
+          accept=".csv"
+          onChange={async (e) => {
+            const file = e.target.files?.[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = async (evt) => {
+              try {
+                const text = evt.target?.result as string;
+                const lines = text.trim().split('\n').filter(line => line.trim());
+                const parseCsvLine = (line: string) => {
+                  const values: string[] = [];
+                  let current = '';
+                  let inQuotes = false;
+                  let escaped = false;
+
+                  for (let i = 0; i < line.length; i++) {
+                    const char = line[i];
+                    if (char === '"' && !escaped) {
+                      inQuotes = !inQuotes;
+                    } else if (char === '"' && escaped) {
+                      current += char;
+                      escaped = false;
+                    } else if (char === '\\' && inQuotes && !escaped) {
+                      escaped = true;
+                    } else if (char === ',' && !inQuotes) {
+                      values.push(current.trim());
+                      current = '';
+                    } else {
+                      current += char;
+                      escaped = false;
+                    }
+                  }
+                  values.push(current.trim());
+                  return values.map(v => v.replace(/^"|"$/g, '').replace(/""/g, '"'));
+                };
+                const headers = parseCsvLine(lines[0]);
+
+                const errors: { values: string[], error: string }[] = [];
+                const updatedSerials: string[] = [];
+
+                for (let i = 1; i < lines.length; i++) {
+                  const values = parseCsvLine(lines[i]);
+                  if (values.length !== headers.length) {
+                    errors.push({ values: values.map(v => v || ''), error: 'Incorrect number of columns' });
+                    continue;
+                  }
+
+                  const serial = values[headers.indexOf('Serial number')];
+                  const location = values[headers.indexOf('Location')];
+                  const asset_group = values[headers.indexOf('Asset group')];
+                  const far_code = values[headers.indexOf('FAR Code')];
+
+                  if (!serial) {
+                    errors.push({ values: values.map(v => v || ''), error: 'Missing serial number' });
+                    continue;
+                  }
+
+                  const { data: deviceData, error: fetchError } = await supabase
+                    .from('devices')
+                    .select('*')
+                    .eq('serial_number', serial)
+                    .eq('is_deleted', false)
+                    .order('updated_at', { ascending: false })
+                    .limit(1);
+
+                  if (fetchError || !deviceData || deviceData.length === 0) {
+                    errors.push({ values: values.map(v => v || ''), error: 'Serial number not available' });
+                    continue;
+                  }
+
+                  const device = deviceData[0];
+
+                  if (device.material_type !== 'Inward') {
+                    errors.push({ values: values.map(v => v || ''), error: 'Not inward material type' });
+                    continue;
+                  }
+
+                  if (device.warehouse !== location) {
+                    errors.push({ values: values.map(v => v || ''), error: 'Location not matched' });
+                    continue;
+                  }
+
+                  if (device.far_code) {
+                    errors.push({ values: values.map(v => v || ''), error: 'FAR Code already available' });
+                    continue;
+                  }
+
+                  const { error: updateError } = await supabase
+                    .from('devices')
+                    .update({
+                      asset_group,
+                      far_code,
+                      updated_at: new Date().toISOString(),
+                      updated_by: userEmail,
+                    })
+                    .eq('id', device.id);
+
+                  if (updateError) {
+                    errors.push({ values: values.map(v => v || ''), error: `Update failed: ${updateError.message}` });
+                  } else {
+                    updatedSerials.push(serial);
+                  }
+                }
+
+                if (errors.length > 0) {
+                  const confirmDownload = window.confirm(`There are ${errors.length} errors. Download error CSV? (OK to download, Cancel to skip)`);
+                  if (confirmDownload) {
+                    let errorCsv = [...headers, 'Error'].map(quoteCsvValue).join(',') + '\n';
+                    errors.forEach(({ values, error }) => {
+                      const row = [...values, error].map(quoteCsvValue).join(',');
+                      errorCsv += row + '\n';
+                    });
+                    const blob = new Blob([errorCsv], { type: 'text/csv' });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = 'update_errors.csv';
+                    a.click();
+                    URL.revokeObjectURL(url);
+                  }
+                } else {
+                  toast({ title: 'Success', description: `Updated ${updatedSerials.length} devices successfully` });
+                }
+
+                await loadDevices();
+              } catch (error) {
+                toast({ title: 'Error', description: `Failed to process update CSV. Please check format. Details: ${error.message}`, variant: 'destructive' });
+              }
+            };
+            reader.readAsText(file);
+          }}
+          style={{ width: '100%', padding: '8px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '14px' }}
+        />
+      </div>
+    </div>
+  </div>
+)}
 
       <button
         onClick={createOrder}
