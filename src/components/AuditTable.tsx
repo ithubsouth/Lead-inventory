@@ -90,7 +90,6 @@ const AuditTable: React.FC<AuditTableProps> = ({
   }, [error]);
 
   const uniqueValues = useMemo(() => {
-    // Pre-filter devices for status and deletion
     const latestDevices = new Map<string, Device>();
     devices.forEach((d) => {
       const key = d.serial_number || d.id;
@@ -103,7 +102,6 @@ const AuditTable: React.FC<AuditTableProps> = ({
       (d) => d.status === 'Stock' && !d.is_deleted
     );
 
-    // Apply all filters except the one being computed to get relevant devices
     const getFilteredDevices = (
       excludeFilter: keyof typeof selectedFilters
     ) => {
@@ -147,6 +145,7 @@ const AuditTable: React.FC<AuditTableProps> = ({
             d.product,
             d.asset_status,
             d.asset_group,
+            d.far_code,
             d.warehouse,
             d.order_type,
             d.sales_order,
@@ -224,6 +223,7 @@ const AuditTable: React.FC<AuditTableProps> = ({
           d.product,
           d.asset_status,
           d.asset_group,
+          d.far_code,
           d.warehouse,
           d.order_type,
           d.sales_order,
@@ -301,8 +301,7 @@ const AuditTable: React.FC<AuditTableProps> = ({
     const trimmedInput = scannerInput.trim();
     if (!trimmedInput) return;
 
-    setScannerInput(''); // Clear input immediately
-
+    setScannerInput('');
     const matchedDevice = devices.find(
       (device) => (device.serial_number === trimmedInput || device.id === trimmedInput) && device.status === 'Stock' && !device.is_deleted
     );
@@ -337,6 +336,7 @@ const AuditTable: React.FC<AuditTableProps> = ({
       'Product',
       'Asset Status',
       'Asset Group',
+      'FAR Code',
       'Warehouse',
       'Asset Check',
     ];
@@ -348,6 +348,7 @@ const AuditTable: React.FC<AuditTableProps> = ({
       d.product || '',
       d.asset_status || '',
       d.asset_group || '',
+      d.far_code || '',
       d.warehouse || '',
       d.asset_check || 'Unmatched',
     ]);
@@ -590,6 +591,7 @@ const AuditTable: React.FC<AuditTableProps> = ({
               <TableHead style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', textAlign: 'left', position: 'sticky', top: 0, background: '#fff', zIndex: 20 }}>Product</TableHead>
               <TableHead style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', textAlign: 'left', position: 'sticky', top: 0, background: '#fff', zIndex: 20 }}>Asset Status</TableHead>
               <TableHead style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', textAlign: 'left', position: 'sticky', top: 0, background: '#fff', zIndex: 20 }}>Asset Group</TableHead>
+              <TableHead style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', textAlign: 'left', position: 'sticky', top: 0, background: '#fff', zIndex: 20 }}>FAR Code</TableHead>
               <TableHead style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', textAlign: 'left', position: 'sticky', top: 0, background: '#fff', zIndex: 20 }}>Warehouse</TableHead>
               <TableHead style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', textAlign: 'left', position: 'sticky', top: 0, background: '#fff', zIndex: 20 }}>Asset Check</TableHead>
             </TableRow>
@@ -597,7 +599,7 @@ const AuditTable: React.FC<AuditTableProps> = ({
           <TableBody>
             {paginatedDevices.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={10} style={{ textAlign: 'center', fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db' }}>
+                <TableCell colSpan={11} style={{ textAlign: 'center', fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db' }}>
                   No devices found with current filters.
                 </TableCell>
               </TableRow>
@@ -615,6 +617,7 @@ const AuditTable: React.FC<AuditTableProps> = ({
                     <TableCell style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db' }}>{d.product}</TableCell>
                     <TableCell style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db' }}>{d.asset_status}</TableCell>
                     <TableCell style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db' }}>{d.asset_group}</TableCell>
+                    <TableCell style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db' }}>{d.far_code}</TableCell>
                     <TableCell style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db' }}>{d.warehouse}</TableCell>
                     <TableCell style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
