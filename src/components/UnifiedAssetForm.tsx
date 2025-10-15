@@ -1039,8 +1039,22 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
                 ['SO-1-abcde', 'DEAL123', 'School A', 'NUC001', 'Hardware', 'SD Card', '', '', '', '256 GB', 'Profile 2', '', '', 'Hyderabad', '1', '', 'Fresh', 'NFA'],
                 ['SO-1-abcde', 'DEAL123', 'School A', 'NUC001', 'Hardware', 'Cover', 'M8 Flap Cover 4th gen - Lead', '', 'Lead', '', '', '', '', 'Trichy', '1', '', 'Fresh', 'NFA'],
               ];
-              const csvTemplate = headers.map(quoteCsvValue).join(',') + '\n' + rows.map(row => row.map(quoteCsvValue).join(',')).join('\n');
-              const blob = new Blob([csvTemplate], { type: 'text/csv' });
+              
+              // Robust CSV value quoting function
+              const quoteCsvValue = (value) => {
+                const str = String(value || '');
+                // Check if value needs quoting (contains special chars or leading/trailing spaces)
+                const needsQuotes = /["\n\r,]/u.test(str) || str.trimStart() !== str || str.trimEnd() !== str;
+                const escaped = str.replace(/"/g, '""');
+                return needsQuotes ? `"${escaped}"` : escaped;
+              };
+              
+              const csvTemplate = headers.map(quoteCsvValue).join(',') + '\n' + 
+                                rows.map(row => row.map(quoteCsvValue).join(',')).join('\n');
+              
+              // Add UTF-8 BOM for Excel compatibility
+              const bom = new Uint8Array([0xEF, 0xBB, 0xBF]);
+              const blob = new Blob([bom, csvTemplate], { type: 'text/csv;charset=utf-8;' });
               const url = URL.createObjectURL(blob);
               const a = document.createElement('a');
               a.href = url;
@@ -1067,140 +1081,266 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
                 const lines = text.trim().split('\n').filter(line => line.trim());
                 if (lines.length < 2) throw new Error('CSV must contain at least a header and one data row');
 
+                // Improved CSV parsing function
                 const parseCsvLine = (line: string) => {
                   const values: string[] = [];
                   let current = '';
                   let inQuotes = false;
-                  let escaped = false;
+                  let i = 0;
 
-                  for (let i = 0; i < line.length; i++) {
+                  while (i < line.length) {
                     const char = line[i];
-                    if (char === '"' && !escaped) {
-                      inQuotes = !inQuotes;
-                    } else if (char === '"' && escaped) {
-                      current += char;
-                      escaped = false;
-                    } else if (char === '\\' && inQuotes && !escaped) {
-                      escaped = true;
+                    
+                    if (char === '"') {
+                      // Handle quoted field
+                      i++; // Move past the opening quote
+                      while (i < line.length) {
+                        const nextChar = line[i];
+                        if (nextChar === '"' && i + 1 < line.length && line[i + 1] === '"') {
+                          // Escaped quote (""), treat as single quote
+                          current += '"';
+                          i += 2; // Skip both quotes
+                        } else if (nextChar === '"') {
+                          // End of quoted field
+                          i++; // Move past closing quote
+                          break;
+                        } else {
+                          current += nextChar;
+                          i++;
+                        }
+                      }
+                      inQuotes = false;
                     } else if (char === ',' && !inQuotes) {
-                      values.push(current.trim());
+                      // Field separator
+                      values.push(current);
                       current = '';
+                      i++;
                     } else {
                       current += char;
-                      escaped = false;
+                      i++;
                     }
                   }
-                  values.push(current.trim());
-                  return values.map(v => v.replace(/^"|"$/g, '').replace(/""/g, '"'));
+                  values.push(current);
+                  
+                  // Clean up values: remove outer quotes and unescape inner quotes
+                  return values.map(v => {
+                    if (v.startsWith('"') && v.endsWith('"')) {
+                      v = v.slice(1, -1); // Remove outer quotes
+                    }
+                    return v.replace(/""/g, '"'); // Unescape doubled quotes
+                  });
                 };
 
                 const headers = parseCsvLine(lines[0]);
-                const expectedHeaders = ['Sales Order', 'Deal ID', 'School Name', 'Nucleus ID', 'Order Type', 'Asset Type', 'Model', 'Configuration', 'Product', 'SD Card Size', 'Profile ID', 'Size', 'Material', 'Location', 'Quantity', 'Serial Number', 'Asset Status', 'Asset Group'];
-                if (headers.length !== expectedHeaders.length || !headers.every((h, i) => h === expectedHeaders[i])) {
+                const expectedHeaders = [
+                  'Sales Order', 'Deal ID', 'School Name', 'Nucleus ID', 'Order Type', 
+                  'Asset Type', 'Model', 'Configuration', 'Product', 'SD Card Size', 
+                  'Profile ID', 'Size', 'Material', 'Location', 'Quantity', 
+                  'Serial Number', 'Asset Status', 'Asset Group'
+                ];
+                
+                // Validate headers
+                if (headers.length !== expectedHeaders.length) {
+                  throw new Error(`Expected ${expectedHeaders.length} columns, found ${headers.length}`);
+                }
+                if (!headers.every((h, i) => h.trim() === expectedHeaders[i])) {
                   throw new Error('CSV header mismatch. Please use the provided template.');
                 }
 
                 const errors: { values: string[], error: string }[] = [];
-                const groupedAssets: Record<string, AssetItem> = {};
+                const groupedAssets: Record<string, any> = {};
 
                 for (let i = 1; i < lines.length; i++) {
-                  const values = parseCsvLine(lines[i]);
-                  if (values.length !== headers.length) {
-                    errors.push({ values, error: 'Incorrect number of columns' });
-                    continue;
-                  }
+                  try {
+                    const values = parseCsvLine(lines[i]);
+                    
+                    // Ensure we have the right number of columns
+                    if (values.length !== headers.length) {
+                      errors.push({ 
+                        values: [...values, ...Array(headers.length - values.length).fill('')], 
+                        error: `Expected ${headers.length} columns, found ${values.length}` 
+                      });
+                      continue;
+                    }
 
-                  const salesOrderVal = values[headers.indexOf('Sales Order')] || '';
-                  const dealIdVal = values[headers.indexOf('Deal ID')] || '';
-                  const schoolNameVal = values[headers.indexOf('School Name')] || '';
-                  const nucleusIdVal = values[headers.indexOf('Nucleus ID')] || '';
-                  const orderTypeVal = values[headers.indexOf('Order Type')] || '';
-                  const assetTypeVal = values[headers.indexOf('Asset Type')] || '';
-                  const modelVal = values[headers.indexOf('Model')] || '';
-                  const configVal = values[headers.indexOf('Configuration')] || '';
-                  const productVal = values[headers.indexOf('Product')] || '';
-                  const sdCardVal = values[headers.indexOf('SD Card Size')] || '';
-                  const profileVal = values[headers.indexOf('Profile ID')] || '';
-                  const sizeVal = values[headers.indexOf('Size')] || '';
-                  const materialVal = values[headers.indexOf('Material')] || '';
-                  const locationVal = values[headers.indexOf('Location')] || '';
-                  const quantityVal = parseInt(values[headers.indexOf('Quantity')]) || 0;
-                  const serialVal = values[headers.indexOf('Serial Number')] || '';
-                  const statusVal = values[headers.indexOf('Asset Status')] || 'Fresh';
-                  const groupVal = values[headers.indexOf('Asset Group')] || 'NFA';
-
-                  if (!locationVal || !assetTypeVal) {
-                    errors.push({ values, error: 'Location and Asset Type are required' });
-                    continue;
-                  }
-
-                  const key = `${assetTypeVal}_${modelVal}_${configVal}_${productVal}_${sdCardVal}_${profileVal}_${sizeVal}_${materialVal}_${locationVal}`;
-                  if (!groupedAssets[key]) {
-                    groupedAssets[key] = {
-                      id: generateId(),
-                      assetType: assetTypeVal,
-                      model: modelVal,
-                      configuration: configVal,
-                      product: productVal,
-                      sdCardSize: sdCardVal,
-                      profileId: profileVal,
-                      size: sizeVal,
-                      material: materialVal,
-                      quantity: 0,
-                      location: locationVal,
-                      serialNumbers: [],
-                      assetStatuses: [],
-                      assetGroups: [],
-                      asset_conditions: [],
-                      hasSerials: !!serialVal || defaultHasSerials(assetTypeVal),
+                    // Extract values with proper header mapping
+                    const getValue = (headerName: string) => {
+                      const index = headers.indexOf(headerName);
+                      return index !== -1 ? (values[index] || '').trim() : '';
                     };
-                  }
 
-                  if (quantityVal > 0 && !serialVal) {
-                    groupedAssets[key].quantity += quantityVal;
-                  } else {
-                    groupedAssets[key].quantity += 1;
-                  }
+                    const salesOrderVal = getValue('Sales Order');
+                    const dealIdVal = getValue('Deal ID');
+                    const schoolNameVal = getValue('School Name');
+                    const nucleusIdVal = getValue('Nucleus ID');
+                    const orderTypeVal = getValue('Order Type');
+                    const assetTypeVal = getValue('Asset Type');
+                    const modelVal = getValue('Model'); // This will correctly capture "Hyundai TV - 43""
+                    const configVal = getValue('Configuration');
+                    const productVal = getValue('Product');
+                    const sdCardVal = getValue('SD Card Size');
+                    const profileVal = getValue('Profile ID');
+                    const sizeVal = getValue('Size');
+                    const materialVal = getValue('Material');
+                    const locationVal = getValue('Location');
+                    const quantityStr = getValue('Quantity');
+                    const serialVal = getValue('Serial Number');
+                    const statusVal = getValue('Asset Status') || 'Fresh';
+                    const groupVal = getValue('Asset Group') || 'NFA';
 
-                  if (serialVal) {
-                    groupedAssets[key].serialNumbers.push(serialVal);
-                    groupedAssets[key].assetStatuses.push(statusVal);
-                    groupedAssets[key].assetGroups.push(groupVal);
-                    groupedAssets[key].asset_conditions.push('');
-                  } else if (groupedAssets[key].serialNumbers.length === 0) {
-                    groupedAssets[key].assetStatuses[0] = statusVal;
-                    groupedAssets[key].assetGroups[0] = groupVal;
-                  }
+                    // Debug logging for model
+                    if (assetTypeVal === 'TV') {
+                      console.log(`Row ${i}: Asset Type: ${assetTypeVal}, Model: "${modelVal}"`);
+                    }
 
-                  // Update state within the loop if not already set
-                  if (salesOrderVal && !salesOrder) setSalesOrder(salesOrderVal);
-                  if (dealIdVal && !dealId) setDealId(dealIdVal);
-                  if (schoolNameVal && !schoolName) setSchoolName(schoolNameVal);
-                  if (nucleusIdVal && !nucleusId) setNucleusId(nucleusIdVal);
-                  if (orderTypeVal && !orderType) setOrderType(orderTypeVal);
+                    const quantityVal = parseInt(quantityStr) || (serialVal ? 1 : 0);
+
+                    // Validate required fields
+                    if (!locationVal || !assetTypeVal) {
+                      errors.push({ values, error: 'Location and Asset Type are required' });
+                      continue;
+                    }
+
+                    // Validate model for specific asset types
+                    if (['TV', 'Tablet'].includes(assetTypeVal) && !modelVal) {
+                      errors.push({ values, error: `Model is required for ${assetTypeVal} assets` });
+                      continue;
+                    }
+
+                    // Create unique key for grouping (preserve original model value)
+                    const groupingKey = [
+                      assetTypeVal || '',
+                      modelVal || '', // Keep the exact model value including quotes
+                      configVal || '',
+                      productVal || '',
+                      sdCardVal || '',
+                      profileVal || '',
+                      sizeVal || '',
+                      materialVal || '',
+                      locationVal || ''
+                    ].join('_').replace(/[^a-zA-Z0-9_-]/g, '_'); // Sanitize for key but preserve original
+
+                    if (!groupedAssets[groupingKey]) {
+                      groupedAssets[groupingKey] = {
+                        id: generateId(),
+                        originalKey: groupingKey,
+                        assetType: assetTypeVal,
+                        model: modelVal, // Preserve exact model value
+                        configuration: configVal,
+                        product: productVal,
+                        sdCardSize: sdCardVal,
+                        profileId: profileVal,
+                        size: sizeVal,
+                        material: materialVal,
+                        quantity: 0,
+                        location: locationVal,
+                        serialNumbers: [],
+                        assetStatuses: [],
+                        assetGroups: [],
+                        asset_conditions: [],
+                        hasSerials: !!serialVal || defaultHasSerials(assetTypeVal),
+                        // Store original model separately to ensure it's not modified
+                        originalModel: modelVal
+                      };
+                    }
+
+                    const currentAsset = groupedAssets[groupingKey];
+
+                    // Handle quantity or serial addition
+                    if (quantityVal > 0 && !serialVal) {
+                      currentAsset.quantity += quantityVal;
+                    } else if (serialVal) {
+                      currentAsset.quantity += 1;
+                      currentAsset.serialNumbers.push(serialVal);
+                      currentAsset.assetStatuses.push(statusVal);
+                      currentAsset.assetGroups.push(groupVal);
+                      currentAsset.asset_conditions.push('');
+                    }
+
+                    // Set default status and group if no serials
+                    if (currentAsset.serialNumbers.length === 0 && currentAsset.quantity > 0) {
+                      if (!currentAsset.assetStatuses[0]) {
+                        currentAsset.assetStatuses[0] = statusVal;
+                      }
+                      if (!currentAsset.assetGroups[0]) {
+                        currentAsset.assetGroups[0] = groupVal;
+                      }
+                    }
+
+                    // Update parent state if not already set
+                    if (salesOrderVal && !salesOrder) setSalesOrder(salesOrderVal);
+                    if (dealIdVal && !dealId) setDealId(dealIdVal);
+                    if (schoolNameVal && !schoolName) setSchoolName(schoolNameVal);
+                    if (nucleusIdVal && !nucleusId) setNucleusId(nucleusIdVal);
+                    if (orderTypeVal && !orderType) setOrderType(orderTypeVal);
+
+                  } catch (rowError) {
+                    errors.push({ 
+                      values: parseCsvLine(lines[i]), 
+                      error: `Row parsing error: ${rowError.message}` 
+                    });
+                  }
                 }
 
+                // Create final assets array with preserved model values
                 const newAssets = Object.values(groupedAssets).map(asset => {
-                  const quantity = asset.serialNumbers.length || asset.quantity;
-                  return {
+                  const finalQuantity = asset.serialNumbers.length || asset.quantity;
+                  const finalAsset = {
                     ...asset,
-                    quantity,
-                    serialNumbers: asset.serialNumbers.length ? asset.serialNumbers : Array(quantity).fill(''),
-                    assetStatuses: asset.assetStatuses.length ? asset.assetStatuses : Array(quantity).fill(asset.assetStatuses[0] || 'Fresh'),
-                    assetGroups: asset.assetGroups.length ? asset.assetGroups : Array(quantity).fill(asset.assetGroups[0] || 'NFA'),
-                    asset_conditions: Array(quantity).fill(''),
+                    quantity: finalQuantity,
+                    serialNumbers: asset.serialNumbers.length 
+                      ? asset.serialNumbers 
+                      : Array(finalQuantity).fill(''),
+                    assetStatuses: asset.assetStatuses.length 
+                      ? asset.assetStatuses 
+                      : Array(finalQuantity).fill(asset.assetStatuses[0] || 'Fresh'),
+                    assetGroups: asset.assetGroups.length 
+                      ? asset.assetGroups 
+                      : Array(finalQuantity).fill(asset.assetGroups[0] || 'NFA'),
+                    asset_conditions: Array(finalQuantity).fill(''),
+                    // Ensure model is preserved exactly as parsed
+                    model: asset.originalModel || asset.model || '',
+                    // Add displayModel for UI compatibility if needed
+                    displayModel: (asset.originalModel || asset.model || '').replace(/"/g, '"'), // Ensure proper quote display
                   };
+
+                  // Debug log for TV assets
+                  if (finalAsset.assetType === 'TV') {
+                    console.log('Final TV Asset:', {
+                      model: finalAsset.model,
+                      displayModel: finalAsset.displayModel,
+                      quantity: finalAsset.quantity,
+                      location: finalAsset.location
+                    });
+                  }
+
+                  return finalAsset;
                 });
 
+                console.log('Total new assets created:', newAssets.length);
+                console.log('All new assets:', newAssets);
+
+                // Handle errors
                 if (errors.length > 0) {
-                  const confirmDownload = window.confirm(`There are ${errors.length} errors. Download error CSV? (OK to download, Cancel to skip)`);
+                  const confirmDownload = window.confirm(
+                    `There are ${errors.length} errors. Download error CSV? (OK to download, Cancel to skip)`
+                  );
                   if (confirmDownload) {
+                    const quoteCsvValue = (value) => {
+                      const str = String(value || '');
+                      const needsQuotes = /["\n\r,]/u.test(str) || str.trimStart() !== str || str.trimEnd() !== str;
+                      const escaped = str.replace(/"/g, '""');
+                      return needsQuotes ? `"${escaped}"` : escaped;
+                    };
+                    
                     let errorCsv = [...headers, 'Error'].map(quoteCsvValue).join(',') + '\n';
                     errors.forEach(({ values, error }) => {
-                      const row = [...values, error].map(quoteCsvValue).join(',');
+                      const row = [...values.slice(0, headers.length), error].map(quoteCsvValue).join(',');
                       errorCsv += row + '\n';
                     });
-                    const blob = new Blob([errorCsv], { type: 'text/csv' });
+                    
+                    const bom = new Uint8Array([0xEF, 0xBB, 0xBF]);
+                    const blob = new Blob([bom, errorCsv], { type: 'text/csv;charset=utf-8;' });
                     const url = URL.createObjectURL(blob);
                     const a = document.createElement('a');
                     a.href = url;
@@ -1208,22 +1348,41 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
                     a.click();
                     URL.revokeObjectURL(url);
                   }
+                  
+                  // Still process successful assets
+                  if (newAssets.length > 0) {
+                    setAssets(prevAssets => [...prevAssets, ...newAssets]);
+                    toast({ 
+                      title: 'Partial Success', 
+                      description: `Imported ${newAssets.length} assets from CSV (${errors.length} errors)` 
+                    });
+                  }
                 } else {
-                  setAssets([...assets, ...newAssets]);
-                  toast({ title: 'Success', description: `Imported ${newAssets.length} assets from CSV` });
+                  // All successful
+                  setAssets(prevAssets => [...prevAssets, ...newAssets]);
+                  toast({ 
+                    title: 'Success', 
+                    description: `Imported ${newAssets.length} assets from CSV` 
+                  });
                 }
+
               } catch (error) {
-                toast({ title: 'Error', description: `Failed to parse CSV file. Please check format. Details: ${error.message}`, variant: 'destructive' });
+                console.error('CSV Processing Error:', error);
+                toast({ 
+                  title: 'Error', 
+                  description: `Failed to parse CSV file. Please check format. Details: ${error.message}`, 
+                  variant: 'destructive' 
+                });
               }
             };
-            reader.readAsText(file);
+            reader.readAsText(file, 'utf-8');
           }}
           style={{ width: '100%', padding: '8px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '14px' }}
         />
       </div>
     </div>
 
-    {/* Bulk Update Section remains unchanged */}
+    {/* Bulk Update Section (unchanged) */}
     <div style={{ flex: 1, border: '1px solid #e5e7eb', borderRadius: '8px', padding: '16px', background: '#fff' }}>
       <h3 style={{ fontSize: '16px', fontWeight: 'bold', marginBottom: '12px' }}>Bulk Update Asset Group and FAR Code (CSV)</h3>
       <div style={{ marginTop: '16px', padding: '12px', background: '#f9fafb', borderRadius: '4px' }}>
@@ -1236,8 +1395,15 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
                 ['SN001', 'Trichy', 'NFA', 'FAR001'],
                 ['SN002', 'Bangalore', 'NFA', 'FAR002']
               ];
+              const quoteCsvValue = (value) => {
+                const str = String(value || '');
+                const needsQuotes = /["\n\r,]/u.test(str) || str.trimStart() !== str || str.trimEnd() !== str;
+                const escaped = str.replace(/"/g, '""');
+                return needsQuotes ? `"${escaped}"` : escaped;
+              };
               const csvTemplate = headers.map(quoteCsvValue).join(',') + '\n' + rows.map(row => row.map(quoteCsvValue).join(',')).join('\n');
-              const blob = new Blob([csvTemplate], { type: 'text/csv' });
+              const bom = new Uint8Array([0xEF, 0xBB, 0xBF]);
+              const blob = new Blob([bom, csvTemplate], { type: 'text/csv;charset=utf-8;' });
               const url = URL.createObjectURL(blob);
               const a = document.createElement('a');
               a.href = url;
@@ -1262,33 +1428,58 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
               try {
                 const text = evt.target?.result as string;
                 const lines = text.trim().split('\n').filter(line => line.trim());
+                if (lines.length < 1) throw new Error('CSV must contain at least a header row');
+
                 const parseCsvLine = (line: string) => {
                   const values: string[] = [];
                   let current = '';
                   let inQuotes = false;
-                  let escaped = false;
+                  let i = 0;
 
-                  for (let i = 0; i < line.length; i++) {
+                  while (i < line.length) {
                     const char = line[i];
-                    if (char === '"' && !escaped) {
-                      inQuotes = !inQuotes;
-                    } else if (char === '"' && escaped) {
-                      current += char;
-                      escaped = false;
-                    } else if (char === '\\' && inQuotes && !escaped) {
-                      escaped = true;
+                    
+                    if (char === '"') {
+                      i++;
+                      while (i < line.length) {
+                        const nextChar = line[i];
+                        if (nextChar === '"' && i + 1 < line.length && line[i + 1] === '"') {
+                          current += '"';
+                          i += 2;
+                        } else if (nextChar === '"') {
+                          i++;
+                          break;
+                        } else {
+                          current += nextChar;
+                          i++;
+                        }
+                      }
+                      inQuotes = false;
                     } else if (char === ',' && !inQuotes) {
-                      values.push(current.trim());
+                      values.push(current);
                       current = '';
+                      i++;
                     } else {
                       current += char;
-                      escaped = false;
+                      i++;
                     }
                   }
-                  values.push(current.trim());
-                  return values.map(v => v.replace(/^"|"$/g, '').replace(/""/g, '"'));
+                  values.push(current);
+                  
+                  return values.map(v => {
+                    if (v.startsWith('"') && v.endsWith('"')) {
+                      v = v.slice(1, -1);
+                    }
+                    return v.replace(/""/g, '"');
+                  });
                 };
+
                 const headers = parseCsvLine(lines[0]);
+                const expectedHeaders = ['Serial number', 'Location', 'Asset group', 'FAR Code'];
+                
+                if (headers.length !== expectedHeaders.length || !headers.every((h, i) => h.trim() === expectedHeaders[i])) {
+                  throw new Error('CSV header mismatch. Please use the provided template.');
+                }
 
                 const errors: { values: string[], error: string }[] = [];
                 const updatedSerials: string[] = [];
@@ -1296,17 +1487,22 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
                 for (let i = 1; i < lines.length; i++) {
                   const values = parseCsvLine(lines[i]);
                   if (values.length !== headers.length) {
-                    errors.push({ values: values.map(v => v || ''), error: 'Incorrect number of columns' });
+                    errors.push({ values: [...values, ...Array(headers.length - values.length).fill('')], error: 'Incorrect number of columns' });
                     continue;
                   }
 
-                  const serial = values[headers.indexOf('Serial number')];
-                  const location = values[headers.indexOf('Location')];
-                  const asset_group = values[headers.indexOf('Asset group')];
-                  const far_code = values[headers.indexOf('FAR Code')];
+                  const getValue = (headerName: string) => {
+                    const index = headers.indexOf(headerName);
+                    return index !== -1 ? (values[index] || '').trim() : '';
+                  };
+
+                  const serial = getValue('Serial number');
+                  const location = getValue('Location');
+                  const asset_group = getValue('Asset group');
+                  const far_code = getValue('FAR Code');
 
                   if (!serial) {
-                    errors.push({ values: values.map(v => v || ''), error: 'Missing serial number' });
+                    errors.push({ values, error: 'Missing serial number' });
                     continue;
                   }
 
@@ -1319,24 +1515,24 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
                     .limit(1);
 
                   if (fetchError || !deviceData || deviceData.length === 0) {
-                    errors.push({ values: values.map(v => v || ''), error: 'Serial number not available' });
+                    errors.push({ values, error: 'Serial number not available' });
                     continue;
                   }
 
                   const device = deviceData[0];
 
                   if (device.material_type !== 'Inward') {
-                    errors.push({ values: values.map(v => v || ''), error: 'Not inward material type' });
+                    errors.push({ values, error: 'Not inward material type' });
                     continue;
                   }
 
                   if (device.warehouse !== location) {
-                    errors.push({ values: values.map(v => v || ''), error: 'Location not matched' });
+                    errors.push({ values, error: 'Location not matched' });
                     continue;
                   }
 
                   if (device.far_code) {
-                    errors.push({ values: values.map(v => v || ''), error: 'FAR Code already available' });
+                    errors.push({ values, error: 'FAR Code already available' });
                     continue;
                   }
 
@@ -1351,21 +1547,32 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
                     .eq('id', device.id);
 
                   if (updateError) {
-                    errors.push({ values: values.map(v => v || ''), error: `Update failed: ${updateError.message}` });
+                    errors.push({ values, error: `Update failed: ${updateError.message}` });
                   } else {
                     updatedSerials.push(serial);
                   }
                 }
 
                 if (errors.length > 0) {
-                  const confirmDownload = window.confirm(`There are ${errors.length} errors. Download error CSV? (OK to download, Cancel to skip)`);
+                  const confirmDownload = window.confirm(
+                    `There are ${errors.length} errors. Download error CSV? (OK to download, Cancel to skip)`
+                  );
                   if (confirmDownload) {
+                    const quoteCsvValue = (value) => {
+                      const str = String(value || '');
+                      const needsQuotes = /["\n\r,]/u.test(str) || str.trimStart() !== str || str.trimEnd() !== str;
+                      const escaped = str.replace(/"/g, '""');
+                      return needsQuotes ? `"${escaped}"` : escaped;
+                    };
+                    
                     let errorCsv = [...headers, 'Error'].map(quoteCsvValue).join(',') + '\n';
                     errors.forEach(({ values, error }) => {
                       const row = [...values, error].map(quoteCsvValue).join(',');
                       errorCsv += row + '\n';
                     });
-                    const blob = new Blob([errorCsv], { type: 'text/csv' });
+                    
+                    const bom = new Uint8Array([0xEF, 0xBB, 0xBF]);
+                    const blob = new Blob([bom, errorCsv], { type: 'text/csv;charset=utf-8;' });
                     const url = URL.createObjectURL(blob);
                     const a = document.createElement('a');
                     a.href = url;
@@ -1377,12 +1584,14 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
                   toast({ title: 'Success', description: `Updated ${updatedSerials.length} devices successfully` });
                 }
 
-                await loadDevices();
+                if (updatedSerials.length > 0) {
+                  await loadDevices();
+                }
               } catch (error) {
                 toast({ title: 'Error', description: `Failed to process update CSV. Please check format. Details: ${error.message}`, variant: 'destructive' });
               }
             };
-            reader.readAsText(file);
+            reader.readAsText(file, 'utf-8');
           }}
           style={{ width: '100%', padding: '8px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '14px' }}
         />
