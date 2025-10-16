@@ -69,7 +69,7 @@ const OrdersTable: React.FC<OrdersTableProps> = ({
   loadOrderSummary,
 }) => {
   const [currentOrdersPage, setCurrentOrdersPage] = useState(1);
-  const [ordersPerPage] = useState(20);
+  const [rowsPerPage, setRowsPerPage] = useState(10);
   const [viewingOrder, setViewingOrder] = useState<Order | null>(null);
   const [editingOrder, setEditingOrder] = useState<Order | null>(null);
   const [showViewDialog, setShowViewDialog] = useState(false);
@@ -367,9 +367,26 @@ const OrdersTable: React.FC<OrdersTableProps> = ({
     duplicates.forEach(serial => duplicateSerials.add(serial));
   });
 
+  useEffect(() => {
+    setCurrentOrdersPage(1);
+  }, [
+    selectedWarehouse,
+    selectedAssetType,
+    selectedModel,
+    selectedConfiguration,
+    selectedProduct,
+    selectedStatus,
+    selectedOrderType,
+    fromDate,
+    toDate,
+    showDeleted,
+    searchQuery,
+    rowsPerPage,
+  ]);
+
   const paginatedOrders = ordersWithCounts.slice(
-    (currentOrdersPage - 1) * ordersPerPage,
-    currentOrdersPage * ordersPerPage
+    (currentOrdersPage - 1) * rowsPerPage,
+    currentOrdersPage * rowsPerPage
   );
 
   useEffect(() => {
@@ -381,13 +398,24 @@ const OrdersTable: React.FC<OrdersTableProps> = ({
     })));
     console.log('Pagination info:', {
       currentOrdersPage,
-      ordersPerPage,
+      rowsPerPage,
       sortedOrdersLength: ordersWithCounts.length,
-      totalOrdersPages: Math.ceil(ordersWithCounts.length / ordersPerPage),
+      totalOrdersPages: Math.ceil(ordersWithCounts.length / rowsPerPage),
     });
   }, [paginatedOrders]);
 
-  const totalOrdersPages = Math.ceil(ordersWithCounts.length / ordersPerPage);
+  const totalOrdersPages = Math.ceil(ordersWithCounts.length / rowsPerPage);
+
+  // Pagination logic for dynamic page range
+  const siblingCount = 2; // Number of pages to show on each side of the current page
+  const pageRange = [];
+  for (let i = Math.max(1, currentOrdersPage - siblingCount); i <= Math.min(totalOrdersPages, currentOrdersPage + siblingCount); i++) {
+    pageRange.push(i);
+  }
+  if (pageRange[0] > 1) pageRange.unshift('...');
+  if (pageRange[0] !== 1) pageRange.unshift(1);
+  if (pageRange[pageRange.length - 1] < totalOrdersPages) pageRange.push('...');
+  if (pageRange[pageRange.length - 1] !== totalOrdersPages) pageRange.push(totalOrdersPages);
 
   const handleStatusClick = (order: Order) => {
     if (order.status === 'Pending' || order.status === 'Failed') {
@@ -820,20 +848,57 @@ const OrdersTable: React.FC<OrdersTableProps> = ({
 
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '4px', fontSize: '12px' }}>
               <div>
-                Showing {(currentOrdersPage - 1) * ordersPerPage + 1} to{' '}
-                {Math.min(currentOrdersPage * ordersPerPage, ordersWithCounts.length)} of{' '}
-                {ordersWithCounts.length} orders
+                <span>Showing {((currentOrdersPage - 1) * rowsPerPage) + 1} to {Math.min(currentOrdersPage * rowsPerPage, ordersWithCounts.length)} of {ordersWithCounts.length} orders</span>
+                <select
+                  value={rowsPerPage}
+                  onChange={(e) => {
+                    setRowsPerPage(Number(e.target.value));
+                    setCurrentOrdersPage(1);
+                  }}
+                  style={{ 
+                    fontSize: '12px', 
+                    border: '1px solid #d1d5db', 
+                    borderRadius: '4px', 
+                    padding: '4px', 
+                    marginLeft: '8px', 
+                    height: '28px' 
+                  }}
+                >
+                  <option value={10}>10</option>
+                  <option value={25}>25</option>
+                  <option value={50}>50</option>
+                  <option value={100}>100</option>
+                </select>
               </div>
-              <div style={{ display: 'flex', gap: '4px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                 <button
-                  onClick={() => setCurrentOrdersPage(prev => Math.max(prev - 1, 1))}
+                  onClick={() => setCurrentOrdersPage((prev) => Math.max(prev - 1, 1))}
                   disabled={currentOrdersPage === 1}
                   style={{ border: '1px solid #d1d5db', borderRadius: '4px', padding: '4px 8px', fontSize: '12px', opacity: currentOrdersPage === 1 ? 0.5 : 1 }}
                 >
                   Previous
                 </button>
+                {pageRange.map((page, index) => (
+                  <button
+                    key={index}
+                    onClick={() => typeof page === 'number' && setCurrentOrdersPage(page)}
+                    style={{
+                      border: '1px solid #d1d5db',
+                      borderRadius: '4px',
+                      padding: '4px 8px',
+                      background: currentOrdersPage === page ? '#3b82f6' : '#fff',
+                      color: currentOrdersPage === page ? '#fff' : '#000',
+                      cursor: typeof page === 'number' ? 'pointer' : 'default',
+                      fontSize: '12px',
+                      opacity: typeof page === 'number' ? 1 : 0.5,
+                    }}
+                    disabled={typeof page !== 'number'}
+                  >
+                    {page}
+                  </button>
+                ))}
                 <button
-                  onClick={() => setCurrentOrdersPage(prev => Math.min(prev + 1, totalOrdersPages))}
+                  onClick={() => setCurrentOrdersPage((prev) => Math.min(prev + 1, totalOrdersPages))}
                   disabled={currentOrdersPage === totalOrdersPages}
                   style={{ border: '1px solid #d1d5db', borderRadius: '4px', padding: '4px 8px', fontSize: '12px', opacity: currentOrdersPage === totalOrdersPages ? 0.5 : 1 }}
                 >

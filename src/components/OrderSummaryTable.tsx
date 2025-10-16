@@ -39,7 +39,7 @@ const OrderSummaryTable: React.FC<OrderSummaryTableProps> = ({
   setSearchQuery,
 }) => {
   const [currentPage, setCurrentPage] = useState(1);
-  const [itemsPerPage] = useState(20);
+  const [rowsPerPage, setRowsPerPage] = useState(10);
 
   const toast = ({ title, description, variant }: { title: string; description: string; variant?: 'destructive' }) => {
     console.log(`Toast: ${title} - ${description}${variant ? ` (Variant: ${variant})` : ''}`);
@@ -142,9 +142,13 @@ const OrderSummaryTable: React.FC<OrderSummaryTableProps> = ({
     });
   }, [filteredSummary, sortedSummary]);
 
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [selectedWarehouse, selectedAssetType, selectedModel, fromDate, toDate, showDeleted, searchQuery, rowsPerPage]);
+
   const paginatedSummary = sortedSummary.slice(
-    (currentPage - 1) * itemsPerPage,
-    currentPage * itemsPerPage
+    (currentPage - 1) * rowsPerPage,
+    currentPage * rowsPerPage
   );
 
   useEffect(() => {
@@ -158,7 +162,18 @@ const OrderSummaryTable: React.FC<OrderSummaryTableProps> = ({
     }
   }, [paginatedSummary, sortedSummary.length]);
 
-  const totalPages = Math.ceil(sortedSummary.length / itemsPerPage);
+  const totalPages = Math.ceil(sortedSummary.length / rowsPerPage);
+
+  // Pagination logic for dynamic page range
+  const siblingCount = 2; // Number of pages to show on each side of the current page
+  const pageRange = [];
+  for (let i = Math.max(1, currentPage - siblingCount); i <= Math.min(totalPages, currentPage + siblingCount); i++) {
+    pageRange.push(i);
+  }
+  if (pageRange[0] > 1) pageRange.unshift('...');
+  if (pageRange[0] !== 1) pageRange.unshift(1);
+  if (pageRange[pageRange.length - 1] < totalPages) pageRange.push('...');
+  if (pageRange[pageRange.length - 1] !== totalPages) pageRange.push(totalPages);
 
   const downloadCSV = (data: OrderSummary[], filename: string) => {
     if (data.length === 0) {
@@ -348,20 +363,57 @@ const OrderSummaryTable: React.FC<OrderSummaryTableProps> = ({
 
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '8px', fontSize: '12px' }}>
               <div>
-                Showing {(currentPage - 1) * itemsPerPage + 1} to{' '}
-                {Math.min(currentPage * itemsPerPage, sortedSummary.length)} of{' '}
-                {sortedSummary.length} summaries
+                <span>Showing {((currentPage - 1) * rowsPerPage) + 1} to {Math.min(currentPage * rowsPerPage, sortedSummary.length)} of {sortedSummary.length} summaries</span>
+                <select
+                  value={rowsPerPage}
+                  onChange={(e) => {
+                    setRowsPerPage(Number(e.target.value));
+                    setCurrentPage(1);
+                  }}
+                  style={{ 
+                    fontSize: '12px', 
+                    border: '1px solid #d1d5db', 
+                    borderRadius: '4px', 
+                    padding: '4px', 
+                    marginLeft: '8px', 
+                    height: '28px' 
+                  }}
+                >
+                  <option value={10}>10</option>
+                  <option value={25}>25</option>
+                  <option value={50}>50</option>
+                  <option value={100}>100</option>
+                </select>
               </div>
-              <div style={{ display: 'flex', gap: '4px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                 <button
-                  onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+                  onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
                   disabled={currentPage === 1}
                   style={{ border: '1px solid #d1d5db', borderRadius: '4px', padding: '4px 8px', fontSize: '12px', opacity: currentPage === 1 ? 0.5 : 1 }}
                 >
                   Previous
                 </button>
+                {pageRange.map((page, index) => (
+                  <button
+                    key={index}
+                    onClick={() => typeof page === 'number' && setCurrentPage(page)}
+                    style={{
+                      border: '1px solid #d1d5db',
+                      borderRadius: '4px',
+                      padding: '4px 8px',
+                      background: currentPage === page ? '#3b82f6' : '#fff',
+                      color: currentPage === page ? '#fff' : '#000',
+                      cursor: typeof page === 'number' ? 'pointer' : 'default',
+                      fontSize: '12px',
+                      opacity: typeof page === 'number' ? 1 : 0.5,
+                    }}
+                    disabled={typeof page !== 'number'}
+                  >
+                    {page}
+                  </button>
+                ))}
                 <button
-                  onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+                  onClick={() => setCurrentPage((prev) => Math.min(prev + 1, totalPages))}
                   disabled={currentPage === totalPages}
                   style={{ border: '1px solid #d1d5db', borderRadius: '4px', padding: '4px 8px', fontSize: '12px', opacity: currentPage === totalPages ? 0.5 : 1 }}
                 >

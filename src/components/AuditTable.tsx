@@ -73,7 +73,7 @@ const AuditTable: React.FC<AuditTableProps> = ({
   const [error, setError] = useState<string | null>(null);
   const [updatingDeviceId, setUpdatingDeviceId] = useState<string | null>(null);
   const [isClearing, setIsClearing] = useState(false);
-  const rowsPerPage = 10;
+  const [rowsPerPage, setRowsPerPage] = useState(10);
 
   React.useEffect(() => {
     if (scanResult) {
@@ -88,6 +88,17 @@ const AuditTable: React.FC<AuditTableProps> = ({
       return () => clearTimeout(timer);
     }
   }, [error]);
+
+  const propertyMap = {
+    warehouse: 'warehouse',
+    assetType: 'asset_type',
+    model: 'model',
+    configuration: 'configuration',
+    product: 'product',
+    assetStatus: 'asset_status',
+    assetGroup: 'asset_group',
+    orderType: 'order_type',
+  };
 
   const uniqueValues = useMemo(() => {
     const latestDevices = new Map<string, Device>();
@@ -125,7 +136,15 @@ const AuditTable: React.FC<AuditTableProps> = ({
             if (key === 'fromDate') {
               if (!fromDate?.from || !fromDate?.to) return true;
               const updatedAt = new Date(d.updated_at);
-              return updatedAt >= new Date(fromDate.from!) && updatedAt <= new Date(fromDate.to!);
+              const startOfDay = new Date(updatedAt);
+              startOfDay.setHours(0, 0, 0, 0);
+              const endOfDay = new Date(updatedAt);
+              endOfDay.setHours(23, 59, 59, 999);
+              const fromStart = new Date(fromDate.from!);
+              fromStart.setHours(0, 0, 0, 0);
+              const toEnd = new Date(fromDate.to!);
+              toEnd.setHours(23, 59, 59, 999);
+              return startOfDay >= fromStart && endOfDay <= toEnd;
             }
             if (key === 'assetCheck') {
               return filterCheck === 'all' ||
@@ -133,7 +152,8 @@ const AuditTable: React.FC<AuditTableProps> = ({
                 (filterCheck === 'unmatched' && d.asset_check !== 'Matched');
             }
             const filterValue = selectedFilters[key as keyof typeof selectedFilters];
-            return filterValue === 'All' || d[key as keyof Device] === filterValue;
+            const prop = propertyMap[key as keyof typeof propertyMap];
+            return filterValue === 'All' || (d[prop as keyof Device] === filterValue);
           });
         const searchMatch =
           searchQuery.trim() === '' ||
@@ -211,8 +231,18 @@ const AuditTable: React.FC<AuditTableProps> = ({
       const dateMatch =
         !fromDate?.from || !fromDate?.to
           ? true
-          : new Date(d.updated_at).setHours(0, 0, 0, 0) >= new Date(fromDate.from).setHours(0, 0, 0, 0) &&
-            new Date(d.updated_at).setHours(23, 59, 59, 999) <= new Date(fromDate.to).setHours(23, 59, 59, 999);
+          : (() => {
+              const updatedAt = new Date(d.updated_at);
+              const startOfDay = new Date(updatedAt);
+              startOfDay.setHours(0, 0, 0, 0);
+              const endOfDay = new Date(updatedAt);
+              endOfDay.setHours(23, 59, 59, 999);
+              const fromStart = new Date(fromDate.from);
+              fromStart.setHours(0, 0, 0, 0);
+              const toEnd = new Date(fromDate.to);
+              toEnd.setHours(23, 59, 59, 999);
+              return startOfDay >= fromStart && endOfDay <= toEnd;
+            })();
       const searchMatch =
         searchQuery.trim() === '' ||
         [
@@ -275,7 +305,7 @@ const AuditTable: React.FC<AuditTableProps> = ({
       ...d,
       asset_check: d.asset_check || 'Unmatched',
     }));
-  }, [filteredDevices, currentPage]);
+  }, [filteredDevices, currentPage, rowsPerPage]);
 
   const totalPages = Math.ceil(filteredDevices.length / rowsPerPage);
   const matchedCount = filteredDevices.filter((d) => d.asset_check === 'Matched').length;
@@ -384,12 +414,23 @@ const AuditTable: React.FC<AuditTableProps> = ({
   const canEdit = userRole === 'Super Admin' || userRole === 'Admin' || userRole === 'Operator';
   const isAllMatched = matchedCount === filteredDevices.length;
 
+  // Pagination logic for dynamic page range
+  const siblingCount = 2; // Number of pages to show on each side of the current page
+  const pageRange = [];
+  for (let i = Math.max(1, currentPage - siblingCount); i <= Math.min(totalPages, currentPage + siblingCount); i++) {
+    pageRange.push(i);
+  }
+  if (pageRange[0] > 1) pageRange.unshift('...');
+  if (pageRange[0] !== 1) pageRange.unshift(1);
+  if (pageRange[pageRange.length - 1] < totalPages) pageRange.push('...');
+  if (pageRange[pageRange.length - 1] !== totalPages) pageRange.push(totalPages);
+
   if (!devices || devices.length === 0) {
     return <div style={{ fontSize: '12px', padding: '8px' }}>No devices available. Please check your data source.</div>;
   }
 
   return (
-    <Card style={{ border: '1px solid #e2e8f0', borderRadius: '8px', background: '#fff', padding: '8px', minHeight: '200px', overflowY: 'auto', maxHeight: '600px' }}>
+    <Card style={{ border: '1px solid #e2e8f0', borderRadius: '8px', background: '#fff', padding: '8px', minHeight: '200px' }}>
       <CardHeader style={{ paddingBottom: '2px' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <CardTitle style={{ display: 'flex', alignItems: 'center', gap: '1px', fontSize: '12px' }}>
@@ -580,96 +621,141 @@ const AuditTable: React.FC<AuditTableProps> = ({
             </div>
           </div>
         </div>
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', textAlign: 'left', position: 'sticky', top: 0, background: '#fff', zIndex: 20 }}>S.No.</TableHead>
-              <TableHead style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', textAlign: 'left', position: 'sticky', top: 0, background: '#fff', zIndex: 20 }}>Asset Type</TableHead>
-              <TableHead style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', textAlign: 'left', position: 'sticky', top: 0, background: '#fff', zIndex: 20 }}>Model</TableHead>
-              <TableHead style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', textAlign: 'left', position: 'sticky', top: 0, background: '#fff', zIndex: 20 }}>Configuration</TableHead>
-              <TableHead style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', textAlign: 'left', position: 'sticky', top: 0, background: '#fff', zIndex: 20 }}>Serial Number</TableHead>
-              <TableHead style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', textAlign: 'left', position: 'sticky', top: 0, background: '#fff', zIndex: 20 }}>Product</TableHead>
-              <TableHead style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', textAlign: 'left', position: 'sticky', top: 0, background: '#fff', zIndex: 20 }}>Asset Status</TableHead>
-              <TableHead style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', textAlign: 'left', position: 'sticky', top: 0, background: '#fff', zIndex: 20 }}>Asset Group</TableHead>
-              <TableHead style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', textAlign: 'left', position: 'sticky', top: 0, background: '#fff', zIndex: 20 }}>FAR Code</TableHead>
-              <TableHead style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', textAlign: 'left', position: 'sticky', top: 0, background: '#fff', zIndex: 20 }}>Warehouse</TableHead>
-              <TableHead style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', textAlign: 'left', position: 'sticky', top: 0, background: '#fff', zIndex: 20 }}>Asset Check</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {paginatedDevices.length === 0 ? (
+        <div style={{ overflowY: 'auto', maxHeight: '400px' }}>
+          <Table>
+            <TableHeader>
               <TableRow>
-                <TableCell colSpan={11} style={{ textAlign: 'center', fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db' }}>
-                  No devices found with current filters.
-                </TableCell>
+                <TableHead style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', textAlign: 'left', position: 'sticky', top: 0, background: '#fff', zIndex: 20 }}>S.No.</TableHead>
+                <TableHead style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', textAlign: 'left', position: 'sticky', top: 0, background: '#fff', zIndex: 20 }}>Asset Type</TableHead>
+                <TableHead style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', textAlign: 'left', position: 'sticky', top: 0, background: '#fff', zIndex: 20 }}>Model</TableHead>
+                <TableHead style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', textAlign: 'left', position: 'sticky', top: 0, background: '#fff', zIndex: 20 }}>Configuration</TableHead>
+                <TableHead style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', textAlign: 'left', position: 'sticky', top: 0, background: '#fff', zIndex: 20 }}>Serial Number</TableHead>
+                <TableHead style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', textAlign: 'left', position: 'sticky', top: 0, background: '#fff', zIndex: 20 }}>Product</TableHead>
+                <TableHead style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', textAlign: 'left', position: 'sticky', top: 0, background: '#fff', zIndex: 20 }}>Asset Status</TableHead>
+                <TableHead style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', textAlign: 'left', position: 'sticky', top: 0, background: '#fff', zIndex: 20 }}>Asset Group</TableHead>
+                <TableHead style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', textAlign: 'left', position: 'sticky', top: 0, background: '#fff', zIndex: 20 }}>FAR Code</TableHead>
+                <TableHead style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', textAlign: 'left', position: 'sticky', top: 0, background: '#fff', zIndex: 20 }}>Warehouse</TableHead>
+                <TableHead style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', textAlign: 'left', position: 'sticky', top: 0, background: '#fff', zIndex: 20 }}>Asset Check</TableHead>
               </TableRow>
-            ) : (
-              paginatedDevices.map((d, index) => {
-                const checkText = d.asset_check || 'Unmatched';
-                const checkColor = checkText === 'Matched' ? '#22c55e' : checkText.startsWith('Found in') ? '#f59e0b' : '#ef4444';
-                return (
-                  <TableRow key={d.id}>
-                    <TableCell style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db' }}>{(currentPage - 1) * rowsPerPage + index + 1}</TableCell>
-                    <TableCell style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db' }}>{d.asset_type}</TableCell>
-                    <TableCell style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db' }}>{d.model}</TableCell>
-                    <TableCell style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db' }}>{d.configuration}</TableCell>
-                    <TableCell style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db' }}>{d.serial_number}</TableCell>
-                    <TableCell style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db' }}>{d.product}</TableCell>
-                    <TableCell style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db' }}>{d.asset_status}</TableCell>
-                    <TableCell style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db' }}>{d.asset_group}</TableCell>
-                    <TableCell style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db' }}>{d.far_code}</TableCell>
-                    <TableCell style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db' }}>{d.warehouse}</TableCell>
-                    <TableCell style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                        <Checkbox
-                          id={`check-${d.id}`}
-                          checked={checkText === 'Matched'}
-                          onCheckedChange={(checked) => {
-                            setUpdatingDeviceId(d.id);
-                            onUpdateAssetCheck(d.id, checked ? 'Matched' : 'Unmatched')
-                              .catch((err) => {
-                                setError(`Failed to update asset check: ${err.message}`);
-                              })
-                              .finally(() => {
-                                setUpdatingDeviceId(null);
-                              });
-                          }}
-                          disabled={!canEdit || updatingDeviceId === d.id}
-                        />
-                        <Label
-                          htmlFor={`check-${d.id}`}
-                          style={{ color: checkColor, fontSize: '12px' }}
-                        >
-                          {updatingDeviceId === d.id ? 'Updating...' : checkText}
-                        </Label>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                );
-              })
-            )}
-          </TableBody>
-        </Table>
+            </TableHeader>
+            <TableBody>
+              {paginatedDevices.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={11} style={{ textAlign: 'center', fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db' }}>
+                    No devices found with current filters.
+                  </TableCell>
+                </TableRow>
+              ) : (
+                paginatedDevices.map((d, index) => {
+                  const checkText = d.asset_check || 'Unmatched';
+                  const checkColor = checkText === 'Matched' ? '#22c55e' : checkText.startsWith('Found in') ? '#f59e0b' : '#ef4444';
+                  return (
+                    <TableRow key={d.id}>
+                      <TableCell style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db' }}>{(currentPage - 1) * rowsPerPage + index + 1}</TableCell>
+                      <TableCell style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db' }}>{d.asset_type}</TableCell>
+                      <TableCell style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db' }}>{d.model}</TableCell>
+                      <TableCell style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db' }}>{d.configuration}</TableCell>
+                      <TableCell style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db' }}>{d.serial_number}</TableCell>
+                      <TableCell style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db' }}>{d.product}</TableCell>
+                      <TableCell style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db' }}>{d.asset_status}</TableCell>
+                      <TableCell style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db' }}>{d.asset_group}</TableCell>
+                      <TableCell style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db' }}>{d.far_code}</TableCell>
+                      <TableCell style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db' }}>{d.warehouse}</TableCell>
+                      <TableCell style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                          <Checkbox
+                            id={`check-${d.id}`}
+                            checked={checkText === 'Matched'}
+                            onCheckedChange={(checked) => {
+                              setUpdatingDeviceId(d.id);
+                              onUpdateAssetCheck(d.id, checked ? 'Matched' : 'Unmatched')
+                                .catch((err) => {
+                                  setError(`Failed to update asset check: ${err.message}`);
+                                })
+                                .finally(() => {
+                                  setUpdatingDeviceId(null);
+                                });
+                            }}
+                            disabled={!canEdit || updatingDeviceId === d.id}
+                          />
+                          <Label
+                            htmlFor={`check-${d.id}`}
+                            style={{ color: checkColor, fontSize: '12px' }}
+                          >
+                            {updatingDeviceId === d.id ? 'Updating...' : checkText}
+                          </Label>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })
+              )}
+            </TableBody>
+          </Table>
+        </div>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '4px', fontSize: '12px' }}>
-          <Button
-            variant="outline"
-            size="sm"
-            style={{ border: '1px solid #d1d5db', borderRadius: '4px', padding: '4px 8px', opacity: currentPage === 1 ? 0.5 : 1 }}
-            disabled={currentPage === 1}
-            onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
-          >
-            Previous
-          </Button>
-          <span>Page {currentPage} of {totalPages}</span>
-          <Button
-            variant="outline"
-            size="sm"
-            style={{ border: '1px solid #d1d5db', borderRadius: '4px', padding: '4px 8px', opacity: currentPage === totalPages ? 0.5 : 1 }}
-            disabled={currentPage === totalPages}
-            onClick={() => setCurrentPage((prev) => Math.min(prev + 1, totalPages))}
-          >
-            Next
-          </Button>
+          <div>
+            <span>Showing {((currentPage - 1) * rowsPerPage) + 1} to {Math.min(currentPage * rowsPerPage, filteredDevices.length)} of {filteredDevices.length} assets</span>
+            <select
+              value={rowsPerPage}
+              onChange={(e) => {
+                setRowsPerPage(Number(e.target.value));
+                setCurrentPage(1);
+              }}
+              style={{ 
+                fontSize: '12px', 
+                border: '1px solid #d1d5db', 
+                borderRadius: '4px', 
+                padding: '4px', 
+                marginLeft: '8px', 
+                height: '28px' 
+              }}
+            >
+              <option value={10}>10</option>
+              <option value={25}>25</option>
+              <option value={50}>50</option>
+              <option value={100}>100</option>
+            </select>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+            <Button
+              variant="outline"
+              size="sm"
+              style={{ border: '1px solid #d1d5db', borderRadius: '4px', padding: '4px 8px', opacity: currentPage === 1 ? 0.5 : 1 }}
+              disabled={currentPage === 1}
+              onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
+            >
+              Previous
+            </Button>
+            {pageRange.map((page, index) => (
+              <button
+                key={index}
+                onClick={() => typeof page === 'number' && setCurrentPage(page)}
+                style={{
+                  border: '1px solid #d1d5db',
+                  borderRadius: '4px',
+                  padding: '4px 8px',
+                  background: currentPage === page ? '#3b82f6' : '#fff',
+                  color: currentPage === page ? '#fff' : '#000',
+                  cursor: typeof page === 'number' ? 'pointer' : 'default',
+                  fontSize: '12px',
+                  opacity: typeof page === 'number' ? 1 : 0.5,
+                }}
+                disabled={typeof page !== 'number'}
+              >
+                {page}
+              </button>
+            ))}
+            <Button
+              variant="outline"
+              size="sm"
+              style={{ border: '1px solid #d1d5db', borderRadius: '4px', padding: '4px 8px', opacity: currentPage === totalPages ? 0.5 : 1 }}
+              disabled={currentPage === totalPages}
+              onClick={() => setCurrentPage((prev) => Math.min(prev + 1, totalPages))}
+            >
+              Next
+            </Button>
+          </div>
         </div>
       </CardContent>
       {showPopup && (
