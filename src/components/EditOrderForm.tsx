@@ -78,23 +78,6 @@ const EditOrderForm: React.FC<EditOrderFormProps> = ({ order, onSave, onCancel }
     setFormData(prev => ({ ...prev, quantity: devices.length }));
   }, [devices]);
 
-  // Reset fields when asset_type changes (keep model for all types)
-  useEffect(() => {
-    if (formData.asset_type) {
-      // Only reset configuration for non-Tablet/TV types
-      if (!['Tablet', 'TV'].includes(formData.asset_type)) {
-        setFormData(prev => ({
-          ...prev,
-          configuration: '',
-        }));
-        setDevices(prev => prev.map(device => ({
-          ...device,
-          configuration: null,
-        })));
-      }
-    }
-  }, [formData.asset_type]);
-
   // Validate serial numbers for duplicates and stock availability
   const validateSerials = async (devicesToValidate: Device[]) => {
     const errors = Array(devicesToValidate.length).fill(null);
@@ -285,6 +268,22 @@ const EditOrderForm: React.FC<EditOrderFormProps> = ({ order, onSave, onCancel }
     }
     if (formData.model && formData.asset_type === 'TV' && !tvModels.includes(formData.model)) {
       toast({ title: 'Error', description: `TV model must be one of: ${tvModels.join(', ')}`, variant: 'destructive' });
+      return false;
+    }
+    if (formData.model && formData.asset_type === 'Cover' && !coverModels.includes(formData.model)) {
+      toast({ title: 'Error', description: `Cover model must be one of: ${coverModels.join(', ')}`, variant: 'destructive' });
+      return false;
+    }
+    if (formData.model && formData.asset_type === 'Pendrive' && !pendriveSizes.includes(formData.model)) {
+      toast({ title: 'Error', description: `Pendrive model must be one of: ${pendriveSizes.join(', ')}`, variant: 'destructive' });
+      return false;
+    }
+    if (formData.model && formData.asset_type === 'SD Card' && !sdCardSizes.includes(formData.model)) {
+      toast({ title: 'Error', description: `SD Card model must be one of: ${sdCardSizes.join(', ')}`, variant: 'destructive' });
+      return false;
+    }
+    if (formData.model && formData.asset_type === 'Other' && !otherMaterials.includes(formData.model)) {
+      toast({ title: 'Error', description: `Other material must be one of: ${otherMaterials.join(', ')}`, variant: 'destructive' });
       return false;
     }
     if (formData.configuration && formData.asset_type === 'Tablet' && !configurations.includes(formData.configuration)) {
@@ -558,7 +557,9 @@ const EditOrderForm: React.FC<EditOrderFormProps> = ({ order, onSave, onCancel }
           if (deviceData.profile_id) {
             await logHistory('devices', newDevice.id, 'profile_id', '', deviceData.profile_id, userEmail, formData.sales_order, 'INSERT');
           }
-          // Add logs for other inserted fields if necessary
+          if (deviceData.configuration) {
+            await logHistory('devices', newDevice.id, 'configuration', '', deviceData.configuration, userEmail, formData.sales_order, 'INSERT');
+          }
         }
       }
       devicesUpdated = true;
@@ -803,7 +804,7 @@ const EditOrderForm: React.FC<EditOrderFormProps> = ({ order, onSave, onCancel }
                     value={formData.configuration || ''}
                     onChange={(e) => setFormData(prev => ({ ...prev, configuration: e.target.value }))}
                     className='text-xs bg-white border-gray-300'
-                    placeholder='Optional'
+                    placeholder='Enter configuration (optional)'
                     disabled={!formData.asset_type}
                   />
                 )}
