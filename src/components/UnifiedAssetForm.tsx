@@ -217,7 +217,7 @@ const validateSerials = async () => {
     const allSerials = asset.serialNumbers.filter(sn => sn && sn.trim());
     const allFarCodes = asset.farCodes.filter(fc => fc && fc.trim());
 
-    // Check for duplicate serials
+    // Check for duplicates
     for (let i = 0; i < asset.serialNumbers.length; i++) {
       const serial = asset.serialNumbers[i]?.trim();
       if (serial && allSerials.filter(s => s === serial).length > 1) {
@@ -225,7 +225,6 @@ const validateSerials = async () => {
       }
     }
 
-    // Check for duplicate FAR codes (only if FAR codes are provided)
     for (let i = 0; i < asset.farCodes.length; i++) {
       const farCode = asset.farCodes[i]?.trim();
       if (farCode && allFarCodes.filter(fc => fc === farCode).length > 1) {
@@ -261,36 +260,25 @@ const validateSerials = async () => {
           if (serial) {
             const latestDevice = latestBySerial[serial];
             if (latestDevice) {
-              // Populate status and group based on order type
-              if (isInward) {
-                // For inward, only populate if not set (allow user edits)
-                if (!newStatuses[i]) {
-                  newStatuses[i] = latestDevice.asset_status || 'Fresh';
-                  updated = true;
-                }
-                if (!newGroups[i]) {
-                  newGroups[i] = latestDevice.asset_group || 'NFA';
-                  updated = true;
-                }
-              } else {
-                // For outward, populate if unset or default to enforce DB values
-                if (!newStatuses[i] || newStatuses[i] === 'Fresh') {
-                  newStatuses[i] = latestDevice.asset_status || 'Fresh';
-                  updated = true;
-                }
-                if (!newGroups[i] || newGroups[i] === 'NFA') {
-                  newGroups[i] = latestDevice.asset_group || 'NFA';
-                  updated = true;
-                }
+              // Always update status, group, and FAR code if available from DB
+              if (!newStatuses[i] || newStatuses[i] === 'Fresh') {
+                newStatuses[i] = latestDevice.asset_status || 'Fresh';
+                updated = true;
               }
-              // Populate FAR code only if it exists in DB and not already set
-              if (!newFarCodes[i] && latestDevice.far_code) {
-                newFarCodes[i] = latestDevice.far_code;
+              if (!newGroups[i] || newGroups[i] === 'NFA') {
+                newGroups[i] = latestDevice.asset_group || 'NFA';
+                updated = true;
+              }
+              if (!newFarCodes[i]) {
+                newFarCodes[i] = latestDevice.far_code || '';
                 updated = true;
               }
 
               // Validation logic based on order type
-              if (!isInward) {
+              if (isInward) {
+                // For inward, just populate from DB (already handled above)
+                // No additional validation needed
+              } else {
                 // Outward validation
                 if (latestDevice.material_type === 'Outward') {
                   serialErrors[i] = `Currently Outward in ${latestDevice.warehouse}`;
@@ -300,8 +288,8 @@ const validateSerials = async () => {
                   }
                 }
 
-                // FAR code uniqueness check (only if FAR code is provided)
-                if (newFarCodes[i]?.trim()) {
+                // FAR code uniqueness check
+                if (newFarCodes[i]) {
                   const { data: farCodeData } = await supabase
                     .from('devices')
                     .select('serial_number')
@@ -317,7 +305,7 @@ const validateSerials = async () => {
               if (!isInward) {
                 serialErrors[i] = 'Not in stock';
               }
-              // Populate defaults for new/unknown serials
+              // For inward, allow new serials - populate defaults if needed
               if (!newStatuses[i]) {
                 newStatuses[i] = 'Fresh';
                 updated = true;
@@ -326,7 +314,6 @@ const validateSerials = async () => {
                 newGroups[i] = 'NFA';
                 updated = true;
               }
-              // FAR code remains as is (optional, can be empty)
               if (!newFarCodes[i]) {
                 newFarCodes[i] = '';
                 updated = true;
@@ -342,7 +329,7 @@ const validateSerials = async () => {
             if (!isInward) {
               serialErrors[i] = 'Not in stock';
             }
-            // Populate defaults
+            // Populate defaults for new/unknown serials
             if (!newStatuses[i]) {
               newStatuses[i] = 'Fresh';
               updated = true;
@@ -351,7 +338,6 @@ const validateSerials = async () => {
               newGroups[i] = 'NFA';
               updated = true;
             }
-            // FAR code remains as is (optional, can be empty)
             if (!newFarCodes[i]) {
               newFarCodes[i] = '';
               updated = true;
@@ -370,7 +356,6 @@ const validateSerials = async () => {
           newGroups[i] = 'NFA';
           updated = true;
         }
-        // FAR code remains as is (optional, can be empty)
         if (!newFarCodes[i]) {
           newFarCodes[i] = '';
           updated = true;
