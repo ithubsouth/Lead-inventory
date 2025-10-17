@@ -172,8 +172,6 @@ const OrderSummaryTable: React.FC<OrderSummaryTableProps> = ({
       }
       if (d.status === 'Assigned') {
         s.outward += 1;
-      } else {
-        s.stock += 1;
       }
 
       if (d.asset_type === 'Tablet' && d.sd_card_size && (d.transaction_type === 'Inward' || (!d.transaction_type && d.status !== 'Assigned'))) {
@@ -192,11 +190,14 @@ const OrderSummaryTable: React.FC<OrderSummaryTableProps> = ({
         sd.inward += 1;
         if (d.status === 'Assigned') {
           sd.outward += 1;
-        } else {
-          sd.stock += 1;
         }
       }
     });
+
+    // Calculate stock as inward - outward for each summary
+    for (let [key, s] of summaryMap) {
+      s.stock = s.inward - s.outward;
+    }
 
     let computedSummaries = Array.from(summaryMap.values());
 
