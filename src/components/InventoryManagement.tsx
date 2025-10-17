@@ -224,38 +224,14 @@ const InventoryManagement = () => {
         const { data, error } = await supabase
           .from('devices')
           .select(`
-            id,
-            sales_order,
-            order_type,
-            warehouse,
-            deal_id,
-            nucleus_id,
-            school_name,
-            asset_type,
-            model,
-            configuration,
-            serial_number,
-            sd_card_size,
-            profile_id,
-            product,
-            asset_status,
-            asset_group,
-            asset_condition,
-            created_at,
-            updated_at,
-            updated_by,
-            is_deleted,
-            order_id,
-            orders!left(id, material_type),
-            asset_check
+            *,
+            orders (
+              material_type
+            )
           `)
-          .order('updated_at', { ascending: false })
+          .order('created_at', { ascending: false })
           .range(page * batchSize, (page + 1) * batchSize - 1);
-        if (error) {
-          console.error(`Supabase fetch error (page ${page}):`, error);
-          throw error;
-        }
-        console.log(`Fetched devices batch ${page}:`, data.length);
+        if (error) throw error;
         allDevices = [...allDevices, ...data];
         hasMore = data.length === batchSize;
         page += 1;
@@ -273,6 +249,9 @@ const InventoryManagement = () => {
       const updatedDevices = allDevices.map((device: any) => {
         const materialType = device.orders?.material_type || null;
         const status = device.order_id && materialType === 'Outward' ? 'Assigned' : 'Stock';
+        if (device.order_id && !device.orders) {
+          console.warn(`Device ${device.id} has order_id ${device.order_id} but no matching order found.`);
+        }
         return {
           id: device.id,
           sales_order: device.sales_order?.trim() || '',
@@ -311,6 +290,13 @@ const InventoryManagement = () => {
         sampleStock: updatedDevices.filter(d => d.status === 'Stock').slice(0, 3).map(d => ({ id: d.id, order_id: d.order_id, material_type: d.material_type })),
         sampleAssigned: updatedDevices.filter(d => d.status === 'Assigned').slice(0, 3).map(d => ({ id: d.id, order_id: d.order_id, material_type: d.material_type })),
       });
+      if (updatedDevices.every(d => d.status === 'Stock')) {
+        toast({
+          title: 'Warning',
+          description: 'All devices are marked as Stock. Verify order data and material types.',
+          variant: 'destructive',
+        });
+      }
       setDevices(updatedDevices);
 
       if (updatedDevices.length === 0) {
