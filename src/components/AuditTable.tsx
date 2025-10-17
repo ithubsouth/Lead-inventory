@@ -11,6 +11,7 @@ import { DatePickerWithRange } from './DatePickerWithRange';
 import { DateRange } from 'react-day-picker';
 import { Device } from './types';
 import debounce from 'lodash/debounce';
+import { excludedAuditItems } from './constants';
 
 interface AuditTableProps {
   devices: Device[];
@@ -100,22 +101,30 @@ const AuditTable: React.FC<AuditTableProps> = ({
     orderType: 'order_type',
   };
 
+  // Helper to get effective status (consistent with loadDevices logic)
+  const getEffectiveStatus = (d: Device) => {
+    return d.order_id && d.material_type === 'Outward' ? 'Assigned' : 'Stock';
+  };
+
   const uniqueValues = useMemo(() => {
+    // Deduplicate devices by serial_number, keeping the latest by created_at
     const latestDevices = new Map<string, Device>();
     devices.forEach((d) => {
       const key = d.serial_number || d.id;
       const existing = latestDevices.get(key);
-      if (!existing || new Date(d.updated_at) > new Date(existing.updated_at)) {
+      if (!existing || new Date(d.created_at) > new Date(existing.created_at)) {
         latestDevices.set(key, d);
       }
     });
+
+    // Filter to only Stock devices
     const stockDevices = Array.from(latestDevices.values()).filter(
-      (d) => d.status === 'Stock' && !d.is_deleted
+      (d) => getEffectiveStatus(d) === 'Stock' && !d.is_deleted &&
+             !excludedAuditItems.assetTypes.includes(d.asset_type || '') &&
+             !excludedAuditItems.models.includes(d.model || '')
     );
 
-    const getFilteredDevices = (
-      excludeFilter: keyof typeof selectedFilters
-    ) => {
+    const getFilteredDevices = (excludeFilter: string) => {
       const selectedFilters = {
         warehouse: selectedWarehouse,
         assetType: selectedAssetType,
@@ -130,19 +139,19 @@ const AuditTable: React.FC<AuditTableProps> = ({
       };
 
       return stockDevices.filter((d) => {
-        const matches = Object.keys(selectedFilters)
-          .filter((key) => key !== excludeFilter)
-          .every((key) => {
+        const matches = Object.entries(selectedFilters)
+          .filter(([key]) => key !== excludeFilter)
+          .every(([key, filterValue]) => {
             if (key === 'fromDate') {
               if (!fromDate?.from || !fromDate?.to) return true;
-              const updatedAt = new Date(d.updated_at);
-              const startOfDay = new Date(updatedAt);
+              const createdAt = new Date(d.created_at);
+              const startOfDay = new Date(createdAt);
               startOfDay.setHours(0, 0, 0, 0);
-              const endOfDay = new Date(updatedAt);
+              const endOfDay = new Date(createdAt);
               endOfDay.setHours(23, 59, 59, 999);
-              const fromStart = new Date(fromDate.from!);
+              const fromStart = new Date(fromDate.from);
               fromStart.setHours(0, 0, 0, 0);
-              const toEnd = new Date(fromDate.to!);
+              const toEnd = new Date(fromDate.to);
               toEnd.setHours(23, 59, 59, 999);
               return startOfDay >= fromStart && endOfDay <= toEnd;
             }
@@ -151,29 +160,12 @@ const AuditTable: React.FC<AuditTableProps> = ({
                 (filterCheck === 'matched' && d.asset_check === 'Matched') ||
                 (filterCheck === 'unmatched' && d.asset_check !== 'Matched');
             }
-            const filterValue = selectedFilters[key as keyof typeof selectedFilters];
             const prop = propertyMap[key as keyof typeof propertyMap];
-            return filterValue === 'All' || (d[prop as keyof Device] === filterValue);
+            const value = d[prop as keyof Device];
+            return filterValue === 'All' || value === filterValue;
           });
-        const searchMatch =
-          searchQuery.trim() === '' ||
-          [
-            d.serial_number,
-            d.model,
-            d.asset_type,
-            d.configuration,
-            d.product,
-            d.asset_status,
-            d.asset_group,
-            d.far_code,
-            d.warehouse,
-            d.order_type,
-            d.sales_order,
-            d.deal_id,
-            d.nucleus_id,
-            d.school_name,
-            d.asset_check || '',
-          ]
+        const searchMatch = searchQuery.trim() === '' ||
+          [d.serial_number, d.model, d.asset_type, d.configuration, d.product, d.asset_status, d.asset_group, d.far_code, d.warehouse, d.order_type, d.sales_order, d.deal_id, d.nucleus_id, d.school_name, d.asset_check || '']
             .filter(Boolean)
             .some((field) => field.toLowerCase().includes(searchQuery.toLowerCase()));
         return matches && searchMatch;
@@ -190,36 +182,24 @@ const AuditTable: React.FC<AuditTableProps> = ({
       assetGroups: ['All', ...[...new Set(getFilteredDevices('assetGroup').map((d) => d.asset_group || ''))].filter(Boolean).sort()],
       orderTypes: ['All', ...[...new Set(getFilteredDevices('orderType').map((d) => d.order_type || ''))].filter(Boolean).sort()],
     };
-  }, [
-    devices,
-    selectedWarehouse,
-    selectedAssetType,
-    selectedModel,
-    selectedConfiguration,
-    selectedProduct,
-    selectedAssetStatus,
-    selectedAssetGroup,
-    selectedOrderType,
-    filterCheck,
-    fromDate,
-    searchQuery,
-  ]);
+  }, [devices, selectedWarehouse, selectedAssetType, selectedModel, selectedConfiguration, selectedProduct, selectedAssetStatus, selectedAssetGroup, selectedOrderType, filterCheck, fromDate, searchQuery]);
 
   const filteredDevices = useMemo(() => {
+    // Deduplicate devices by serial_number, keeping the latest by created_at
     const latestDevices = new Map<string, Device>();
     devices.forEach((d) => {
       const key = d.serial_number || d.id;
       const existing = latestDevices.get(key);
-      if (!existing || new Date(d.updated_at) > new Date(existing.updated_at)) {
+      if (!existing || new Date(d.created_at) > new Date(existing.created_at)) {
         latestDevices.set(key, d);
       }
     });
 
-    const latestStockDevices = Array.from(latestDevices.values()).filter(
-      (d) => d.status === 'Stock' && !d.is_deleted
-    );
-
-    return latestStockDevices.filter((d) => {
+    // Filter to only Stock devices
+    return Array.from(latestDevices.values()).filter((d) => {
+      const isStock = getEffectiveStatus(d) === 'Stock' && !d.is_deleted &&
+                      !excludedAuditItems.assetTypes.includes(d.asset_type || '') &&
+                      !excludedAuditItems.models.includes(d.model || '');
       const warehouseMatch = selectedWarehouse === 'All' || d.warehouse === selectedWarehouse;
       const assetTypeMatch = selectedAssetType === 'All' || d.asset_type === selectedAssetType;
       const modelMatch = selectedModel === 'All' || d.model === selectedModel;
@@ -228,75 +208,31 @@ const AuditTable: React.FC<AuditTableProps> = ({
       const assetStatusMatch = selectedAssetStatus === 'All' || d.asset_status === selectedAssetStatus;
       const assetGroupMatch = selectedAssetGroup === 'All' || d.asset_group === selectedAssetGroup;
       const orderTypeMatch = selectedOrderType === 'All' || d.order_type === selectedOrderType;
-      const dateMatch =
-        !fromDate?.from || !fromDate?.to
-          ? true
-          : (() => {
-              const updatedAt = new Date(d.updated_at);
-              const startOfDay = new Date(updatedAt);
-              startOfDay.setHours(0, 0, 0, 0);
-              const endOfDay = new Date(updatedAt);
-              endOfDay.setHours(23, 59, 59, 999);
-              const fromStart = new Date(fromDate.from);
-              fromStart.setHours(0, 0, 0, 0);
-              const toEnd = new Date(fromDate.to);
-              toEnd.setHours(23, 59, 59, 999);
-              return startOfDay >= fromStart && endOfDay <= toEnd;
-            })();
-      const searchMatch =
-        searchQuery.trim() === '' ||
-        [
-          d.serial_number,
-          d.model,
-          d.asset_type,
-          d.configuration,
-          d.product,
-          d.asset_status,
-          d.asset_group,
-          d.far_code,
-          d.warehouse,
-          d.order_type,
-          d.sales_order,
-          d.deal_id,
-          d.nucleus_id,
-          d.school_name,
-          d.asset_check || '',
-        ]
+      const dateMatch = !fromDate?.from || !fromDate?.to || (() => {
+        const createdAt = new Date(d.created_at);
+        const startOfDay = new Date(createdAt);
+        startOfDay.setHours(0, 0, 0, 0);
+        const endOfDay = new Date(createdAt);
+        endOfDay.setHours(23, 59, 59, 999);
+        const fromStart = new Date(fromDate.from);
+        fromStart.setHours(0, 0, 0, 0);
+        const toEnd = new Date(fromDate.to);
+        toEnd.setHours(23, 59, 59, 999);
+        return startOfDay >= fromStart && endOfDay <= toEnd;
+      })();
+      const searchMatch = searchQuery.trim() === '' ||
+        [d.serial_number, d.model, d.asset_type, d.configuration, d.product, d.asset_status, d.asset_group, d.far_code, d.warehouse, d.order_type, d.sales_order, d.deal_id, d.nucleus_id, d.school_name, d.asset_check || '']
           .filter(Boolean)
           .some((field) => field.toLowerCase().includes(searchQuery.toLowerCase()));
-      const checkMatch =
-        filterCheck === 'all' ||
+      const checkMatch = filterCheck === 'all' ||
         (filterCheck === 'matched' && d.asset_check === 'Matched') ||
         (filterCheck === 'unmatched' && d.asset_check !== 'Matched');
 
-      return (
-        warehouseMatch &&
-        assetTypeMatch &&
-        modelMatch &&
-        configMatch &&
-        productMatch &&
-        assetStatusMatch &&
-        assetGroupMatch &&
-        orderTypeMatch &&
-        dateMatch &&
-        searchMatch &&
-        checkMatch
-      );
+      return isStock && warehouseMatch && assetTypeMatch && modelMatch && configMatch &&
+             productMatch && assetStatusMatch && assetGroupMatch && orderTypeMatch &&
+             dateMatch && searchMatch && checkMatch;
     });
-  }, [
-    devices,
-    selectedWarehouse,
-    selectedAssetType,
-    selectedModel,
-    selectedConfiguration,
-    selectedProduct,
-    selectedAssetStatus,
-    selectedAssetGroup,
-    selectedOrderType,
-    fromDate,
-    searchQuery,
-    filterCheck,
-  ]);
+  }, [devices, selectedWarehouse, selectedAssetType, selectedModel, selectedConfiguration, selectedProduct, selectedAssetStatus, selectedAssetGroup, selectedOrderType, fromDate, searchQuery, filterCheck]);
 
   const paginatedDevices = useMemo(() => {
     const start = (currentPage - 1) * rowsPerPage;
@@ -332,8 +268,9 @@ const AuditTable: React.FC<AuditTableProps> = ({
     if (!trimmedInput) return;
 
     setScannerInput('');
-    const matchedDevice = devices.find(
-      (device) => (device.serial_number === trimmedInput || device.id === trimmedInput) && device.status === 'Stock' && !device.is_deleted
+    // Search only among filtered devices (already Stock and not excluded)
+    const matchedDevice = filteredDevices.find(
+      (device) => device.serial_number === trimmedInput || device.id === trimmedInput
     );
 
     if (matchedDevice) {
@@ -353,7 +290,7 @@ const AuditTable: React.FC<AuditTableProps> = ({
     } else {
       setScanResult('Not Found');
     }
-  }, [scannerInput, devices, selectedWarehouse, onUpdateAssetCheck]);
+  }, [scannerInput, filteredDevices, selectedWarehouse, onUpdateAssetCheck]);
 
   const debouncedHandleCheck = useCallback(debounce(handleCheck, 300), [handleCheck]);
 
@@ -415,7 +352,7 @@ const AuditTable: React.FC<AuditTableProps> = ({
   const isAllMatched = matchedCount === filteredDevices.length;
 
   // Pagination logic for dynamic page range
-  const siblingCount = 2; // Number of pages to show on each side of the current page
+  const siblingCount = 2;
   const pageRange = [];
   for (let i = Math.max(1, currentPage - siblingCount); i <= Math.min(totalPages, currentPage + siblingCount); i++) {
     pageRange.push(i);
@@ -599,7 +536,7 @@ const AuditTable: React.FC<AuditTableProps> = ({
             </div>
             <div style={{ flex: '1', minWidth: '120px' }}>
               <label htmlFor="assetCheckFilter" style={{ fontSize: '12px', color: '#6b7280', display: 'block', marginBottom: '2px', whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' }}>Asset Check</label>
-              <Select value={filterCheck} onValueChange={(value) => setFilterCheck(value as "all" | "matched" | "unmatched")}>
+              <Select value={filterCheck} onValueChange={(value) => setFilterCheck(value as 'all' | 'matched' | 'unmatched')}>
                 <SelectTrigger id="assetCheckFilter" style={{ fontSize: '12px', width: '100%', border: '1px solid #d1d5db', borderRadius: '4px', padding: '6px', whiteSpace: 'nowrap', textOverflow: 'ellipsis', height: '28px' }}>
                   <SelectValue placeholder="All Asset Checks" />
                 </SelectTrigger>
