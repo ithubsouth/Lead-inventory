@@ -4,7 +4,6 @@ import { Package, BarChart3, Archive } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import UnifiedAssetForm from './UnifiedAssetForm';
-import CreateOrderForm from './CreateOrderForm';
 import OrdersTable from './OrdersTable';
 import DevicesTable from './DevicesTable';
 import OrderSummaryTable from './OrderSummaryTable';
@@ -58,14 +57,14 @@ const InventoryManagement = () => {
           return;
         }
 
-        const { data: userData, error: roleError} = await (supabase as any)
+        const { data: userData, error: roleError } = await supabase
           .from('users')
           .select('role')
           .eq('email', user.email)
           .single();
         if (roleError) throw roleError;
-        setUserRole((userData as any)?.role || null);
-        if (!(userData as any)?.role) {
+        setUserRole(userData?.role || null);
+        if (!userData?.role) {
           console.warn('No role found for user.');
           toast({ title: 'Warning', description: 'No role assigned to user. Updates may fail.', variant: 'destructive' });
         }
@@ -242,6 +241,7 @@ const InventoryManagement = () => {
             asset_status,
             asset_group,
             asset_condition,
+            created_at,
             updated_at,
             updated_by,
             is_deleted,
@@ -684,162 +684,179 @@ const InventoryManagement = () => {
         <div className='container mx-auto px-4 py-6 h-full'>
           <Tabs defaultValue='create' className='w-full h-full flex flex-col'>
             <TabsList className='grid w-full grid-cols-5 mb-6 bg-card/50 backdrop-blur-sm border border-border/50 flex-shrink-0'>
-            <TabsTrigger value='create' className='flex items-center gap-2 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground'>
-              <Package className='w-4 h-4' />
-              Create Order
-            </TabsTrigger>
-            <TabsTrigger value='view' className='flex items-center gap-2 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground'>
-              <Archive className='w-4 h-4' />
-              View Orders
-            </TabsTrigger>
-            <TabsTrigger value='order' className='flex items-center gap-2 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground'>
-              <BarChart3 className='w-4 h-4' />
-              Order Summary
-            </TabsTrigger>
-            <TabsTrigger value='devices' className='flex items-center gap-2 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground'>
-              <Archive className='w-4 h-4' />
-              Devices
-            </TabsTrigger>
-            <TabsTrigger value='audit' className='flex items-center gap-2 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground'>
-              <Archive className='w-4 h-4' />
-              Audit View
-            </TabsTrigger>
-          </TabsList>
-          <TabsContent value='create' className='space-y-6 flex-1 overflow-y-auto'>
-            <UnifiedAssetForm
-              orderType={orderType}
-              setOrderType={setOrderType}
-              salesOrder={salesOrder}
-              setSalesOrder={setSalesOrder}
-              dealId={dealId}
-              setDealId={setDealId}
-              nucleusId={nucleusId}
-              setNucleusId={setNucleusId}
-              schoolName={schoolName}
-              setSchoolName={setSchoolName}
-              loading={loading}
-              setLoading={setLoading}
-              loadOrders={loadOrders}
-              loadDevices={loadDevices}
-              loadOrderSummary={loadOrderSummary}
-              openScanner={(itemId, index, assetType) => {
-                setCurrentSerialIndex({ itemId, index, type: assetType as 'tablet' | 'tv' });
-                setShowScanner(true);
-              }}
-            />
-          </TabsContent>
-          <TabsContent value='view' className='flex-1 overflow-y-auto'>
-            <OrdersTable
-              orders={orders}
-              setOrders={setOrders}
-              selectedWarehouse={selectedWarehouse}
-              setSelectedWarehouse={setSelectedWarehouse}
-              selectedAssetType={selectedAssetType}
-              setSelectedAssetType={setSelectedAssetType}
-              selectedModel={selectedModel}
-              setSelectedModel={setSelectedModel}
-              selectedConfiguration={selectedConfiguration}
-              setSelectedConfiguration={setSelectedConfiguration}
-              selectedOrderType={selectedOrderType}
-              setSelectedOrderType={setSelectedOrderType}
-              selectedProduct={selectedProduct}
-              setSelectedProduct={setSelectedProduct}
-              selectedStatus={selectedStatus}
-              setSelectedStatus={setSelectedStatus}
-              fromDate={fromDate}
-              setFromDate={setFromDate}
-              toDate={toDate}
-              setToDate={setToDate}
-              showDeleted={showDeleted}
-              setShowDeleted={setShowDeleted}
-              searchQuery={searchQuery}
-              setSearchQuery={setSearchQuery}
-              loading={loading}
-              setLoading={setLoading}
-              loadOrders={loadOrders}
-              loadDevices={loadDevices}
-              loadOrderSummary={loadOrderSummary}
-            />
-          </TabsContent>
-          <TabsContent value='order' className='flex-1 overflow-y-auto'>
-            <OrderSummaryTable
-              orderSummary={orderSummary}
-              selectedWarehouse={selectedWarehouse}
-              setSelectedWarehouse={setSelectedWarehouse}
-              selectedAssetType={selectedAssetType}
-              setSelectedAssetType={setSelectedAssetType}
-              selectedModel={selectedModel}
-              setSelectedModel={setSelectedModel}
-              fromDate={fromDate}
-              setFromDate={setFromDate}
-              toDate={toDate}
-              setToDate={setToDate}
-              showDeleted={showDeleted}
-              setShowDeleted={setShowDeleted}
-              searchQuery={searchQuery}
-              setSearchQuery={setSearchQuery}
-            />
-          </TabsContent>
-          <TabsContent value='devices' className='flex-1 overflow-y-auto'>
-            <DevicesTable
-              devices={devices}
-              selectedWarehouse={selectedWarehouse}
-              setSelectedWarehouse={setSelectedWarehouse}
-              selectedAssetType={selectedAssetType}
-              setSelectedAssetType={setSelectedAssetType}
-              selectedModel={selectedModel}
-              setSelectedModel={setSelectedModel}
-              selectedAssetStatus={selectedAssetStatus}
-              setSelectedAssetStatus={setSelectedAssetStatus}
-              selectedConfiguration={selectedConfiguration}
-              setSelectedConfiguration={setSelectedConfiguration}
-              selectedProduct={selectedProduct}
-              setSelectedProduct={setSelectedProduct}
-              selectedStatus={selectedStatus}
-              setSelectedStatus={setSelectedStatus}
-              selectedOrderType={selectedOrderType}
-              setSelectedOrderType={setSelectedOrderType}
-              selectedAssetGroup={selectedAssetGroup}
-              setSelectedAssetGroup={setSelectedAssetGroup}
-              fromDate={fromDate}
-              setFromDate={setFromDate}
-              toDate={toDate}
-              setToDate={setToDate}
-              showDeleted={showDeleted}
-              setShowDeleted={setShowDeleted}
-              searchQuery={searchQuery}
-              setSearchQuery={setSearchQuery}
-            />
-          </TabsContent>
-          <TabsContent value='audit' className='flex-1 overflow-y-auto'>
-            <AuditTable
-              devices={devices}
-              selectedWarehouse={selectedWarehouse}
-              setSelectedWarehouse={setSelectedWarehouse}
-              selectedAssetType={selectedAssetType}
-              setSelectedAssetType={setSelectedAssetType}
-              selectedModel={selectedModel}
-              setSelectedModel={setSelectedModel}
-              selectedAssetStatus={selectedAssetStatus}
-              setSelectedAssetStatus={setSelectedAssetStatus}
-              selectedConfiguration={selectedConfiguration}
-              setSelectedConfiguration={setSelectedConfiguration}
-              selectedProduct={selectedProduct}
-              setSelectedProduct={setSelectedProduct}
-              selectedOrderType={selectedOrderType}
-              setSelectedOrderType={setSelectedOrderType}
-              selectedAssetGroup={selectedAssetGroup}
-              setSelectedAssetGroup={setSelectedAssetGroup}
-              fromDate={fromDate ? { from: new Date(fromDate), to: undefined } : undefined}
-              setFromDate={(range) => setFromDate(range?.from?.toISOString().split('T')[0] || '')}
-              searchQuery={searchQuery}
-              setSearchQuery={setSearchQuery}
-              onUpdateAssetCheck={handleUpdateAssetCheck}
-              onClearAllChecks={handleClearAllChecks}
-              userRole={userRole || 'unknown'}
-            />
-          </TabsContent>
-        </Tabs>
+              <TabsTrigger value='create' className='flex items-center gap-2 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground'>
+                <Package className='w-4 h-4' />
+                Create Order
+              </TabsTrigger>
+              <TabsTrigger value='view' className='flex items-center gap-2 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground'>
+                <Archive className='w-4 h-4' />
+                View Orders
+              </TabsTrigger>
+              <TabsTrigger value='order' className='flex items-center gap-2 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground'>
+                <BarChart3 className='w-4 h-4' />
+                Order Summary
+              </TabsTrigger>
+              <TabsTrigger value='devices' className='flex items-center gap-2 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground'>
+                <Archive className='w-4 h-4' />
+                Devices
+              </TabsTrigger>
+              <TabsTrigger value='audit' className='flex items-center gap-2 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground'>
+                <Archive className='w-4 h-4' />
+                Audit View
+              </TabsTrigger>
+            </TabsList>
+            <TabsContent value='create' className='space-y-6 flex-1 overflow-y-auto'>
+              <UnifiedAssetForm
+                orderType={orderType}
+                setOrderType={setOrderType}
+                salesOrder={salesOrder}
+                setSalesOrder={setSalesOrder}
+                dealId={dealId}
+                setDealId={setDealId}
+                nucleusId={nucleusId}
+                setNucleusId={setNucleusId}
+                schoolName={schoolName}
+                setSchoolName={setSchoolName}
+                loading={loading}
+                setLoading={setLoading}
+                loadOrders={loadOrders}
+                loadDevices={loadDevices}
+                loadOrderSummary={loadOrderSummary}
+                openScanner={(itemId, index, assetType) => {
+                  setCurrentSerialIndex({ itemId, index, type: assetType as 'tablet' | 'tv' });
+                  setShowScanner(true);
+                }}
+              />
+            </TabsContent>
+            <TabsContent value='view' className='flex-1 overflow-y-auto'>
+              <OrdersTable
+                orders={orders}
+                setOrders={setOrders}
+                selectedWarehouse={selectedWarehouse}
+                setSelectedWarehouse={setSelectedWarehouse}
+                selectedAssetType={selectedAssetType}
+                setSelectedAssetType={setSelectedAssetType}
+                selectedModel={selectedModel}
+                setSelectedModel={setSelectedModel}
+                selectedConfiguration={selectedConfiguration}
+                setSelectedConfiguration={setSelectedConfiguration}
+                selectedOrderType={selectedOrderType}
+                setSelectedOrderType={setSelectedOrderType}
+                selectedProduct={selectedProduct}
+                setSelectedProduct={setSelectedProduct}
+                selectedStatus={selectedStatus}
+                setSelectedStatus={setSelectedStatus}
+                fromDate={fromDate}
+                setFromDate={setFromDate}
+                toDate={toDate}
+                setToDate={setToDate}
+                showDeleted={showDeleted}
+                setShowDeleted={setShowDeleted}
+                searchQuery={searchQuery}
+                setSearchQuery={setSearchQuery}
+                loading={loading}
+                setLoading={setLoading}
+                loadOrders={loadOrders}
+                loadDevices={loadDevices}
+                loadOrderSummary={loadOrderSummary}
+              />
+            </TabsContent>
+            <TabsContent value='order' className='flex-1 overflow-y-auto'>
+              <OrderSummaryTable
+                devices={devices}
+                orderSummary={orderSummary}
+                selectedWarehouse={selectedWarehouse}
+                setSelectedWarehouse={(value) => {
+                  setSelectedWarehouse(value);
+                  setSelectedAssetType('All');
+                  setSelectedModel('All');
+                  setSelectedProduct('All');
+                  setSelectedAssetStatus('All');
+                  setSelectedAssetGroup('All');
+                }}
+                selectedAssetType={selectedAssetType}
+                setSelectedAssetType={(value) => {
+                  setSelectedAssetType(value);
+                  setSelectedModel('All');
+                }}
+                selectedModel={selectedModel}
+                setSelectedModel={setSelectedModel}
+                selectedAssetStatus={selectedAssetStatus}
+                setSelectedAssetStatus={setSelectedAssetStatus}
+                selectedAssetGroup={selectedAssetGroup}
+                setSelectedAssetGroup={setSelectedAssetGroup}
+                selectedProduct={selectedProduct}
+                setSelectedProduct={setSelectedProduct}
+                fromDate={fromDate}
+                setFromDate={setFromDate}
+                toDate={toDate}
+                setToDate={setToDate}
+                showDeleted={showDeleted}
+                setShowDeleted={setShowDeleted}
+                searchQuery={searchQuery}
+                setSearchQuery={setSearchQuery}
+              />
+            </TabsContent>
+            <TabsContent value='devices' className='flex-1 overflow-y-auto'>
+              <DevicesTable
+                devices={devices}
+                selectedWarehouse={selectedWarehouse}
+                setSelectedWarehouse={setSelectedWarehouse}
+                selectedAssetType={selectedAssetType}
+                setSelectedAssetType={setSelectedAssetType}
+                selectedModel={selectedModel}
+                setSelectedModel={setSelectedModel}
+                selectedAssetStatus={selectedAssetStatus}
+                setSelectedAssetStatus={setSelectedAssetStatus}
+                selectedConfiguration={selectedConfiguration}
+                setSelectedConfiguration={setSelectedConfiguration}
+                selectedProduct={selectedProduct}
+                setSelectedProduct={setSelectedProduct}
+                selectedStatus={selectedStatus}
+                setSelectedStatus={setSelectedStatus}
+                selectedOrderType={selectedOrderType}
+                setSelectedOrderType={setSelectedOrderType}
+                selectedAssetGroup={selectedAssetGroup}
+                setSelectedAssetGroup={setSelectedAssetGroup}
+                fromDate={fromDate}
+                setFromDate={setFromDate}
+                toDate={toDate}
+                setToDate={setToDate}
+                showDeleted={showDeleted}
+                setShowDeleted={setShowDeleted}
+                searchQuery={searchQuery}
+                setSearchQuery={setSearchQuery}
+              />
+            </TabsContent>
+            <TabsContent value='audit' className='flex-1 overflow-y-auto'>
+              <AuditTable
+                devices={devices}
+                selectedWarehouse={selectedWarehouse}
+                setSelectedWarehouse={setSelectedWarehouse}
+                selectedAssetType={selectedAssetType}
+                setSelectedAssetType={setSelectedAssetType}
+                selectedModel={selectedModel}
+                setSelectedModel={setSelectedModel}
+                selectedAssetStatus={selectedAssetStatus}
+                setSelectedAssetStatus={setSelectedAssetStatus}
+                selectedConfiguration={selectedConfiguration}
+                setSelectedConfiguration={setSelectedConfiguration}
+                selectedProduct={selectedProduct}
+                setSelectedProduct={setSelectedProduct}
+                selectedOrderType={selectedOrderType}
+                setSelectedOrderType={setSelectedOrderType}
+                selectedAssetGroup={selectedAssetGroup}
+                setSelectedAssetGroup={setSelectedAssetGroup}
+                fromDate={fromDate ? { from: new Date(fromDate), to: undefined } : undefined}
+                setFromDate={(range) => setFromDate(range?.from?.toISOString().split('T')[0] || '')}
+                searchQuery={searchQuery}
+                setSearchQuery={setSearchQuery}
+                onUpdateAssetCheck={handleUpdateAssetCheck}
+                onClearAllChecks={handleClearAllChecks}
+                userRole={userRole || 'unknown'}
+              />
+            </TabsContent>
+          </Tabs>
         </div>
       </div>
       <EnhancedBarcodeScanner

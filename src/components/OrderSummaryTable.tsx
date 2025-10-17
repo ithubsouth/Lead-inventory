@@ -1,16 +1,22 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Search, Download } from 'lucide-react';
-import { OrderSummary } from './types';
+import { OrderSummary, Device } from './types';
 import { formatDate } from './utils';
 
 interface OrderSummaryTableProps {
-  orderSummary: OrderSummary[];
+  devices: Device[];
   selectedWarehouse: string;
   setSelectedWarehouse: (value: string) => void;
   selectedAssetType: string;
   setSelectedAssetType: (value: string) => void;
   selectedModel: string;
   setSelectedModel: (value: string) => void;
+  selectedAssetStatus: string;
+  setSelectedAssetStatus: (value: string) => void;
+  selectedAssetGroup: string;
+  setSelectedAssetGroup: (value: string) => void;
+  selectedProduct: string;
+  setSelectedProduct: (value: string) => void;
   fromDate: string;
   setFromDate: (value: string) => void;
   toDate: string;
@@ -22,13 +28,19 @@ interface OrderSummaryTableProps {
 }
 
 const OrderSummaryTable: React.FC<OrderSummaryTableProps> = ({
-  orderSummary,
+  devices,
   selectedWarehouse,
   setSelectedWarehouse,
   selectedAssetType,
   setSelectedAssetType,
   selectedModel,
   setSelectedModel,
+  selectedAssetStatus,
+  setSelectedAssetStatus,
+  selectedAssetGroup,
+  setSelectedAssetGroup,
+  selectedProduct,
+  setSelectedProduct,
   fromDate,
   setFromDate,
   toDate,
@@ -46,6 +58,54 @@ const OrderSummaryTable: React.FC<OrderSummaryTableProps> = ({
     alert(`${title}: ${description}`);
   };
 
+  // Filter active devices for filter options
+  const activeDevices = useMemo(() => devices.filter(d => !d.is_deleted), [devices]);
+
+  // Dynamic filter options
+  const warehouseOptions = useMemo(() => 
+    ['All', ...new Set(activeDevices.map(d => d.warehouse).filter(Boolean))].sort(), 
+    [activeDevices]
+  );
+
+  const assetTypeOptions = useMemo(() => {
+    const filteredDevices = selectedWarehouse === 'All' 
+      ? activeDevices 
+      : activeDevices.filter(d => d.warehouse === selectedWarehouse);
+    return ['All', ...new Set(filteredDevices.map(d => d.asset_type).filter(Boolean))].sort();
+  }, [activeDevices, selectedWarehouse]);
+
+  const modelOptions = useMemo(() => {
+    let filteredDevices = selectedWarehouse === 'All' 
+      ? activeDevices 
+      : activeDevices.filter(d => d.warehouse === selectedWarehouse);
+    if (selectedAssetType !== 'All') {
+      filteredDevices = filteredDevices.filter(d => d.asset_type === selectedAssetType);
+    }
+    return ['All', ...new Set(filteredDevices.map(d => d.model).filter(Boolean))].sort();
+  }, [activeDevices, selectedWarehouse, selectedAssetType]);
+
+  const productOptions = useMemo(() => {
+    const filteredDevices = selectedWarehouse === 'All' 
+      ? activeDevices 
+      : activeDevices.filter(d => d.warehouse === selectedWarehouse);
+    return ['All', ...new Set(filteredDevices.map(d => d.product).filter(Boolean))].sort();
+  }, [activeDevices, selectedWarehouse]);
+
+  const assetStatusOptions = useMemo(() => {
+    const filteredDevices = selectedWarehouse === 'All' 
+      ? activeDevices 
+      : activeDevices.filter(d => d.warehouse === selectedWarehouse);
+    return ['All', ...new Set(filteredDevices.map(d => d.asset_status).filter(Boolean))].sort();
+  }, [activeDevices, selectedWarehouse]);
+
+  const assetGroupOptions = useMemo(() => {
+    const filteredDevices = selectedWarehouse === 'All' 
+      ? activeDevices 
+      : activeDevices.filter(d => d.warehouse === selectedWarehouse);
+    return ['All', ...new Set(filteredDevices.map(d => d.asset_group).filter(Boolean))].sort();
+  }, [activeDevices, selectedWarehouse]);
+
+  // Reset invalid selections
   useEffect(() => {
     if (selectedAssetType !== 'All' && !assetTypeOptions.includes(selectedAssetType)) {
       setSelectedAssetType('All');
@@ -106,11 +166,17 @@ const OrderSummaryTable: React.FC<OrderSummaryTableProps> = ({
         });
       }
       const s = summaryMap.get(key)!;
-      s.inward += 1;
-      if (d.status === 'Assigned') s.outward += 1;
-      else s.stock += 1;
+      // Increment inward only for inward transactions or non-assigned devices
+      if (d.transaction_type === 'Inward' || (!d.transaction_type && d.status !== 'Assigned')) {
+        s.inward += 1;
+      }
+      if (d.status === 'Assigned') {
+        s.outward += 1;
+      } else {
+        s.stock += 1;
+      }
 
-      if (d.asset_type === 'Tablet' && d.sd_card_size) {
+      if (d.asset_type === 'Tablet' && d.sd_card_size && (d.transaction_type === 'Inward' || (!d.transaction_type && d.status !== 'Assigned'))) {
         const sdKey = `${d.warehouse}-SD Card-${d.sd_card_size}`;
         if (!summaryMap.has(sdKey)) {
           summaryMap.set(sdKey, {
@@ -124,8 +190,11 @@ const OrderSummaryTable: React.FC<OrderSummaryTableProps> = ({
         }
         const sd = summaryMap.get(sdKey)!;
         sd.inward += 1;
-        if (d.status === 'Assigned') sd.outward += 1;
-        else sd.stock += 1;
+        if (d.status === 'Assigned') {
+          sd.outward += 1;
+        } else {
+          sd.stock += 1;
+        }
       }
     });
 
@@ -140,73 +209,42 @@ const OrderSummaryTable: React.FC<OrderSummaryTableProps> = ({
         [s.warehouse, s.asset_type, s.model].some(field =>
           field?.toLowerCase().includes(searchQuery.toLowerCase())
         )
-      : true;
-
-    return matchesDeleted && matchesWarehouse && matchesAssetType && matchesModel && matchesDateRange && matchesSearch;
-  });
-
-  const sortedSummary = [...filteredSummary].sort((a, b) => {
-    const warehouseA = a.warehouse || '';
-    const warehouseB = b.warehouse || '';
-    if (warehouseA !== warehouseB) {
-      return warehouseA.localeCompare(warehouseB);
+      );
     }
 
-    const assetTypeA = a.asset_type || '';
-    const assetTypeB = b.asset_type || '';
-    if (assetTypeA !== assetTypeB) {
-      return assetTypeA.localeCompare(assetTypeB);
-    }
+    computedSummaries.sort((a, b) =>
+      (a.warehouse || '').localeCompare(b.warehouse || '') ||
+      (a.asset_type || '').localeCompare(b.asset_type || '') ||
+      (a.model || '').localeCompare(b.model || '')
+    );
 
-    const modelA = a.model || '';
-    const modelB = b.model || '';
-    return modelA.localeCompare(modelB);
-  });
-
-  useEffect(() => {
-    // OrderSummary doesn't have order_date field
-    console.log('Filtered summaries (first 5):', filteredSummary.slice(0, 5).map(s => ({
-      warehouse: s.warehouse,
-      asset_type: s.asset_type,
-      model: s.model,
-    })));
-    console.log('Sorted summaries (first 5):', sortedSummary.slice(0, 5).map(s => ({
-      warehouse: s.warehouse,
-      asset_type: s.asset_type,
-      model: s.model,
-    })));
-    console.log('Filtered and sorted summaries summary:', {
-      filteredLength: filteredSummary.length,
-      sortedLength: sortedSummary.length,
-      deletedSummaries: sortedSummary.filter(s => s.inward === 0 && s.outward === 0).length,
-      activeSummaries: sortedSummary.filter(s => s.inward !== 0 || s.outward !== 0).length,
-    });
-  }, [filteredSummary, sortedSummary]);
+    return computedSummaries;
+  }, [
+    devices,
+    showDeleted,
+    selectedWarehouse,
+    selectedAssetType,
+    selectedModel,
+    selectedProduct,
+    selectedAssetStatus,
+    selectedAssetGroup,
+    fromDate,
+    toDate,
+    searchQuery,
+  ]);
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [selectedWarehouse, selectedAssetType, selectedModel, fromDate, toDate, showDeleted, searchQuery, rowsPerPage]);
+  }, [selectedWarehouse, selectedAssetType, selectedModel, selectedProduct, selectedAssetStatus, selectedAssetGroup, fromDate, toDate, showDeleted, searchQuery, rowsPerPage]);
 
-  const paginatedSummary = sortedSummary.slice(
+  const paginatedSummary = summaries.slice(
     (currentPage - 1) * rowsPerPage,
     currentPage * rowsPerPage
   );
 
-  useEffect(() => {
-    console.log('Paginated summaries (first 5):', paginatedSummary.slice(0, 5).map(s => ({
-      warehouse: s.warehouse,
-      asset_type: s.asset_type,
-      model: s.model,
-    })));
-    if (sortedSummary.length > 0 && paginatedSummary.length === 0) {
-      setCurrentPage(1);
-    }
-  }, [paginatedSummary, sortedSummary.length]);
+  const totalPages = Math.ceil(summaries.length / rowsPerPage);
 
-  const totalPages = Math.ceil(sortedSummary.length / rowsPerPage);
-
-  // Pagination logic for dynamic page range
-  const siblingCount = 2; // Number of pages to show on each side of the current page
+  const siblingCount = 2;
   const pageRange = [];
   for (let i = Math.max(1, currentPage - siblingCount); i <= Math.min(totalPages, currentPage + siblingCount); i++) {
     pageRange.push(i);
@@ -225,15 +263,15 @@ const OrderSummaryTable: React.FC<OrderSummaryTableProps> = ({
     const csvContent = [
       headers.join(','),
       ...data.map((row) =>
-          [
-            row.warehouse,
-            row.asset_type,
-            row.model,
-            row.inward,
-            row.outward,
-            row.stock,
-          ].map((value) => (typeof value === 'string' && value.includes(',') ? `"${value}"` : value ?? '')).join(',')
-        ),
+        [
+          row.warehouse,
+          row.asset_type,
+          row.model,
+          row.inward,
+          row.outward,
+          row.stock,
+        ].map((value) => (typeof value === 'string' && value.includes(',') ? `"${value}"` : value ?? '')).join(',')
+      ),
     ].join('\n');
     const blob = new Blob([csvContent], { type: 'text/csv' });
     const url = window.URL.createObjectURL(blob);
@@ -272,7 +310,7 @@ const OrderSummaryTable: React.FC<OrderSummaryTableProps> = ({
               </div>
             </div>
             <button
-              onClick={() => downloadCSV(sortedSummary, 'order_summary_export.csv')}
+              onClick={() => downloadCSV(summaries, 'order_summary_export.csv')}
               style={{ border: '1px solid #d1d5db', borderRadius: '4px', padding: '4px 8px', fontSize: '12px', display: 'flex', alignItems: 'center' }}
             >
               <Download style={{ width: '12px', height: '12px' }} />
@@ -334,6 +372,51 @@ const OrderSummaryTable: React.FC<OrderSummaryTableProps> = ({
               </select>
             </div>
             <div style={{ flex: 1, minWidth: '150px' }}>
+              <label htmlFor="productFilter" style={{ fontSize: '12px', color: '#6b7280', display: 'block', marginBottom: '4px' }}>Product</label>
+              <select
+                id="productFilter"
+                value={selectedProduct}
+                onChange={(e) => setSelectedProduct(e.target.value)}
+                style={{ fontSize: '12px', width: '100%', border: '1px solid #d1d5db', borderRadius: '4px', padding: '8px' }}
+              >
+                {productOptions.map(product => (
+                  <option key={product} value={product} style={{ fontSize: '12px' }}>
+                    {product}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div style={{ flex: 1, minWidth: '150px' }}>
+              <label htmlFor="assetStatusFilter" style={{ fontSize: '12px', color: '#6b7280', display: 'block', marginBottom: '4px' }}>Asset Status</label>
+              <select
+                id="assetStatusFilter"
+                value={selectedAssetStatus}
+                onChange={(e) => setSelectedAssetStatus(e.target.value)}
+                style={{ fontSize: '12px', width: '100%', border: '1px solid #d1d5db', borderRadius: '4px', padding: '8px' }}
+              >
+                {assetStatusOptions.map(status => (
+                  <option key={status} value={status} style={{ fontSize: '12px' }}>
+                    {status}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div style={{ flex: 1, minWidth: '150px' }}>
+              <label htmlFor="assetGroupFilter" style={{ fontSize: '12px', color: '#6b7280', display: 'block', marginBottom: '4px' }}>Asset Group</label>
+              <select
+                id="assetGroupFilter"
+                value={selectedAssetGroup}
+                onChange={(e) => setSelectedAssetGroup(e.target.value)}
+                style={{ fontSize: '12px', width: '100%', border: '1px solid #d1d5db', borderRadius: '4px', padding: '8px' }}
+              >
+                {assetGroupOptions.map(group => (
+                  <option key={group} value={group} style={{ fontSize: '12px' }}>
+                    {group}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div style={{ flex: 1, minWidth: '150px' }}>
               <label htmlFor="fromDate" style={{ fontSize: '12px', color: '#6b7280', display: 'block', marginBottom: '4px' }}>From Date</label>
               <input
                 type="date"
@@ -356,8 +439,8 @@ const OrderSummaryTable: React.FC<OrderSummaryTableProps> = ({
           </div>
         </div>
 
-        {orderSummary.length === 0 ? (
-          <div style={{ fontSize: '12px' }}>No order summary available. Create an order or check your database.</div>
+        {devices.length === 0 ? (
+          <div style={{ fontSize: '12px' }}>No devices available. Load devices or check your database.</div>
         ) : (
           <>
             <div
@@ -404,7 +487,7 @@ const OrderSummaryTable: React.FC<OrderSummaryTableProps> = ({
 
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '8px', fontSize: '12px' }}>
               <div>
-                <span>Showing {((currentPage - 1) * rowsPerPage) + 1} to {Math.min(currentPage * rowsPerPage, sortedSummary.length)} of {sortedSummary.length} summaries</span>
+                <span>Showing {((currentPage - 1) * rowsPerPage) + 1} to {Math.min(currentPage * rowsPerPage, summaries.length)} of {summaries.length} summaries</span>
                 <select
                   value={rowsPerPage}
                   onChange={(e) => {
