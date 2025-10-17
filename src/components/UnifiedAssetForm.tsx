@@ -77,7 +77,7 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
   const [assetErrors, setAssetErrors] = useState<Record<string, (string | null)[]>>({});
   const [userEmail, setUserEmail] = useState<string | null>(null);
   const [showBulk, setShowBulk] = useState(false);
-  const [progress, setProgress] = useState<string | null>(null); // State for progress tracking
+  const [progress, setProgress] = useState<string | null>(null);
 
   const toast = ({ title, description, variant }: { title: string; description: string; variant?: 'destructive' }) => {
     alert(`${title}: ${description}`);
@@ -968,7 +968,7 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
       </div>
 
       <div>
-        {assets.map(asset => renderAssetFields(asset))}
+        {assets.map(asset => renderAssetPages(asset))}
       </div>
 
       <div style={{ marginBottom: '16px' }}>
@@ -1285,10 +1285,10 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
                 <label style={{ fontSize: '14px', fontWeight: 'bold' }}>Bulk Update (CSV)</label>
                 <button
                   onClick={() => {
-                    const headers = ['Serial number', 'Location', 'Asset group', 'FAR Code'];
+                    const headers = ['Serial number', 'Asset group', 'FAR Code'];
                     const rows = [
-                      ['SN001', 'Trichy', 'NFA', 'FAR001'],
-                      ['SN002', 'Bangalore', 'NFA', 'FAR002']
+                      ['SN001', 'NFA', 'FAR001'],
+                      ['SN002', 'NFA', 'FAR002']
                     ];
                     const quoteCsvValue = (value) => {
                       const str = String(value || '');
@@ -1367,7 +1367,7 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
                       };
 
                       const headers = parseCsvLine(lines[0]);
-                      const expectedHeaders = ['Serial number', 'Location', 'Asset group', 'FAR Code'];
+                      const expectedHeaders = ['Serial number', 'Asset group', 'FAR Code'];
                       
                       if (headers.length !== expectedHeaders.length || !headers.every((h, i) => h.trim() === expectedHeaders[i])) {
                         throw new Error('CSV header mismatch. Please use the provided template.');
@@ -1391,7 +1391,6 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
                         };
 
                         const serial = getValue('Serial number');
-                        const location = getValue('Location');
                         const asset_group = getValue('Asset group');
                         const far_code = getValue('FAR Code');
 
@@ -1417,11 +1416,6 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
 
                         if (device.material_type !== 'Inward') {
                           errors.push({ values, error: 'Not inward material type' });
-                          continue;
-                        }
-
-                        if (device.warehouse !== location) {
-                          errors.push({ values, error: 'Location not matched' });
                           continue;
                         }
 
