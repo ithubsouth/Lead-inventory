@@ -33,6 +33,7 @@ interface AssetItem {
   assetStatuses: string[];
   assetGroups: string[];
   asset_conditions: string[];
+  farCodes: string[];
   hasSerials: boolean;
 }
 
@@ -77,7 +78,7 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
   const [assetErrors, setAssetErrors] = useState<Record<string, (string | null)[]>>({});
   const [userEmail, setUserEmail] = useState<string | null>(null);
   const [showBulk, setShowBulk] = useState(false);
-  const [progress, setProgress] = useState<string | null>(null); // State for progress tracking
+  const [progress, setProgress] = useState<string | null>(null);
 
   const toast = ({ title, description, variant }: { title: string; description: string; variant?: 'destructive' }) => {
     alert(`${title}: ${description}`);
@@ -120,6 +121,7 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
       assetStatuses: ['Fresh'],
       assetGroups: ['NFA'],
       asset_conditions: [''],
+      farCodes: hasSerials ? [''] : [],
       hasSerials,
     };
     setAssets([...assets, newAsset]);
@@ -134,7 +136,9 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
           const currentStatuses = asset.assetStatuses || [];
           const currentGroups = asset.assetGroups || [];
           const currentConditions = asset.asset_conditions || [];
+          const currentFarCodes = asset.farCodes || [];
           const newSerialNumbers = asset.hasSerials ? Array(newQuantity).fill('').map((_, i) => currentSerials[i] || '') : [];
+          const newFarCodes = asset.hasSerials ? Array(newQuantity).fill('').map((_, i) => currentFarCodes[i] || '') : [];
           let newAssetStatuses;
           let newAssetGroups;
           let newAssetConditions;
@@ -150,23 +154,42 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
             newAssetGroups = Array(newQuantity).fill(defaultGroup);
             newAssetConditions = Array(newQuantity).fill(defaultCondition);
           }
-          return { ...asset, quantity: newQuantity, serialNumbers: newSerialNumbers, assetStatuses: newAssetStatuses, assetGroups: newAssetGroups, asset_conditions: newAssetConditions };
+          return {
+            ...asset,
+            quantity: newQuantity,
+            serialNumbers: newSerialNumbers,
+            assetStatuses: newAssetStatuses,
+            assetGroups: newAssetGroups,
+            asset_conditions: newAssetConditions,
+            farCodes: newFarCodes,
+          };
         }
         if (field === 'hasSerials') {
           const newHasSerials = value;
           let newSerialNumbers = asset.serialNumbers;
+          let newFarCodes = asset.farCodes || [];
           if (newHasSerials && newSerialNumbers.length === 0) {
             newSerialNumbers = Array(asset.quantity).fill('');
+            newFarCodes = Array(asset.quantity).fill('');
           } else if (!newHasSerials) {
             newSerialNumbers = [];
+            newFarCodes = [];
           }
           if (!newHasSerials) {
             const uniformStatuses = Array(asset.quantity).fill(asset.assetStatuses[0] || 'Fresh');
             const uniformGroups = Array(asset.quantity).fill(asset.assetGroups[0] || 'NFA');
             const uniformConditions = Array(asset.quantity).fill(asset.asset_conditions[0] || '');
-            return { ...asset, hasSerials: newHasSerials, serialNumbers: newSerialNumbers, assetStatuses: uniformStatuses, assetGroups: uniformGroups, asset_conditions: uniformConditions };
+            return {
+              ...asset,
+              hasSerials: newHasSerials,
+              serialNumbers: newSerialNumbers,
+              assetStatuses: uniformStatuses,
+              assetGroups: uniformGroups,
+              asset_conditions: uniformConditions,
+              farCodes: newFarCodes,
+            };
           } else {
-            return { ...asset, hasSerials: newHasSerials, serialNumbers: newSerialNumbers };
+            return { ...asset, hasSerials: newHasSerials, serialNumbers: newSerialNumbers, farCodes: newFarCodes };
           }
         }
         if (field === 'model' && asset.assetType === 'SD Card') {
@@ -180,76 +203,83 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
 
   const removeAsset = (id: string) => setAssets(assets.filter(asset => asset.id !== id));
 
-  const validateSerials = async () => {
-    const errors: Record<string, (string | null)[]> = {};
-    const isInward = ['Stock', 'Return'].includes(orderType);
+const validateSerials = async () => {
+  const errors: Record<string, (string | null)[]> = {};
+  const isInward = ['Stock', 'Return'].includes(orderType);
 
-    for (const asset of assets) {
-      if (!asset.hasSerials) {
-        errors[asset.id] = [];
-        continue;
+  for (const asset of assets) {
+    if (!asset.hasSerials) {
+      errors[asset.id] = [];
+      continue;
+    }
+
+    const serialErrors: (string | null)[] = Array(asset.quantity).fill(null);
+    const allSerials = asset.serialNumbers.filter(sn => sn && sn.trim());
+    const allFarCodes = asset.farCodes.filter(fc => fc && fc.trim());
+
+    // Check for duplicates
+    for (let i = 0; i < asset.serialNumbers.length; i++) {
+      const serial = asset.serialNumbers[i]?.trim();
+      if (serial && allSerials.filter(s => s === serial).length > 1) {
+        serialErrors[i] = 'Duplicate serial within order';
       }
+    }
 
-      const serialErrors: (string | null)[] = Array(asset.quantity).fill(null);
-      const allSerials = asset.serialNumbers.filter(sn => sn && sn.trim());
-
-      for (let i = 0; i < asset.serialNumbers.length; i++) {
-        const serial = asset.serialNumbers[i]?.trim();
-        if (serial && allSerials.filter(s => s === serial).length > 1) {
-          serialErrors[i] = 'Duplicate within order';
-        }
+    for (let i = 0; i < asset.farCodes.length; i++) {
+      const farCode = asset.farCodes[i]?.trim();
+      if (farCode && allFarCodes.filter(fc => fc === farCode).length > 1) {
+        serialErrors[i] = 'Duplicate FAR Code within order';
       }
+    }
 
-      if (allSerials.length > 0) {
-        const { data: deviceData, error: deviceError } = await supabase
-          .from('devices')
-          .select('*')
-          .eq('asset_type', asset.assetType)
-          .in('serial_number', allSerials)
-          .order('updated_at', { ascending: false });
+    // Initialize arrays for all cases
+    const newStatuses = [...asset.assetStatuses];
+    const newGroups = [...asset.assetGroups];
+    const newFarCodes = [...asset.farCodes];
+    let updated = false;
 
-        if (!deviceError && deviceData) {
-          const latestBySerial: Record<string, any> = {};
-          deviceData.forEach((device: any) => {
-            if (!device.is_deleted && (!latestBySerial[device.serial_number] || new Date(device.updated_at) > new Date(latestBySerial[device.serial_number].updated_at))) {
-              latestBySerial[device.serial_number] = device;
-            }
-          });
+    if (allSerials.length > 0) {
+      const { data: deviceData, error: deviceError } = await supabase
+        .from('devices')
+        .select('*')
+        .eq('asset_type', asset.assetType)
+        .in('serial_number', allSerials)
+        .eq('is_deleted', false)
+        .order('updated_at', { ascending: false });
 
-          if (!isInward) {
-            const newStatuses = [...asset.assetStatuses];
-            const newGroups = [...asset.assetGroups];
-            let updated = false;
-
-            for (let i = 0; i < asset.serialNumbers.length; i++) {
-              const serial = asset.serialNumbers[i]?.trim();
-              if (serial) {
-                const latestDevice = latestBySerial[serial];
-                if (latestDevice && latestDevice.material_type === 'Inward') {
-                  if (newStatuses[i] === 'Fresh' || !newStatuses[i]) {
-                    newStatuses[i] = latestDevice.asset_status || 'Fresh';
-                    updated = true;
-                  }
-                  if (newGroups[i] === 'NFA' || !newGroups[i]) {
-                    newGroups[i] = latestDevice.asset_group || 'NFA';
-                    updated = true;
-                  }
-                }
-              }
-            }
-
-            if (updated) {
-              setAssets(prevAssets => prevAssets.map(a => 
-                a.id === asset.id ? { ...a, assetStatuses: newStatuses, assetGroups: newGroups } : a
-              ));
-            }
+      if (!deviceError && deviceData) {
+        const latestBySerial: Record<string, any> = {};
+        deviceData.forEach((device: any) => {
+          if (!latestBySerial[device.serial_number] || new Date(device.updated_at) > new Date(latestBySerial[device.serial_number].updated_at)) {
+            latestBySerial[device.serial_number] = device;
           }
+        });
 
-          for (let i = 0; i < asset.serialNumbers.length; i++) {
-            const serial = asset.serialNumbers[i]?.trim();
-            if (serial && !serialErrors[i]) {
-              const latestDevice = latestBySerial[serial];
-              if (latestDevice) {
+        for (let i = 0; i < asset.serialNumbers.length; i++) {
+          const serial = asset.serialNumbers[i]?.trim();
+          if (serial) {
+            const latestDevice = latestBySerial[serial];
+            if (latestDevice) {
+              // Always update status, group, and FAR code if available from DB
+              if (!newStatuses[i] || newStatuses[i] === 'Fresh') {
+                newStatuses[i] = latestDevice.asset_status || 'Fresh';
+                updated = true;
+              }
+              if (!newGroups[i] || newGroups[i] === 'NFA') {
+                newGroups[i] = latestDevice.asset_group || 'NFA';
+                updated = true;
+              }
+              if (!newFarCodes[i]) {
+                newFarCodes[i] = latestDevice.far_code || '';
+                updated = true;
+              }
+
+              // Validation logic based on order type
+              if (isInward) {
+                // For inward, just populate from DB (already handled above)
+                // No additional validation needed
+              } else {
+                // Outward validation
                 if (latestDevice.material_type === 'Outward') {
                   serialErrors[i] = `Currently Outward in ${latestDevice.warehouse}`;
                 } else if (latestDevice.material_type === 'Inward') {
@@ -257,19 +287,98 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
                     serialErrors[i] = `In ${latestDevice.warehouse} stock`;
                   }
                 }
-              } else if (!isInward) {
+
+                // FAR code uniqueness check
+                if (newFarCodes[i]) {
+                  const { data: farCodeData } = await supabase
+                    .from('devices')
+                    .select('serial_number')
+                    .eq('far_code', newFarCodes[i])
+                    .eq('is_deleted', false);
+                  if (farCodeData && farCodeData.length > 0 && farCodeData[0].serial_number !== serial) {
+                    serialErrors[i] = `FAR Code ${newFarCodes[i]} already assigned to another serial number`;
+                  }
+                }
+              }
+            } else {
+              // Serial not found in database
+              if (!isInward) {
                 serialErrors[i] = 'Not in stock';
+              }
+              // For inward, allow new serials - populate defaults if needed
+              if (!newStatuses[i]) {
+                newStatuses[i] = 'Fresh';
+                updated = true;
+              }
+              if (!newGroups[i]) {
+                newGroups[i] = 'NFA';
+                updated = true;
+              }
+              if (!newFarCodes[i]) {
+                newFarCodes[i] = '';
+                updated = true;
               }
             }
           }
         }
+      } else {
+        // No device data found or error occurred
+        for (let i = 0; i < asset.serialNumbers.length; i++) {
+          const serial = asset.serialNumbers[i]?.trim();
+          if (serial) {
+            if (!isInward) {
+              serialErrors[i] = 'Not in stock';
+            }
+            // Populate defaults for new/unknown serials
+            if (!newStatuses[i]) {
+              newStatuses[i] = 'Fresh';
+              updated = true;
+            }
+            if (!newGroups[i]) {
+              newGroups[i] = 'NFA';
+              updated = true;
+            }
+            if (!newFarCodes[i]) {
+              newFarCodes[i] = '';
+              updated = true;
+            }
+          }
+        }
       }
-
-      errors[asset.id] = serialErrors;
+    } else {
+      // No serials provided, populate defaults
+      for (let i = 0; i < asset.quantity; i++) {
+        if (!newStatuses[i]) {
+          newStatuses[i] = 'Fresh';
+          updated = true;
+        }
+        if (!newGroups[i]) {
+          newGroups[i] = 'NFA';
+          updated = true;
+        }
+        if (!newFarCodes[i]) {
+          newFarCodes[i] = '';
+          updated = true;
+        }
+      }
     }
 
-    setAssetErrors(errors);
-  };
+    // Update assets if any changes were made
+    if (updated) {
+      setAssets(prevAssets =>
+        prevAssets.map(a =>
+          a.id === asset.id
+            ? { ...a, assetStatuses: newStatuses, assetGroups: newGroups, farCodes: newFarCodes }
+            : a
+        )
+      );
+    }
+
+    errors[asset.id] = serialErrors;
+  }
+
+  setAssetErrors(errors);
+};
 
   useEffect(() => {
     validateSerials();
@@ -319,7 +428,11 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
 
       for (let i = 0; i < asset.quantity; i++) {
         if (isInward && asset.assetStatuses[i] === 'Scrap' && !asset.asset_conditions[i]?.trim()) {
-          toast({ title: 'Error', description: `Asset condition is required for scrapped item in ${asset.assetType} at position ${i + 1}`, variant: 'destructive' });
+          toast({
+            title: 'Error',
+            description: `Asset condition is required for scrapped item in ${asset.assetType} at position ${i + 1}`,
+            variant: 'destructive',
+          });
           return false;
         }
       }
@@ -403,6 +516,7 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
           const assetStatus = asset.assetStatuses[i] || 'Fresh';
           const assetGroup = asset.assetGroups[i] || 'NFA';
           const assetCondition = asset.asset_conditions[i] || null;
+          const farCode = asset.hasSerials ? (asset.farCodes[i] || null) : null;
 
           await supabase.from('devices').insert({
             asset_type: asset.assetType,
@@ -423,7 +537,7 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
             asset_status: assetStatus,
             asset_group: assetGroup,
             asset_condition: assetCondition,
-            far_code: null,
+            far_code: farCode,
             created_by: userEmail,
             updated_by: userEmail,
           });
@@ -452,7 +566,6 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
     const isMandatorySerial = ['Tablet', 'TV'].includes(asset.assetType);
     const showSerialSection = isMandatorySerial || asset.hasSerials;
     const isInward = ['Stock', 'Return'].includes(orderType);
-    const isOutward = !isInward;
 
     return (
       <div key={asset.id} style={{ border: '1px solid #e5e7eb', borderRadius: '8px', padding: '16px', marginBottom: '16px', background: '#f9fafb' }}>
@@ -810,7 +923,7 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
                       border: `1px solid ${assetErrors[asset.id]?.[index] ? '#ef4444' : '#d1d5db'}`,
                       borderRadius: '4px',
                       fontSize: '14px',
-                      resize: 'none'
+                      resize: 'none',
                     }}
                   />
                   <button
@@ -819,7 +932,22 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
                   >
                     <Camera size={16} />
                   </button>
-                  {isInward && (
+                  <input
+                    type="text"
+                    value={asset.farCodes[index] || ''}
+                    disabled
+                    placeholder="FAR Code"
+                    style={{
+                      width: '120px',
+                      padding: '8px',
+                      border: `1px solid ${assetErrors[asset.id]?.[index] ? '#ef4444' : '#d1d5db'}`,
+                      borderRadius: '4px',
+                      fontSize: '14px',
+                      resize: 'none',
+                      background: '#f3f4f6',
+                    }}
+                  />
+                  {isInward ? (
                     <>
                       <select
                         value={asset.assetStatuses[index] || 'Fresh'}
@@ -857,8 +985,7 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
                         />
                       )}
                     </>
-                  )}
-                  {isOutward && (
+                  ) : (
                     <>
                       <input
                         type="text"
@@ -958,7 +1085,7 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
                 background: '#3b82f6',
                 color: '#fff',
                 fontSize: '14px',
-                cursor: 'pointer'
+                cursor: 'pointer',
               }}
             >
               + {type}
@@ -972,17 +1099,17 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
       </div>
 
       <div style={{ marginBottom: '16px' }}>
-        <button 
-          onClick={() => setShowBulk(!showBulk)} 
-          style={{ 
-            padding: '12px 24px', 
-            border: 'none', 
-            borderRadius: '4px', 
-            background: '#3b82f6', 
-            color: '#fff', 
-            fontSize: '16px', 
-            fontWeight: 'bold', 
-            cursor: 'pointer' 
+        <button
+          onClick={() => setShowBulk(!showBulk)}
+          style={{
+            padding: '12px 24px',
+            border: 'none',
+            borderRadius: '4px',
+            background: '#3b82f6',
+            color: '#fff',
+            fontSize: '16px',
+            fontWeight: 'bold',
+            cursor: 'pointer',
           }}
         >
           {showBulk ? 'Hide Bulk Operations' : 'Bulk Operations'}
@@ -998,16 +1125,16 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
                 <label style={{ fontSize: '14px', fontWeight: 'bold' }}>Bulk Upload (CSV)</label>
                 <button
                   onClick={() => {
-                    const headers = ['Sales Order', 'Deal ID', 'School Name', 'Nucleus ID', 'Order Type', 'Asset Type', 'Model', 'Configuration', 'Product', 'SD Card Size', 'Profile ID', 'Location', 'Quantity', 'Serial Number', 'Asset Status', 'Asset Group'];
+                    const headers = ['Sales Order', 'Deal ID', 'School Name', 'Nucleus ID', 'Order Type', 'Asset Type', 'Model', 'Configuration', 'Product', 'SD Card Size', 'Profile ID', 'Location', 'Quantity', 'Serial Number', 'Asset Status', 'Asset Group', 'FAR Code'];
                     const rows = [
-                      ['SO-1-abcde', 'DEAL123', 'School A', 'NUC001', 'Hardware', 'Tablet', 'Lenovo TB301XU', '4G+64 GB (Android-13)', 'Lead', '128 GB', 'Profile 1', 'Trichy', '3', 'SN001', 'Fresh', 'NFA'],
-                      ['SO-1-abcde', 'DEAL123', 'School A', 'NUC001', 'Hardware', 'Tablet', 'Lenovo TB301XU', '4G+64 GB (Android-13)', 'Lead', '128 GB', 'Profile 1', 'Trichy', '', 'SN002', 'Fresh', 'NFA'],
-                      ['SO-1-abcde', 'DEAL123', 'School A', 'NUC001', 'Hardware', 'Tablet', 'Lenovo TB301XU', '4G+64 GB (Android-13)', 'Lead', '128 GB', 'Profile 1', 'Trichy', '', 'SN003', 'Fresh', 'NFA'],
-                      ['SO-1-abcde', 'DEAL123', 'School A', 'NUC001', 'Hardware', 'TV', 'Hyundai TV - 43"', 'Smart TV', 'Propel', '', '', 'Bangalore', '1', 'SN004', 'Fresh', 'NFA'],
-                      ['SO-1-abcde', 'DEAL123', 'School A', 'NUC001', 'Hardware', 'SD Card', '256 GB', '', '', '', 'Profile 2', 'Hyderabad', '1', '', 'Fresh', 'NFA'],
-                      ['SO-1-abcde', 'DEAL123', 'School A', 'NUC001', 'Hardware', 'Cover', 'M8 Flap Cover 4th gen - Lead', '', 'Lead', '', '', 'Trichy', '1', '', 'Fresh', 'NFA'],
-                      ['SO-1-abcde', 'DEAL123', 'School A', 'NUC001', 'Hardware', 'Pendrive', '64 GB', '', 'Lead', '', '', 'Trichy', '1', 'SN005', 'Fresh', 'NFA'],
-                      ['SO-1-abcde', 'DEAL123', 'School A', 'NUC001', 'Hardware', 'Other', 'Sample Material', '', 'Lead', '', '', 'Trichy', '1', '', 'Fresh', 'NFA'],
+                      ['SO-1-abcde', 'DEAL123', 'School A', 'NUC001', 'Hardware', 'Tablet', 'Lenovo TB301XU', '4G+64 GB (Android-13)', 'Lead', '128 GB', 'Profile 1', 'Trichy', '3', 'SN001', 'Fresh', 'NFA', 'FAR001'],
+                      ['SO-1-abcde', 'DEAL123', 'School A', 'NUC001', 'Hardware', 'Tablet', 'Lenovo TB301XU', '4G+64 GB (Android-13)', 'Lead', '128 GB', 'Profile 1', 'Trichy', '', 'SN002', 'Fresh', 'NFA', 'FAR002'],
+                      ['SO-1-abcde', 'DEAL123', 'School A', 'NUC001', 'Hardware', 'Tablet', 'Lenovo TB301XU', '4G+64 GB (Android-13)', 'Lead', '128 GB', 'Profile 1', 'Trichy', '', 'SN003', 'Fresh', 'NFA', 'FAR003'],
+                      ['SO-1-abcde', 'DEAL123', 'School A', 'NUC001', 'Hardware', 'TV', 'Hyundai TV - 43"', 'Smart TV', 'Propel', '', '', 'Bangalore', '1', 'SN004', 'Fresh', 'NFA', 'FAR004'],
+                      ['SO-1-abcde', 'DEAL123', 'School A', 'NUC001', 'Hardware', 'SD Card', '256 GB', '', '', '', 'Profile 2', 'Hyderabad', '1', '', 'Fresh', 'NFA', ''],
+                      ['SO-1-abcde', 'DEAL123', 'School A', 'NUC001', 'Hardware', 'Cover', 'M8 Flap Cover 4th gen - Lead', '', 'Lead', '', '', 'Trichy', '1', '', 'Fresh', 'NFA', ''],
+                      ['SO-1-abcde', 'DEAL123', 'School A', 'NUC001', 'Hardware', 'Pendrive', '64 GB', '', 'Lead', '', '', 'Trichy', '1', 'SN005', 'Fresh', 'NFA', 'FAR005'],
+                      ['SO-1-abcde', 'DEAL123', 'School A', 'NUC001', 'Hardware', 'Other', 'Sample Material', '', 'Lead', '', '', 'Trichy', '1', '', 'Fresh', 'NFA', ''],
                     ];
                     const quoteCsvValue = (value) => {
                       const str = String(value || '');
@@ -1015,7 +1142,7 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
                       const escaped = str.replace(/"/g, '""');
                       return needsQuotes ? `"${escaped}"` : escaped;
                     };
-                    const csvTemplate = headers.map(quoteCsvValue).join(',') + '\n' + 
+                    const csvTemplate = headers.map(quoteCsvValue).join(',') + '\n' +
                                       rows.map(row => row.map(quoteCsvValue).join(',')).join('\n');
                     const bom = new Uint8Array([0xEF, 0xBB, 0xBF]);
                     const blob = new Blob([bom, csvTemplate], { type: 'text/csv;charset=utf-8;' });
@@ -1083,11 +1210,11 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
 
                       const headers = parseCsvLine(lines[0]);
                       const expectedHeaders = [
-                        'Sales Order', 'Deal ID', 'School Name', 'Nucleus ID', 'Order Type', 
-                        'Asset Type', 'Model', 'Configuration', 'Product', 'SD Card Size', 
-                        'Profile ID', 'Location', 'Quantity', 'Serial Number', 'Asset Status', 'Asset Group'
+                        'Sales Order', 'Deal ID', 'School Name', 'Nucleus ID', 'Order Type',
+                        'Asset Type', 'Model', 'Configuration', 'Product', 'SD Card Size',
+                        'Profile ID', 'Location', 'Quantity', 'Serial Number', 'Asset Status', 'Asset Group', 'FAR Code'
                       ];
-                      
+
                       if (headers.length !== expectedHeaders.length) {
                         throw new Error(`Expected ${expectedHeaders.length} columns, found ${headers.length}`);
                       }
@@ -1102,9 +1229,9 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
                         try {
                           const values = parseCsvLine(lines[i]);
                           if (values.length !== headers.length) {
-                            errors.push({ 
-                              values: [...values, ...Array(headers.length - values.length).fill('')], 
-                              error: `Expected ${headers.length} columns, found ${values.length}` 
+                            errors.push({
+                              values: [...values, ...Array(headers.length - values.length).fill('')],
+                              error: `Expected ${headers.length} columns, found ${values.length}`
                             });
                             continue;
                           }
@@ -1130,6 +1257,7 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
                           const serialVal = getValue('Serial Number');
                           const statusVal = getValue('Asset Status') || 'Fresh';
                           const groupVal = getValue('Asset Group') || 'NFA';
+                          const farCodeVal = getValue('FAR Code');
 
                           const quantityVal = parseInt(quantityStr) || (serialVal ? 1 : 0);
 
@@ -1168,6 +1296,7 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
                               assetStatuses: [],
                               assetGroups: [],
                               asset_conditions: [],
+                              farCodes: [],
                               hasSerials: !!serialVal || defaultHasSerials(assetTypeVal),
                             };
                           }
@@ -1181,6 +1310,7 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
                             currentAsset.serialNumbers.push(serialVal);
                             currentAsset.assetStatuses.push(statusVal);
                             currentAsset.assetGroups.push(groupVal);
+                            currentAsset.farCodes.push(farCodeVal);
                             currentAsset.asset_conditions.push('');
                           }
 
@@ -1200,9 +1330,9 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
                           if (orderTypeVal && !orderType) setOrderType(orderTypeVal);
 
                         } catch (rowError) {
-                          errors.push({ 
-                            values: parseCsvLine(lines[i]), 
-                            error: `Row parsing error: ${rowError.message}` 
+                          errors.push({
+                            values: parseCsvLine(lines[i]),
+                            error: `Row parsing error: ${rowError.message}`
                           });
                         }
                       }
@@ -1210,16 +1340,19 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
                       const newAssets = Object.values(groupedAssets).map(asset => ({
                         ...asset,
                         quantity: asset.serialNumbers.length || asset.quantity,
-                        serialNumbers: asset.serialNumbers.length 
-                          ? asset.serialNumbers 
+                        serialNumbers: asset.serialNumbers.length
+                          ? asset.serialNumbers
                           : Array(asset.quantity).fill(''),
-                        assetStatuses: asset.assetStatuses.length 
-                          ? asset.assetStatuses 
+                        assetStatuses: asset.assetStatuses.length
+                          ? asset.assetStatuses
                           : Array(asset.quantity).fill(asset.assetStatuses[0] || 'Fresh'),
-                        assetGroups: asset.assetGroups.length 
-                          ? asset.assetGroups 
+                        assetGroups: asset.assetGroups.length
+                          ? asset.assetGroups
                           : Array(asset.quantity).fill(asset.assetGroups[0] || 'NFA'),
                         asset_conditions: Array(asset.quantity).fill(''),
+                        farCodes: asset.farCodes.length
+                          ? asset.farCodes
+                          : Array(asset.quantity).fill(''),
                       }));
 
                       if (errors.length > 0) {
@@ -1249,25 +1382,25 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
                         }
                         if (newAssets.length > 0) {
                           setAssets(prevAssets => [...prevAssets, ...newAssets]);
-                          toast({ 
-                            title: 'Partial Success', 
-                            description: `Imported ${newAssets.length} assets from CSV (${errors.length} errors)` 
+                          toast({
+                            title: 'Partial Success',
+                            description: `Imported ${newAssets.length} assets from CSV (${errors.length} errors)`
                           });
                         }
                       } else {
                         setAssets(prevAssets => [...prevAssets, ...newAssets]);
-                        toast({ 
-                          title: 'Success', 
-                          description: `Imported ${newAssets.length} assets from CSV` 
+                        toast({
+                          title: 'Success',
+                          description: `Imported ${newAssets.length} assets from CSV`
                         });
                       }
 
                     } catch (error) {
                       console.error('CSV Processing Error:', error);
-                      toast({ 
-                        title: 'Error', 
-                        description: `Failed to parse CSV file. Please check format. Details: ${error.message}`, 
-                        variant: 'destructive' 
+                      toast({
+                        title: 'Error',
+                        description: `Failed to parse CSV file. Please check format. Details: ${error.message}`,
+                        variant: 'destructive'
                       });
                     }
                   };
@@ -1285,10 +1418,10 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
                 <label style={{ fontSize: '14px', fontWeight: 'bold' }}>Bulk Update (CSV)</label>
                 <button
                   onClick={() => {
-                    const headers = ['Serial number', 'Location', 'Asset group', 'FAR Code'];
+                    const headers = ['Serial number', 'Asset group', 'FAR Code'];
                     const rows = [
-                      ['SN001', 'Trichy', 'NFA', 'FAR001'],
-                      ['SN002', 'Bangalore', 'NFA', 'FAR002']
+                      ['SN001', 'NFA', 'FAR001'],
+                      ['SN002', 'NFA', 'FAR002']
                     ];
                     const quoteCsvValue = (value) => {
                       const str = String(value || '');
@@ -1367,15 +1500,15 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
                       };
 
                       const headers = parseCsvLine(lines[0]);
-                      const expectedHeaders = ['Serial number', 'Location', 'Asset group', 'FAR Code'];
-                      
+                      const expectedHeaders = ['Serial number', 'Asset group', 'FAR Code'];
+
                       if (headers.length !== expectedHeaders.length || !headers.every((h, i) => h.trim() === expectedHeaders[i])) {
                         throw new Error('CSV header mismatch. Please use the provided template.');
                       }
 
                       const errors: { values: string[], error: string }[] = [];
                       const updatedSerials: string[] = [];
-                      const totalRows = lines.length - 1; // Exclude header
+                      const totalRows = lines.length - 1;
 
                       for (let i = 1; i < lines.length; i++) {
                         setProgress(`Updating ${i}/${totalRows}`);
@@ -1391,7 +1524,6 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
                         };
 
                         const serial = getValue('Serial number');
-                        const location = getValue('Location');
                         const asset_group = getValue('Asset group');
                         const far_code = getValue('FAR Code');
 
@@ -1420,16 +1552,6 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
                           continue;
                         }
 
-                        if (device.warehouse !== location) {
-                          errors.push({ values, error: 'Location not matched' });
-                          continue;
-                        }
-
-                        if (device.far_code) {
-                          errors.push({ values, error: `FAR Code already available - Existing FAR Code is ${device.far_code}` });
-                          continue;
-                        }
-
                         const { error: updateError } = await supabase
                           .from('devices')
                           .update({
@@ -1447,7 +1569,7 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
                         }
                       }
 
-                      setProgress(null); // Clear progress after completion
+                      setProgress(null);
 
                       if (errors.length > 0) {
                         const confirmDownload = window.confirm(
@@ -1482,7 +1604,7 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
                         await loadDevices();
                       }
                     } catch (error) {
-                      setProgress(null); // Clear progress on error
+                      setProgress(null);
                       toast({ title: 'Error', description: `Failed to process update CSV. Please check format. Details: ${error.message}`, variant: 'destructive' });
                     }
                   };
