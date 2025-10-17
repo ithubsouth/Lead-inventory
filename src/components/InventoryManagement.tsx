@@ -304,6 +304,13 @@ const InventoryManagement = () => {
 
       console.log('Processed devices:', updatedDevices.length);
       console.log('Devices with sales_order 905643:', updatedDevices.filter(d => d.sales_order === '905643'));
+      console.log('Sample devices status breakdown:', {
+        total: updatedDevices.length,
+        stock: updatedDevices.filter(d => d.status === 'Stock').length,
+        assigned: updatedDevices.filter(d => d.status === 'Assigned').length,
+        sampleStock: updatedDevices.filter(d => d.status === 'Stock').slice(0, 3).map(d => ({ id: d.id, order_id: d.order_id, material_type: d.material_type })),
+        sampleAssigned: updatedDevices.filter(d => d.status === 'Assigned').slice(0, 3).map(d => ({ id: d.id, order_id: d.order_id, material_type: d.material_type })),
+      });
       setDevices(updatedDevices);
 
       if (updatedDevices.length === 0) {

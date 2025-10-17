@@ -166,11 +166,17 @@ const OrderSummaryTable: React.FC<OrderSummaryTableProps> = ({
         });
       }
       const s = summaryMap.get(key)!;
-      s.inward += 1;
-      if (d.status === 'Assigned') s.outward += 1;
-      else s.stock += 1;
+      // Increment inward only for inward transactions or non-assigned devices
+      if (d.transaction_type === 'Inward' || (!d.transaction_type && d.status !== 'Assigned')) {
+        s.inward += 1;
+      }
+      if (d.status === 'Assigned') {
+        s.outward += 1;
+      } else {
+        s.stock += 1;
+      }
 
-      if (d.asset_type === 'Tablet' && d.sd_card_size) {
+      if (d.asset_type === 'Tablet' && d.sd_card_size && (d.transaction_type === 'Inward' || (!d.transaction_type && d.status !== 'Assigned'))) {
         const sdKey = `${d.warehouse}-SD Card-${d.sd_card_size}`;
         if (!summaryMap.has(sdKey)) {
           summaryMap.set(sdKey, {
@@ -184,8 +190,11 @@ const OrderSummaryTable: React.FC<OrderSummaryTableProps> = ({
         }
         const sd = summaryMap.get(sdKey)!;
         sd.inward += 1;
-        if (d.status === 'Assigned') sd.outward += 1;
-        else sd.stock += 1;
+        if (d.status === 'Assigned') {
+          sd.outward += 1;
+        } else {
+          sd.stock += 1;
+        }
       }
     });
 

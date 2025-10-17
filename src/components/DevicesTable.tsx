@@ -140,6 +140,7 @@ const DevicesTable: React.FC<DevicesTableProps> = ({
       asset_group: d.asset_group || '',
       far_code: d.far_code || '',
       status: d.status || '',
+      created_at: d.created_at || '',
       updated_at: d.updated_at || '',
       updated_by: d.updated_by || '',
     })) || []);
@@ -173,8 +174,8 @@ const DevicesTable: React.FC<DevicesTableProps> = ({
     const matchesOrderType = selectedOrderType === 'All' || (device.order_type || '') === selectedOrderType;
     const matchesAssetGroup = selectedAssetGroup === 'All' || (device.asset_group || '') === selectedAssetGroup;
     const matchesDate =
-      (!fromDate || !device.updated_at || new Date(device.updated_at) >= new Date(fromDate)) &&
-      (!toDate || !device.updated_at || new Date(device.updated_at) <= new Date(toDate));
+      (!fromDate || !device.created_at || new Date(device.created_at) >= new Date(fromDate)) &&
+      (!toDate || !device.created_at || new Date(device.created_at) <= new Date(toDate));
 
     return (
       matchesDeleted &&
@@ -288,8 +289,8 @@ const DevicesTable: React.FC<DevicesTableProps> = ({
     const matchesOrderType = selectedOrderType === 'All' || (device.order_type || '') === selectedOrderType;
     const matchesAssetGroup = selectedAssetGroup === 'All' || (device.asset_group || '') === selectedAssetGroup;
     const matchesDate =
-      (!fromDate || !device.updated_at || new Date(device.updated_at) >= new Date(fromDate)) &&
-      (!toDate || !device.updated_at || new Date(device.updated_at) <= new Date(toDate));
+      (!fromDate || !device.created_at || new Date(device.created_at) >= new Date(fromDate)) &&
+      (!toDate || !device.created_at || new Date(device.created_at) <= new Date(toDate));
     const matchesSearch = searchQuery
       ? [
           device.serial_number || '',
@@ -329,8 +330,8 @@ const DevicesTable: React.FC<DevicesTableProps> = ({
   }) || [];
 
   const sortedDevices = [...filteredDevices].sort((a, b) => {
-    const dateA = a.updated_at ? new Date(a.updated_at).getTime() : 0;
-    const dateB = b.updated_at ? new Date(b.updated_at).getTime() : 0;
+    const dateA = a.created_at ? new Date(a.created_at).getTime() : 0;
+    const dateB = b.created_at ? new Date(b.created_at).getTime() : 0;
     if (dateA !== dateB) {
       return dateB - dateA;
     }
@@ -375,7 +376,7 @@ const DevicesTable: React.FC<DevicesTableProps> = ({
   });
 
   useEffect(() => {
-    const invalidDates = filteredDevices.filter(d => d.updated_at && isNaN(new Date(d.updated_at).getTime())).map(d => ({
+    const invalidDates = filteredDevices.filter(d => d.created_at && isNaN(new Date(d.created_at).getTime())).map(d => ({
       id: d.id,
       sales_order: d.sales_order || '',
       order_type: d.order_type || '',
@@ -394,11 +395,12 @@ const DevicesTable: React.FC<DevicesTableProps> = ({
       asset_group: d.asset_group || '',
       far_code: d.far_code || '',
       status: d.status || '',
+      created_at: d.created_at || '',
       updated_at: d.updated_at || '',
       updated_by: d.updated_by || '',
     }));
     if (invalidDates.length > 0) {
-      console.warn('Invalid updated_at values detected:', invalidDates);
+      console.warn('Invalid created_at values detected:', invalidDates);
     }
     console.log('Filtered devices (first 5):', filteredDevices.slice(0, 5).map(d => ({
       id: d.id,
@@ -419,6 +421,7 @@ const DevicesTable: React.FC<DevicesTableProps> = ({
       asset_group: d.asset_group || '',
       far_code: d.far_code || '',
       status: d.status || '',
+      created_at: d.created_at || '',
       updated_at: d.updated_at || '',
       updated_by: d.updated_by || '',
     })));
@@ -441,6 +444,7 @@ const DevicesTable: React.FC<DevicesTableProps> = ({
       asset_group: d.asset_group || '',
       far_code: d.far_code || '',
       status: d.status || '',
+      created_at: d.created_at || '',
       updated_at: d.updated_at || '',
       updated_by: d.updated_by || '',
     })));
@@ -497,6 +501,7 @@ const DevicesTable: React.FC<DevicesTableProps> = ({
       asset_group: d.asset_group || '',
       far_code: d.far_code || '',
       status: d.status || '',
+      created_at: d.created_at || '',
       updated_at: d.updated_at || '',
       updated_by: d.updated_by || '',
     })));
@@ -544,6 +549,7 @@ const DevicesTable: React.FC<DevicesTableProps> = ({
       'asset_group',
       'far_code',
       'status',
+      'created_at',
       'updated_at',
       'updated_by',
       'id',
@@ -595,7 +601,7 @@ const DevicesTable: React.FC<DevicesTableProps> = ({
     asset_group: '120px',
     far_code: '120px',
     status: '100px',
-    updated_at: '150px',
+    created_at: '150px',
     updated_by: '120px',
     actions: '80px',
   };
@@ -810,7 +816,7 @@ const DevicesTable: React.FC<DevicesTableProps> = ({
                     <th style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', textAlign: 'left', position: 'sticky', top: 0, background: '#fff', zIndex: 10, width: columnWidths.asset_group }}>Asset Group</th>
                     <th style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', textAlign: 'left', position: 'sticky', top: 0, background: '#fff', zIndex: 10, width: columnWidths.far_code }}>FAR Code</th>
                     <th style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', textAlign: 'left', position: 'sticky', top: 0, background: '#fff', zIndex: 10, width: columnWidths.status }}>Status</th>
-                    <th style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', textAlign: 'left', position: 'sticky', top: 0, background: '#fff', zIndex: 10, width: columnWidths.updated_at }}>Updated At</th>
+                    <th style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', textAlign: 'left', position: 'sticky', top: 0, background: '#fff', zIndex: 10, width: columnWidths.created_at }}>Created At</th>
                     <th style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', textAlign: 'left', position: 'sticky', top: 0, background: '#fff', zIndex: 10, width: columnWidths.updated_by }}>Updated By</th>
                     <th style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', textAlign: 'left', position: 'sticky', top: 0, background: '#fff', zIndex: 10, width: columnWidths.actions }}>Actions</th>
                   </tr>
@@ -857,7 +863,7 @@ const DevicesTable: React.FC<DevicesTableProps> = ({
                             {device.status || ''}
                           </span>
                         </td>
-                        <td style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', width: columnWidths.updated_at }}>{formatDate(device.updated_at) || ''}</td>
+                        <td style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', width: columnWidths.created_at }}>{formatDate(device.created_at) || ''}</td>
                         <td style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', width: columnWidths.updated_by }}>{device.updated_by || ''}</td>
                         <td style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', width: columnWidths.actions }}>
                           <button
@@ -962,6 +968,7 @@ const DevicesTable: React.FC<DevicesTableProps> = ({
                     <p><strong>Asset Group:</strong> {viewingDevice.asset_group || ''}</p>
                     <p><strong>FAR Code:</strong> {viewingDevice.far_code || ''}</p>
                     <p><strong>Status:</strong> {viewingDevice.status || ''}</p>
+                    <p><strong>Created At:</strong> {formatDate(viewingDevice.created_at) || ''}</p>
                     <p><strong>Updated At:</strong> {formatDate(viewingDevice.updated_at) || ''}</p>
                     <p><strong>Updated By:</strong> {viewingDevice.updated_by || ''}</p>
                     <p><strong>Deleted:</strong> {viewingDevice.is_deleted ? 'Yes' : 'No'}</p>
