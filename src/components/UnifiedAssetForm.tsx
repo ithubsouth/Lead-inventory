@@ -33,6 +33,7 @@ interface AssetItem {
   assetStatuses: string[];
   assetGroups: string[];
   asset_conditions: string[];
+  farCodes: string[];
   hasSerials: boolean;
 }
 
@@ -77,7 +78,7 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
   const [assetErrors, setAssetErrors] = useState<Record<string, (string | null)[]>>({});
   const [userEmail, setUserEmail] = useState<string | null>(null);
   const [showBulk, setShowBulk] = useState(false);
-  const [progress, setProgress] = useState<string | null>(null); // State for progress tracking
+  const [progress, setProgress] = useState<string | null>(null);
 
   const toast = ({ title, description, variant }: { title: string; description: string; variant?: 'destructive' }) => {
     alert(`${title}: ${description}`);
@@ -117,9 +118,10 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
       quantity: 1,
       location: '',
       serialNumbers: hasSerials ? [''] : [],
-      assetStatuses: ['Fresh'],
-      assetGroups: ['NFA'],
+      assetStatuses: [''],
+      assetGroups: [''],
       asset_conditions: [''],
+      farCodes: hasSerials ? [''] : [],
       hasSerials,
     };
     setAssets([...assets, newAsset]);
@@ -134,43 +136,72 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
           const currentStatuses = asset.assetStatuses || [];
           const currentGroups = asset.assetGroups || [];
           const currentConditions = asset.asset_conditions || [];
+          const currentFarCodes = asset.farCodes || [];
           const newSerialNumbers = asset.hasSerials ? Array(newQuantity).fill('').map((_, i) => currentSerials[i] || '') : [];
+          const newFarCodes = asset.hasSerials ? Array(newQuantity).fill('').map((_, i) => currentFarCodes[i] || '') : [];
           let newAssetStatuses;
           let newAssetGroups;
           let newAssetConditions;
           if (asset.hasSerials) {
-            newAssetStatuses = Array(newQuantity).fill('Fresh').map((_, i) => currentStatuses[i] || 'Fresh');
-            newAssetGroups = Array(newQuantity).fill('NFA').map((_, i) => currentGroups[i] || 'NFA');
+            newAssetStatuses = Array(newQuantity).fill('').map((_, i) => currentStatuses[i] || '');
+            newAssetGroups = Array(newQuantity).fill('').map((_, i) => currentGroups[i] || '');
             newAssetConditions = Array(newQuantity).fill('').map((_, i) => currentConditions[i] || '');
           } else {
-            const defaultStatus = currentStatuses[0] || 'Fresh';
-            const defaultGroup = currentGroups[0] || 'NFA';
+            const defaultStatus = currentStatuses[0] || '';
+            const defaultGroup = currentGroups[0] || '';
             const defaultCondition = currentConditions[0] || '';
             newAssetStatuses = Array(newQuantity).fill(defaultStatus);
             newAssetGroups = Array(newQuantity).fill(defaultGroup);
             newAssetConditions = Array(newQuantity).fill(defaultCondition);
           }
-          return { ...asset, quantity: newQuantity, serialNumbers: newSerialNumbers, assetStatuses: newAssetStatuses, assetGroups: newAssetGroups, asset_conditions: newAssetConditions };
+          return { 
+            ...asset, 
+            quantity: newQuantity, 
+            serialNumbers: newSerialNumbers, 
+            assetStatuses: newAssetStatuses, 
+            assetGroups: newAssetGroups, 
+            asset_conditions: newAssetConditions,
+            farCodes: newFarCodes 
+          };
         }
         if (field === 'hasSerials') {
           const newHasSerials = value;
           let newSerialNumbers = asset.serialNumbers;
+          let newFarCodes = asset.farCodes;
           if (newHasSerials && newSerialNumbers.length === 0) {
             newSerialNumbers = Array(asset.quantity).fill('');
+            newFarCodes = Array(asset.quantity).fill('');
           } else if (!newHasSerials) {
             newSerialNumbers = [];
+            newFarCodes = [];
           }
           if (!newHasSerials) {
-            const uniformStatuses = Array(asset.quantity).fill(asset.assetStatuses[0] || 'Fresh');
-            const uniformGroups = Array(asset.quantity).fill(asset.assetGroups[0] || 'NFA');
+            const uniformStatuses = Array(asset.quantity).fill(asset.assetStatuses[0] || '');
+            const uniformGroups = Array(asset.quantity).fill(asset.assetGroups[0] || '');
             const uniformConditions = Array(asset.quantity).fill(asset.asset_conditions[0] || '');
-            return { ...asset, hasSerials: newHasSerials, serialNumbers: newSerialNumbers, assetStatuses: uniformStatuses, assetGroups: uniformGroups, asset_conditions: uniformConditions };
+            return { 
+              ...asset, 
+              hasSerials: newHasSerials, 
+              serialNumbers: newSerialNumbers, 
+              assetStatuses: uniformStatuses, 
+              assetGroups: uniformGroups, 
+              asset_conditions: uniformConditions,
+              farCodes: newFarCodes 
+            };
           } else {
-            return { ...asset, hasSerials: newHasSerials, serialNumbers: newSerialNumbers };
+            return { 
+              ...asset, 
+              hasSerials: newHasSerials, 
+              serialNumbers: newSerialNumbers,
+              farCodes: newFarCodes 
+            };
           }
         }
         if (field === 'model' && asset.assetType === 'SD Card') {
           return { ...asset, [field]: value, sdCardSize: value };
+        }
+        if (field === 'serialNumbers') {
+          return { ...asset, [field]: value };
         }
         return { ...asset, [field]: value };
       }
@@ -180,19 +211,76 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
 
   const removeAsset = (id: string) => setAssets(assets.filter(asset => asset.id !== id));
 
+  const fetchAssetDetails = async (asset: AssetItem, index: number, serialNumber: string) => {
+    if (!serialNumber || !asset.hasSerials) return;
+
+    const { data: deviceData, error: deviceError } = await supabase
+      .from('devices')
+      .select('asset_status, asset_group, far_code')
+      .eq('serial_number', serialNumber)
+      .eq('is_deleted', false)
+      .order('updated_at', { ascending: false })
+      .limit(1);
+
+    if (deviceError || !deviceData || deviceData.length === 0) {
+      setAssets(prevAssets =>
+        prevAssets.map(a => {
+          if (a.id === asset.id) {
+            const newStatuses = [...a.assetStatuses];
+            const newGroups = [...a.assetGroups];
+            const newFarCodes = [...a.farCodes];
+            newStatuses[index] = '';
+            newGroups[index] = '';
+            newFarCodes[index] = '';
+            return { 
+              ...a, 
+              assetStatuses: newStatuses, 
+              assetGroups: newGroups, 
+              farCodes: newFarCodes 
+            };
+          }
+          return a;
+        })
+      );
+      return;
+    }
+
+    const device = deviceData[0];
+    setAssets(prevAssets =>
+      prevAssets.map(a => {
+        if (a.id === asset.id) {
+          const newStatuses = [...a.assetStatuses];
+          const newGroups = [...a.assetGroups];
+          const newFarCodes = [...a.farCodes];
+          newStatuses[index] = device.asset_status || '';
+          newGroups[index] = device.asset_group || '';
+          newFarCodes[index] = device.far_code || '';
+          return { 
+            ...a, 
+            assetStatuses: newStatuses, 
+            assetGroups: newGroups, 
+            farCodes: newFarCodes 
+          };
+        }
+        return a;
+      })
+    );
+  };
+
   const validateSerials = async () => {
     const errors: Record<string, (string | null)[]> = {};
     const isInward = ['Stock', 'Return'].includes(orderType);
 
     for (const asset of assets) {
       if (!asset.hasSerials) {
-        errors[asset.id] = [];
+        errors[asset.id] = Array(asset.quantity).fill(null);
         continue;
       }
 
       const serialErrors: (string | null)[] = Array(asset.quantity).fill(null);
       const allSerials = asset.serialNumbers.filter(sn => sn && sn.trim());
 
+      // Check for duplicate serial numbers within the order
       for (let i = 0; i < asset.serialNumbers.length; i++) {
         const serial = asset.serialNumbers[i]?.trim();
         if (serial && allSerials.filter(s => s === serial).length > 1) {
@@ -203,63 +291,60 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
       if (allSerials.length > 0) {
         const { data: deviceData, error: deviceError } = await supabase
           .from('devices')
-          .select('*')
+          .select('id, serial_number, asset_type, material_type, warehouse, asset_status, asset_group, far_code, updated_at')
           .eq('asset_type', asset.assetType)
           .in('serial_number', allSerials)
+          .eq('is_deleted', false)
           .order('updated_at', { ascending: false });
 
-        if (!deviceError && deviceData) {
-          const latestBySerial: Record<string, any> = {};
-          deviceData.forEach((device: any) => {
-            if (!device.is_deleted && (!latestBySerial[device.serial_number] || new Date(device.updated_at) > new Date(latestBySerial[device.serial_number].updated_at))) {
-              latestBySerial[device.serial_number] = device;
-            }
-          });
+        if (deviceError) {
+          console.error('Device fetch error:', deviceError.message);
+          errors[asset.id] = serialErrors;
+          continue;
+        }
 
-          if (!isInward) {
-            const newStatuses = [...asset.assetStatuses];
-            const newGroups = [...asset.assetGroups];
-            let updated = false;
+        const latestBySerial: Record<string, any> = {};
+        deviceData?.forEach((device: any) => {
+          if (!latestBySerial[device.serial_number] || new Date(device.updated_at) > new Date(latestBySerial[device.serial_number].updated_at)) {
+            latestBySerial[device.serial_number] = device;
+          }
+        });
 
-            for (let i = 0; i < asset.serialNumbers.length; i++) {
-              const serial = asset.serialNumbers[i]?.trim();
-              if (serial) {
-                const latestDevice = latestBySerial[serial];
-                if (latestDevice && latestDevice.material_type === 'Inward') {
-                  if (newStatuses[i] === 'Fresh' || !newStatuses[i]) {
-                    newStatuses[i] = latestDevice.asset_status || 'Fresh';
-                    updated = true;
-                  }
-                  if (newGroups[i] === 'NFA' || !newGroups[i]) {
-                    newGroups[i] = latestDevice.asset_group || 'NFA';
-                    updated = true;
-                  }
-                }
-              }
-            }
-
-            if (updated) {
-              setAssets(prevAssets => prevAssets.map(a => 
-                a.id === asset.id ? { ...a, assetStatuses: newStatuses, assetGroups: newGroups } : a
-              ));
-            }
+        for (let i = 0; i < asset.serialNumbers.length; i++) {
+          const serial = asset.serialNumbers[i]?.trim();
+          if (!serial) {
+            continue;
           }
 
-          for (let i = 0; i < asset.serialNumbers.length; i++) {
-            const serial = asset.serialNumbers[i]?.trim();
-            if (serial && !serialErrors[i]) {
-              const latestDevice = latestBySerial[serial];
-              if (latestDevice) {
-                if (latestDevice.material_type === 'Outward') {
-                  serialErrors[i] = `Currently Outward in ${latestDevice.warehouse}`;
-                } else if (latestDevice.material_type === 'Inward') {
-                  if (latestDevice.warehouse !== asset.location) {
-                    serialErrors[i] = `In ${latestDevice.warehouse} stock`;
-                  }
-                }
-              } else if (!isInward) {
-                serialErrors[i] = 'Not in stock';
+          const latestDevice = latestBySerial[serial];
+          if (latestDevice) {
+            if (isInward) {
+              // Allow user-defined values for Inward, fetched values are editable
+            } else {
+              const newStatuses = [...asset.assetStatuses];
+              const newGroups = [...asset.assetGroups];
+              const newFarCodes = [...asset.farCodes];
+              newStatuses[i] = latestDevice.asset_status || '';
+              newGroups[i] = latestDevice.asset_group || '';
+              newFarCodes[i] = latestDevice.far_code || '';
+              setAssets(prevAssets =>
+                prevAssets.map(a =>
+                  a.id === asset.id ? { ...a, assetStatuses: newStatuses, assetGroups: newGroups, farCodes: newFarCodes } : a
+                )
+              );
+
+              // Additional validation for location and material type
+              if (isInward && latestDevice.material_type === 'Inward' && latestDevice.warehouse !== asset.location) {
+                serialErrors[i] = `Currently Inward in ${latestDevice.warehouse}`;
+              } else if (!isInward && latestDevice.material_type === 'Outward' && latestDevice.warehouse !== asset.location) {
+                serialErrors[i] = `Currently Outward in ${latestDevice.warehouse}`;
+              } else if (!isInward && latestDevice.material_type === 'Inward' && latestDevice.warehouse !== asset.location) {
+                serialErrors[i] = `Currently Inward in ${latestDevice.warehouse}`;
               }
+            }
+          } else {
+            if (!isInward) {
+              serialErrors[i] = 'Not in stock';
             }
           }
         }
@@ -274,6 +359,37 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
   useEffect(() => {
     validateSerials();
   }, [assets, orderType]);
+
+  const handleSerialChange = async (asset: AssetItem, index: number, serial: string) => {
+    if (!asset.hasSerials) return;
+
+    if (!serial.trim()) {
+      // Reset fields to default when serial number is cleared
+      setAssets(prevAssets =>
+        prevAssets.map(a => {
+          if (a.id === asset.id) {
+            const newStatuses = [...a.assetStatuses];
+            const newGroups = [...a.assetGroups];
+            const newFarCodes = [...a.farCodes];
+            newStatuses[index] = '';
+            newGroups[index] = '';
+            newFarCodes[index] = '';
+            return { 
+              ...a, 
+              assetStatuses: newStatuses, 
+              assetGroups: newGroups, 
+              farCodes: newFarCodes 
+            };
+          }
+          return a;
+        })
+      );
+      return;
+    }
+
+    // Fetch details for non-empty serial number
+    await fetchAssetDetails(asset, index, serial.trim());
+  };
 
   const validateForm = () => {
     if (!orderType) {
@@ -314,6 +430,11 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
 
       if (asset.asset_conditions.length !== asset.quantity) {
         toast({ title: 'Error', description: `Asset conditions count mismatch for ${asset.assetType}`, variant: 'destructive' });
+        return false;
+      }
+
+      if (asset.farCodes.length !== asset.quantity) {
+        toast({ title: 'Error', description: `FAR codes count mismatch for ${asset.assetType}`, variant: 'destructive' });
         return false;
       }
 
@@ -400,9 +521,10 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
 
         for (let i = 0; i < asset.quantity; i++) {
           const serialNumber = asset.hasSerials ? (asset.serialNumbers[i] || '') : '';
-          const assetStatus = asset.assetStatuses[i] || 'Fresh';
-          const assetGroup = asset.assetGroups[i] || 'NFA';
+          const assetStatus = asset.assetStatuses[i] || '';
+          const assetGroup = asset.assetGroups[i] || '';
           const assetCondition = asset.asset_conditions[i] || null;
+          const farCode = asset.farCodes[i] || null;
 
           await supabase.from('devices').insert({
             asset_type: asset.assetType,
@@ -423,7 +545,7 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
             asset_status: assetStatus,
             asset_group: assetGroup,
             asset_condition: assetCondition,
-            far_code: null,
+            far_code: farCode,
             created_by: userEmail,
             updated_by: userEmail,
           });
@@ -452,7 +574,6 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
     const isMandatorySerial = ['Tablet', 'TV'].includes(asset.assetType);
     const showSerialSection = isMandatorySerial || asset.hasSerials;
     const isInward = ['Stock', 'Return'].includes(orderType);
-    const isOutward = !isInward;
 
     return (
       <div key={asset.id} style={{ border: '1px solid #e5e7eb', borderRadius: '8px', padding: '16px', marginBottom: '16px', background: '#f9fafb' }}>
@@ -720,70 +841,74 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
           </div>
           {!showSerialSection && (
             <>
-              {isInward ? (
-                <>
-                  <div>
-                    <label style={{ fontSize: '12px', display: 'block', marginBottom: '4px' }}>Asset Status</label>
-                    <select
-                      value={asset.assetStatuses[0] || 'Fresh'}
-                      onChange={(e) => {
-                        const newStatuses = Array(asset.quantity).fill(e.target.value);
-                        updateAsset(asset.id, 'assetStatuses', newStatuses);
-                      }}
-                      style={{ width: '100%', padding: '8px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '14px' }}
-                    >
-                      {assetStatuses.map(s => <option key={s} value={s}>{s}</option>)}
-                    </select>
-                  </div>
-                  <div>
-                    <label style={{ fontSize: '12px', display: 'block', marginBottom: '4px' }}>Asset Group</label>
-                    <select
-                      value={asset.assetGroups[0] || 'NFA'}
-                      onChange={(e) => {
-                        const newGroups = Array(asset.quantity).fill(e.target.value);
-                        updateAsset(asset.id, 'assetGroups', newGroups);
-                      }}
-                      style={{ width: '100%', padding: '8px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '14px' }}
-                    >
-                      {assetGroups.map(g => <option key={g} value={g}>{g}</option>)}
-                    </select>
-                  </div>
-                  {(asset.assetStatuses[0] || 'Fresh') === 'Scrap' && (
-                    <div>
-                      <label style={{ fontSize: '12px', display: 'block', marginBottom: '4px' }}>Asset Condition</label>
-                      <input
-                        type="text"
-                        value={asset.asset_conditions[0] || ''}
-                        onChange={(e) => {
-                          const newConditions = Array(asset.quantity).fill(e.target.value);
-                          updateAsset(asset.id, 'asset_conditions', newConditions);
-                        }}
-                        style={{ width: '100%', padding: '8px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '14px' }}
-                      />
-                    </div>
-                  )}
-                </>
-              ) : (
-                <>
-                  <div>
-                    <label style={{ fontSize: '12px', display: 'block', marginBottom: '4px' }}>Asset Status</label>
-                    <input
-                      type="text"
-                      value={asset.assetStatuses[0] || 'Fresh'}
-                      disabled
-                      style={{ width: '100%', padding: '8px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '14px', background: '#f3f4f6' }}
-                    />
-                  </div>
-                  <div>
-                    <label style={{ fontSize: '12px', display: 'block', marginBottom: '4px' }}>Asset Group</label>
-                    <input
-                      type="text"
-                      value={asset.assetGroups[0] || 'NFA'}
-                      disabled
-                      style={{ width: '100%', padding: '8px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '14px', background: '#f3f4f6' }}
-                    />
-                  </div>
-                </>
+              <div>
+                <label style={{ fontSize: '12px', display: 'block', marginBottom: '4px' }}>Asset Status</label>
+                {isInward ? (
+                  <select
+                    value={asset.assetStatuses[0] || ''}
+                    onChange={(e) => {
+                      const newStatuses = Array(asset.quantity).fill(e.target.value);
+                      updateAsset(asset.id, 'assetStatuses', newStatuses);
+                    }}
+                    style={{ width: '100%', padding: '8px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '14px' }}
+                  >
+                    <option value="">Select Status</option>
+                    {assetStatuses.map(s => <option key={s} value={s}>{s}</option>)}
+                  </select>
+                ) : (
+                  <input
+                    type="text"
+                    value={asset.assetStatuses[0] || ''}
+                    disabled
+                    style={{ width: '100%', padding: '8px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '14px', background: '#f3f4f6' }}
+                  />
+                )}
+              </div>
+              <div>
+                <label style={{ fontSize: '12px', display: 'block', marginBottom: '4px' }}>Asset Group</label>
+                {isInward ? (
+                  <select
+                    value={asset.assetGroups[0] || ''}
+                    onChange={(e) => {
+                      const newGroups = Array(asset.quantity).fill(e.target.value);
+                      updateAsset(asset.id, 'assetGroups', newGroups);
+                    }}
+                    style={{ width: '100%', padding: '8px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '14px' }}
+                  >
+                    <option value="">Select Group</option>
+                    {assetGroups.map(g => <option key={g} value={g}>{g}</option>)}
+                  </select>
+                ) : (
+                  <input
+                    type="text"
+                    value={asset.assetGroups[0] || ''}
+                    disabled
+                    style={{ width: '100%', padding: '8px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '14px', background: '#f3f4f6' }}
+                  />
+                )}
+              </div>
+              <div>
+                <label style={{ fontSize: '12px', display: 'block', marginBottom: '4px' }}>FAR Code</label>
+                <input
+                  type="text"
+                  value={asset.farCodes[0] || ''}
+                  disabled
+                  style={{ width: '100%', padding: '8px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '14px', background: '#f3f4f6' }}
+                />
+              </div>
+              {isInward && (asset.assetStatuses[0] || '') === 'Scrap' && (
+                <div>
+                  <label style={{ fontSize: '12px', display: 'block', marginBottom: '4px' }}>Asset Condition</label>
+                  <input
+                    type="text"
+                    value={asset.asset_conditions[0] || ''}
+                    onChange={(e) => {
+                      const newConditions = Array(asset.quantity).fill(e.target.value);
+                      updateAsset(asset.id, 'asset_conditions', newConditions);
+                    }}
+                    style={{ width: '100%', padding: '8px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '14px' }}
+                  />
+                </div>
               )}
             </>
           )}
@@ -802,6 +927,7 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
                       const newSerials = [...asset.serialNumbers];
                       newSerials[index] = e.target.value;
                       updateAsset(asset.id, 'serialNumbers', newSerials);
+                      handleSerialChange(asset, index, e.target.value);
                     }}
                     placeholder={`Serial ${index + 1}`}
                     style={{
@@ -819,10 +945,10 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
                   >
                     <Camera size={16} />
                   </button>
-                  {isInward && (
+                  {isInward ? (
                     <>
                       <select
-                        value={asset.assetStatuses[index] || 'Fresh'}
+                        value={asset.assetStatuses[index] || ''}
                         onChange={(e) => {
                           const newStatuses = [...asset.assetStatuses];
                           newStatuses[index] = e.target.value;
@@ -830,10 +956,11 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
                         }}
                         style={{ width: '120px', padding: '8px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '14px', resize: 'none' }}
                       >
+                        <option value="">Select Status</option>
                         {assetStatuses.map(s => <option key={s} value={s}>{s}</option>)}
                       </select>
                       <select
-                        value={asset.assetGroups[index] || 'NFA'}
+                        value={asset.assetGroups[index] || ''}
                         onChange={(e) => {
                           const newGroups = [...asset.assetGroups];
                           newGroups[index] = e.target.value;
@@ -841,8 +968,15 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
                         }}
                         style={{ width: '80px', padding: '8px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '14px', resize: 'none' }}
                       >
+                        <option value="">Select Group</option>
                         {assetGroups.map(g => <option key={g} value={g}>{g}</option>)}
                       </select>
+                      <input
+                        type="text"
+                        value={asset.farCodes[index] || ''}
+                        disabled
+                        style={{ width: '120px', padding: '8px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '14px', background: '#f3f4f6', resize: 'none' }}
+                      />
                       {asset.assetStatuses[index] === 'Scrap' && (
                         <input
                           type="text"
@@ -857,20 +991,25 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
                         />
                       )}
                     </>
-                  )}
-                  {isOutward && (
+                  ) : (
                     <>
                       <input
                         type="text"
-                        value={asset.assetStatuses[index] || 'Fresh'}
+                        value={asset.assetStatuses[index] || ''}
                         disabled
                         style={{ width: '120px', padding: '8px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '14px', background: '#f3f4f6', resize: 'none' }}
                       />
                       <input
                         type="text"
-                        value={asset.assetGroups[index] || 'NFA'}
+                        value={asset.assetGroups[index] || ''}
                         disabled
                         style={{ width: '80px', padding: '8px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '14px', background: '#f3f4f6', resize: 'none' }}
+                      />
+                      <input
+                        type="text"
+                        value={asset.farCodes[index] || ''}
+                        disabled
+                        style={{ width: '120px', padding: '8px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '14px', background: '#f3f4f6', resize: 'none' }}
                       />
                     </>
                   )}
@@ -990,510 +1129,509 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
       </div>
 
       {showBulk && (
-        <div style={{ display: 'flex', gap: '16px', marginBottom: '16px' }}>
-          <div style={{ flex: 1, border: '1px solid #e5e7eb', borderRadius: '8px', padding: '16px', background: '#fff' }}>
-            <h3 style={{ fontSize: '16px', fontWeight: 'bold', marginBottom: '12px' }}>Bulk Upload (CSV)</h3>
-            <div style={{ marginTop: '16px', padding: '12px', background: '#f9fafb', borderRadius: '4px' }}>
-              <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginBottom: '8px' }}>
-                <label style={{ fontSize: '14px', fontWeight: 'bold' }}>Bulk Upload (CSV)</label>
-                <button
-                  onClick={() => {
-                    const headers = ['Sales Order', 'Deal ID', 'School Name', 'Nucleus ID', 'Order Type', 'Asset Type', 'Model', 'Configuration', 'Product', 'SD Card Size', 'Profile ID', 'Location', 'Quantity', 'Serial Number', 'Asset Status', 'Asset Group'];
-                    const rows = [
-                      ['SO-1-abcde', 'DEAL123', 'School A', 'NUC001', 'Hardware', 'Tablet', 'Lenovo TB301XU', '4G+64 GB (Android-13)', 'Lead', '128 GB', 'Profile 1', 'Trichy', '3', 'SN001', 'Fresh', 'NFA'],
-                      ['SO-1-abcde', 'DEAL123', 'School A', 'NUC001', 'Hardware', 'Tablet', 'Lenovo TB301XU', '4G+64 GB (Android-13)', 'Lead', '128 GB', 'Profile 1', 'Trichy', '', 'SN002', 'Fresh', 'NFA'],
-                      ['SO-1-abcde', 'DEAL123', 'School A', 'NUC001', 'Hardware', 'Tablet', 'Lenovo TB301XU', '4G+64 GB (Android-13)', 'Lead', '128 GB', 'Profile 1', 'Trichy', '', 'SN003', 'Fresh', 'NFA'],
-                      ['SO-1-abcde', 'DEAL123', 'School A', 'NUC001', 'Hardware', 'TV', 'Hyundai TV - 43"', 'Smart TV', 'Propel', '', '', 'Bangalore', '1', 'SN004', 'Fresh', 'NFA'],
-                      ['SO-1-abcde', 'DEAL123', 'School A', 'NUC001', 'Hardware', 'SD Card', '256 GB', '', '', '', 'Profile 2', 'Hyderabad', '1', '', 'Fresh', 'NFA'],
-                      ['SO-1-abcde', 'DEAL123', 'School A', 'NUC001', 'Hardware', 'Cover', 'M8 Flap Cover 4th gen - Lead', '', 'Lead', '', '', 'Trichy', '1', '', 'Fresh', 'NFA'],
-                      ['SO-1-abcde', 'DEAL123', 'School A', 'NUC001', 'Hardware', 'Pendrive', '64 GB', '', 'Lead', '', '', 'Trichy', '1', 'SN005', 'Fresh', 'NFA'],
-                      ['SO-1-abcde', 'DEAL123', 'School A', 'NUC001', 'Hardware', 'Other', 'Sample Material', '', 'Lead', '', '', 'Trichy', '1', '', 'Fresh', 'NFA'],
-                    ];
-                    const quoteCsvValue = (value) => {
-                      const str = String(value || '');
-                      const needsQuotes = /["\n\r,]/u.test(str) || str.trimStart() !== str || str.trimEnd() !== str;
-                      const escaped = str.replace(/"/g, '""');
-                      return needsQuotes ? `"${escaped}"` : escaped;
-                    };
-                    const csvTemplate = headers.map(quoteCsvValue).join(',') + '\n' + 
-                                      rows.map(row => row.map(quoteCsvValue).join(',')).join('\n');
-                    const bom = new Uint8Array([0xEF, 0xBB, 0xBF]);
-                    const blob = new Blob([bom, csvTemplate], { type: 'text/csv;charset=utf-8;' });
-                    const url = URL.createObjectURL(blob);
-                    const a = document.createElement('a');
-                    a.href = url;
-                    a.download = 'bulk_upload_template.csv';
-                    a.click();
-                    URL.revokeObjectURL(url);
-                  }}
-                  style={{ padding: '6px 12px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '12px', background: '#fff', cursor: 'pointer' }}
-                >
-                  Download Template
-                </button>
-              </div>
-              <input
-                type="file"
-                accept=".csv"
-                onChange={(e) => {
-                  const file = e.target.files?.[0];
-                  if (!file) return;
+  <div style={{ display: 'flex', gap: '16px', marginBottom: '16px' }}>
+    <div style={{ flex: 1, border: '1px solid #e5e7eb', borderRadius: '8px', padding: '16px', background: '#fff' }}>
+      <h3 style={{ fontSize: '16px', fontWeight: 'bold', marginBottom: '12px' }}>Bulk Upload (CSV)</h3>
+      <div style={{ marginTop: '16px', padding: '12px', background: '#f9fafb', borderRadius: '4px' }}>
+        <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginBottom: '8px' }}>
+          <label style={{ fontSize: '14px', fontWeight: 'bold' }}>Bulk Upload (CSV)</label>
+          <button
+            onClick={() => {
+              const headers = ['Sales Order', 'Deal ID', 'School Name', 'Nucleus ID', 'Order Type', 'Asset Type', 'Model', 'Configuration', 'Product', 'SD Card Size', 'Profile ID', 'Location', 'Quantity', 'Serial Number', 'Asset Status', 'Asset Group'];
+              const rows = [
+                ['SO-1-abcde', 'DEAL123', 'School A', 'NUC001', 'Hardware', 'Tablet', 'Lenovo TB301XU', '4G+64 GB (Android-13)', 'Lead', '128 GB', 'Profile 1', 'Trichy', '3', 'SN001', '', ''],
+                ['SO-1-abcde', 'DEAL123', 'School A', 'NUC001', 'Hardware', 'Tablet', 'Lenovo TB301XU', '4G+64 GB (Android-13)', 'Lead', '128 GB', 'Profile 1', 'Trichy', '', 'SN002', '', ''],
+                ['SO-1-abcde', 'DEAL123', 'School A', 'NUC001', 'Hardware', 'Tablet', 'Lenovo TB301XU', '4G+64 GB (Android-13)', 'Lead', '128 GB', 'Profile 1', 'Trichy', '', 'SN003', '', ''],
+                ['SO-1-abcde', 'DEAL123', 'School A', 'NUC001', 'Hardware', 'TV', 'Hyundai TV - 43"', 'Smart TV', 'Propel', '', '', 'Bangalore', '1', 'SN004', '', ''],
+                ['SO-1-abcde', 'DEAL123', 'School A', 'NUC001', 'Hardware', 'SD Card', '256 GB', '', '', '', 'Profile 2', 'Hyderabad', '1', '', '', ''],
+                ['SO-1-abcde', 'DEAL123', 'School A', 'NUC001', 'Hardware', 'Cover', 'M8 Flap Cover 4th gen - Lead', '', 'Lead', '', '', 'Trichy', '1', '', '', ''],
+                ['SO-1-abcde', 'DEAL123', 'School A', 'NUC001', 'Hardware', 'Pendrive', '64 GB', '', 'Lead', '', '', 'Trichy', '1', 'SN005', '', ''],
+                ['SO-1-abcde', 'DEAL123', 'School A', 'NUC001', 'Hardware', 'Other', 'Sample Material', '', 'Lead', '', '', 'Trichy', '1', '', '', ''],
+              ];
+              const quoteCsvValue = (value) => {
+                const str = String(value || '');
+                const needsQuotes = /["\n\r,]/u.test(str) || str.trimStart() !== str || str.trimEnd() !== str;
+                const escaped = str.replace(/"/g, '""');
+                return needsQuotes ? `"${escaped}"` : escaped;
+              };
+              const csvTemplate = headers.map(quoteCsvValue).join(',') + '\n' + 
+                                rows.map(row => row.map(quoteCsvValue).join(',')).join('\n');
+              const bom = new Uint8Array([0xEF, 0xBB, 0xBF]);
+              const blob = new Blob([bom, csvTemplate], { type: 'text/csv;charset=utf-8;' });
+              const url = URL.createObjectURL(blob);
+              const a = document.createElement('a');
+              a.href = url;
+              a.download = 'bulk_upload_template.csv';
+              a.click();
+              URL.revokeObjectURL(url);
+            }}
+            style={{ padding: '6px 12px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '12px', background: '#fff', cursor: 'pointer' }}
+          >
+            Download Template
+          </button>
+        </div>
+        <input
+          type="file"
+          accept=".csv"
+          onChange={(e) => {
+            const file = e.target.files?.[0];
+            if (!file) return;
 
-                  const reader = new FileReader();
-                  reader.onload = async (evt) => {
-                    try {
-                      const text = evt.target?.result as string;
-                      const lines = text.trim().split('\n').filter(line => line.trim());
-                      if (lines.length < 2) throw new Error('CSV must contain at least a header and one data row');
+            const reader = new FileReader();
+            reader.onload = async (evt) => {
+              try {
+                const text = evt.target?.result as string;
+                const lines = text.trim().split('\n').filter(line => line.trim());
+                if (lines.length < 2) throw new Error('CSV must contain at least a header and one data row');
 
-                      const parseCsvLine = (line: string) => {
-                        const values: string[] = [];
-                        let current = '';
-                        let inQuotes = false;
-                        let i = 0;
+                const parseCsvLine = (line: string) => {
+                  const values: string[] = [];
+                  let current = '';
+                  let inQuotes = false;
+                  let i = 0;
 
-                        while (i < line.length) {
-                          const char = line[i];
-                          if (char === '"') {
-                            if (inQuotes) {
-                              if (i + 1 < line.length && line[i + 1] === '"') {
-                                current += '"';
-                                i++;
-                              } else {
-                                inQuotes = false;
-                              }
-                            } else {
-                              inQuotes = true;
-                            }
-                          } else if (char === ',' && !inQuotes) {
-                            values.push(current);
-                            current = '';
-                          } else {
-                            current += char;
-                          }
+                  while (i < line.length) {
+                    const char = line[i];
+                    if (char === '"') {
+                      if (inQuotes) {
+                        if (i + 1 < line.length && line[i + 1] === '"') {
+                          current += '"';
                           i++;
-                        }
-                        values.push(current);
-                        return values.map(v => {
-                          if (v.startsWith('"') && v.endsWith('"')) {
-                            v = v.slice(1, -1);
-                          }
-                          return v.replace(/""/g, '"');
-                        });
-                      };
-
-                      const headers = parseCsvLine(lines[0]);
-                      const expectedHeaders = [
-                        'Sales Order', 'Deal ID', 'School Name', 'Nucleus ID', 'Order Type', 
-                        'Asset Type', 'Model', 'Configuration', 'Product', 'SD Card Size', 
-                        'Profile ID', 'Location', 'Quantity', 'Serial Number', 'Asset Status', 'Asset Group'
-                      ];
-                      
-                      if (headers.length !== expectedHeaders.length) {
-                        throw new Error(`Expected ${expectedHeaders.length} columns, found ${headers.length}`);
-                      }
-                      if (!headers.every((h, i) => h.trim() === expectedHeaders[i])) {
-                        throw new Error('CSV header mismatch. Please use the provided template.');
-                      }
-
-                      const errors: { values: string[], error: string }[] = [];
-                      const groupedAssets: Record<string, any> = {};
-
-                      for (let i = 1; i < lines.length; i++) {
-                        try {
-                          const values = parseCsvLine(lines[i]);
-                          if (values.length !== headers.length) {
-                            errors.push({ 
-                              values: [...values, ...Array(headers.length - values.length).fill('')], 
-                              error: `Expected ${headers.length} columns, found ${values.length}` 
-                            });
-                            continue;
-                          }
-
-                          const getValue = (headerName: string) => {
-                            const index = headers.indexOf(headerName);
-                            return index !== -1 ? (values[index] || '').trim() : '';
-                          };
-
-                          const salesOrderVal = getValue('Sales Order');
-                          const dealIdVal = getValue('Deal ID');
-                          const schoolNameVal = getValue('School Name');
-                          const nucleusIdVal = getValue('Nucleus ID');
-                          const orderTypeVal = getValue('Order Type');
-                          const assetTypeVal = getValue('Asset Type');
-                          const modelVal = getValue('Model');
-                          const configVal = getValue('Configuration');
-                          const productVal = getValue('Product');
-                          const sdCardVal = getValue('SD Card Size');
-                          const profileVal = getValue('Profile ID');
-                          const locationVal = getValue('Location');
-                          const quantityStr = getValue('Quantity');
-                          const serialVal = getValue('Serial Number');
-                          const statusVal = getValue('Asset Status') || 'Fresh';
-                          const groupVal = getValue('Asset Group') || 'NFA';
-
-                          const quantityVal = parseInt(quantityStr) || (serialVal ? 1 : 0);
-
-                          if (!locationVal || !assetTypeVal) {
-                            errors.push({ values, error: 'Location and Asset Type are required' });
-                            continue;
-                          }
-
-                          if (['TV', 'Tablet', 'SD Card', 'Cover', 'Pendrive', 'Other'].includes(assetTypeVal) && !modelVal) {
-                            errors.push({ values, error: `Model is required for ${assetTypeVal} assets` });
-                            continue;
-                          }
-
-                          const groupingKey = [
-                            assetTypeVal || '',
-                            modelVal || '',
-                            configVal || '',
-                            productVal || '',
-                            sdCardVal || '',
-                            profileVal || '',
-                            locationVal || ''
-                          ].join('_').replace(/[^a-zA-Z0-9_-]/g, '_');
-
-                          if (!groupedAssets[groupingKey]) {
-                            groupedAssets[groupingKey] = {
-                              id: generateId(),
-                              assetType: assetTypeVal,
-                              model: modelVal,
-                              configuration: configVal,
-                              product: productVal,
-                              sdCardSize: assetTypeVal === 'SD Card' ? modelVal : sdCardVal,
-                              profileId: profileVal,
-                              quantity: 0,
-                              location: locationVal,
-                              serialNumbers: [],
-                              assetStatuses: [],
-                              assetGroups: [],
-                              asset_conditions: [],
-                              hasSerials: !!serialVal || defaultHasSerials(assetTypeVal),
-                            };
-                          }
-
-                          const currentAsset = groupedAssets[groupingKey];
-
-                          if (quantityVal > 0 && !serialVal) {
-                            currentAsset.quantity += quantityVal;
-                          } else if (serialVal) {
-                            currentAsset.quantity += 1;
-                            currentAsset.serialNumbers.push(serialVal);
-                            currentAsset.assetStatuses.push(statusVal);
-                            currentAsset.assetGroups.push(groupVal);
-                            currentAsset.asset_conditions.push('');
-                          }
-
-                          if (currentAsset.serialNumbers.length === 0 && currentAsset.quantity > 0) {
-                            if (!currentAsset.assetStatuses[0]) {
-                              currentAsset.assetStatuses[0] = statusVal;
-                            }
-                            if (!currentAsset.assetGroups[0]) {
-                              currentAsset.assetGroups[0] = groupVal;
-                            }
-                          }
-
-                          if (salesOrderVal && !salesOrder) setSalesOrder(salesOrderVal);
-                          if (dealIdVal && !dealId) setDealId(dealIdVal);
-                          if (schoolNameVal && !schoolName) setSchoolName(schoolNameVal);
-                          if (nucleusIdVal && !nucleusId) setNucleusId(nucleusIdVal);
-                          if (orderTypeVal && !orderType) setOrderType(orderTypeVal);
-
-                        } catch (rowError) {
-                          errors.push({ 
-                            values: parseCsvLine(lines[i]), 
-                            error: `Row parsing error: ${rowError.message}` 
-                          });
-                        }
-                      }
-
-                      const newAssets = Object.values(groupedAssets).map(asset => ({
-                        ...asset,
-                        quantity: asset.serialNumbers.length || asset.quantity,
-                        serialNumbers: asset.serialNumbers.length 
-                          ? asset.serialNumbers 
-                          : Array(asset.quantity).fill(''),
-                        assetStatuses: asset.assetStatuses.length 
-                          ? asset.assetStatuses 
-                          : Array(asset.quantity).fill(asset.assetStatuses[0] || 'Fresh'),
-                        assetGroups: asset.assetGroups.length 
-                          ? asset.assetGroups 
-                          : Array(asset.quantity).fill(asset.assetGroups[0] || 'NFA'),
-                        asset_conditions: Array(asset.quantity).fill(''),
-                      }));
-
-                      if (errors.length > 0) {
-                        const confirmDownload = window.confirm(
-                          `There are ${errors.length} errors. Download error CSV? (OK to download, Cancel to skip)`
-                        );
-                        if (confirmDownload) {
-                          const quoteCsvValue = (value) => {
-                            const str = String(value || '');
-                            const needsQuotes = /["\n\r,]/u.test(str) || str.trimStart() !== str || str.trimEnd() !== str;
-                            const escaped = str.replace(/"/g, '""');
-                            return needsQuotes ? `"${escaped}"` : escaped;
-                          };
-                          let errorCsv = [...headers, 'Error'].map(quoteCsvValue).join(',') + '\n';
-                          errors.forEach(({ values, error }) => {
-                            const row = [...values.slice(0, headers.length), error].map(quoteCsvValue).join(',');
-                            errorCsv += row + '\n';
-                          });
-                          const bom = new Uint8Array([0xEF, 0xBB, 0xBF]);
-                          const blob = new Blob([bom, errorCsv], { type: 'text/csv;charset=utf-8;' });
-                          const url = URL.createObjectURL(blob);
-                          const a = document.createElement('a');
-                          a.href = url;
-                          a.download = 'bulk_upload_errors.csv';
-                          a.click();
-                          URL.revokeObjectURL(url);
-                        }
-                        if (newAssets.length > 0) {
-                          setAssets(prevAssets => [...prevAssets, ...newAssets]);
-                          toast({ 
-                            title: 'Partial Success', 
-                            description: `Imported ${newAssets.length} assets from CSV (${errors.length} errors)` 
-                          });
+                        } else {
+                          inQuotes = false;
                         }
                       } else {
-                        setAssets(prevAssets => [...prevAssets, ...newAssets]);
-                        toast({ 
-                          title: 'Success', 
-                          description: `Imported ${newAssets.length} assets from CSV` 
-                        });
+                        inQuotes = true;
                       }
-
-                    } catch (error) {
-                      console.error('CSV Processing Error:', error);
-                      toast({ 
-                        title: 'Error', 
-                        description: `Failed to parse CSV file. Please check format. Details: ${error.message}`, 
-                        variant: 'destructive' 
-                      });
+                    } else if (char === ',' && !inQuotes) {
+                      values.push(current);
+                      current = '';
+                    } else {
+                      current += char;
                     }
-                  };
-                  reader.readAsText(file, 'utf-8');
-                }}
-                style={{ width: '100%', padding: '8px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '14px' }}
-              />
-            </div>
-          </div>
+                    i++;
+                  }
+                  values.push(current);
+                  return values.map(v => {
+                    if (v.startsWith('"') && v.endsWith('"')) {
+                      v = v.slice(1, -1);
+                    }
+                    return v.replace(/""/g, '"');
+                  });
+                };
 
-          <div style={{ flex: 1, border: '1px solid #e5e7eb', borderRadius: '8px', padding: '16px', background: '#fff' }}>
-            <h3 style={{ fontSize: '16px', fontWeight: 'bold', marginBottom: '12px' }}>Bulk Update Asset Group and FAR Code (CSV)</h3>
-            <div style={{ marginTop: '16px', padding: '12px', background: '#f9fafb', borderRadius: '4px' }}>
-              <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginBottom: '8px' }}>
-                <label style={{ fontSize: '14px', fontWeight: 'bold' }}>Bulk Update (CSV)</label>
-                <button
-                  onClick={() => {
-                    const headers = ['Serial number', 'Location', 'Asset group', 'FAR Code'];
-                    const rows = [
-                      ['SN001', 'Trichy', 'NFA', 'FAR001'],
-                      ['SN002', 'Bangalore', 'NFA', 'FAR002']
-                    ];
+                const headers = parseCsvLine(lines[0]);
+                const expectedHeaders = [
+                  'Sales Order', 'Deal ID', 'School Name', 'Nucleus ID', 'Order Type', 
+                  'Asset Type', 'Model', 'Configuration', 'Product', 'SD Card Size', 
+                  'Profile ID', 'Location', 'Quantity', 'Serial Number', 'Asset Status', 
+                  'Asset Group'
+                ];
+                
+                if (headers.length !== expectedHeaders.length) {
+                  throw new Error(`Expected ${expectedHeaders.length} columns, found ${headers.length}`);
+                }
+                if (!headers.every((h, i) => h.trim() === expectedHeaders[i])) {
+                  throw new Error('CSV header mismatch. Please use the provided template.');
+                }
+
+                const errors: { values: string[], error: string }[] = [];
+                const groupedAssets: Record<string, any> = {};
+
+                for (let i = 1; i < lines.length; i++) {
+                  try {
+                    const values = parseCsvLine(lines[i]);
+                    if (values.length !== headers.length) {
+                      errors.push({ 
+                        values: [...values, ...Array(headers.length - values.length).fill('')], 
+                        error: `Expected ${headers.length} columns, found ${values.length}` 
+                      });
+                      continue;
+                    }
+
+                    const getValue = (headerName: string) => {
+                      const index = headers.indexOf(headerName);
+                      return index !== -1 ? (values[index] || '').trim() : '';
+                    };
+
+                    const salesOrderVal = getValue('Sales Order');
+                    const dealIdVal = getValue('Deal ID');
+                    const schoolNameVal = getValue('School Name');
+                    const nucleusIdVal = getValue('Nucleus ID');
+                    const orderTypeVal = getValue('Order Type');
+                    const assetTypeVal = getValue('Asset Type');
+                    const modelVal = getValue('Model');
+                    const configVal = getValue('Configuration');
+                    const productVal = getValue('Product');
+                    const sdCardVal = getValue('SD Card Size');
+                    const profileVal = getValue('Profile ID');
+                    const locationVal = getValue('Location');
+                    const quantityStr = getValue('Quantity');
+                    const serialVal = getValue('Serial Number');
+                    const statusVal = getValue('Asset Status') || '';
+                    const groupVal = getValue('Asset Group') || '';
+
+                    const quantityVal = parseInt(quantityStr) || (serialVal ? 1 : 0);
+
+                    if (!locationVal || !assetTypeVal) {
+                      errors.push({ values, error: 'Location and Asset Type are required' });
+                      continue;
+                    }
+
+                    if (['TV', 'Tablet', 'SD Card', 'Cover', 'Pendrive', 'Other'].includes(assetTypeVal) && !modelVal) {
+                      errors.push({ values, error: `Model is required for ${assetTypeVal} assets` });
+                      continue;
+                    }
+
+                    const groupingKey = [
+                      assetTypeVal || '',
+                      modelVal || '',
+                      configVal || '',
+                      productVal || '',
+                      sdCardVal || '',
+                      profileVal || '',
+                      locationVal || ''
+                    ].join('_').replace(/[^a-zA-Z0-9_-]/g, '_');
+
+                    if (!groupedAssets[groupingKey]) {
+                      groupedAssets[groupingKey] = {
+                        id: generateId(),
+                        assetType: assetTypeVal,
+                        model: modelVal,
+                        configuration: configVal,
+                        product: productVal,
+                        sdCardSize: assetTypeVal === 'SD Card' ? modelVal : sdCardVal,
+                        profileId: profileVal,
+                        quantity: 0,
+                        location: locationVal,
+                        serialNumbers: [],
+                        assetStatuses: [],
+                        assetGroups: [],
+                        asset_conditions: [],
+                        farCodes: [],
+                        hasSerials: !!serialVal || defaultHasSerials(assetTypeVal),
+                        lastFetchedOrderType: undefined,
+                      };
+                    }
+
+                    const currentAsset = groupedAssets[groupingKey];
+
+                    if (quantityVal > 0 && !serialVal) {
+                      currentAsset.quantity += quantityVal;
+                    } else if (serialVal) {
+                      currentAsset.quantity += 1;
+                      currentAsset.serialNumbers.push(serialVal);
+                      currentAsset.assetStatuses.push(statusVal);
+                      currentAsset.assetGroups.push(groupVal);
+                      currentAsset.asset_conditions.push('');
+                      currentAsset.farCodes.push('');
+                    }
+
+                    if (currentAsset.serialNumbers.length === 0 && currentAsset.quantity > 0) {
+                      if (!currentAsset.assetStatuses[0]) {
+                        currentAsset.assetStatuses[0] = statusVal;
+                      }
+                      if (!currentAsset.assetGroups[0]) {
+                        currentAsset.assetGroups[0] = groupVal;
+                      }
+                      if (!currentAsset.farCodes[0]) {
+                        currentAsset.farCodes[0] = '';
+                      }
+                    }
+
+                    if (salesOrderVal && !salesOrder) setSalesOrder(salesOrderVal);
+                    if (dealIdVal && !dealId) setDealId(dealIdVal);
+                    if (schoolNameVal && !schoolName) setSchoolName(schoolNameVal);
+                    if (nucleusIdVal && !nucleusId) setNucleusId(nucleusIdVal);
+                    if (orderTypeVal && !orderType) setOrderType(orderTypeVal);
+
+                  } catch (rowError) {
+                    errors.push({ 
+                      values: parseCsvLine(lines[i]), 
+                      error: `Row parsing error: ${rowError.message}` 
+                    });
+                  }
+                }
+
+                const newAssets = Object.values(groupedAssets).map(asset => ({
+                  ...asset,
+                  quantity: asset.serialNumbers.length || asset.quantity,
+                  serialNumbers: asset.serialNumbers.length 
+                    ? asset.serialNumbers 
+                    : Array(asset.quantity).fill(''),
+                  assetStatuses: asset.assetStatuses.length 
+                    ? asset.assetStatuses 
+                    : Array(asset.quantity).fill(asset.assetStatuses[0] || ''),
+                  assetGroups: asset.assetGroups.length 
+                    ? asset.assetGroups 
+                    : Array(asset.quantity).fill(asset.assetGroups[0] || ''),
+                  asset_conditions: Array(asset.quantity).fill(''),
+                  farCodes: asset.farCodes.length 
+                    ? asset.farCodes 
+                    : Array(asset.quantity).fill(asset.farCodes[0] || ''),
+                }));
+
+                if (errors.length > 0) {
+                  const confirmDownload = window.confirm(
+                    `There are ${errors.length} errors. Download error CSV? (OK to download, Cancel to skip)`
+                  );
+                  if (confirmDownload) {
                     const quoteCsvValue = (value) => {
                       const str = String(value || '');
                       const needsQuotes = /["\n\r,]/u.test(str) || str.trimStart() !== str || str.trimEnd() !== str;
                       const escaped = str.replace(/"/g, '""');
                       return needsQuotes ? `"${escaped}"` : escaped;
                     };
-                    const csvTemplate = headers.map(quoteCsvValue).join(',') + '\n' + rows.map(row => row.map(quoteCsvValue).join(',')).join('\n');
+                    let errorCsv = [...headers, 'Error'].map(quoteCsvValue).join(',') + '\n';
+                    errors.forEach(({ values, error }) => {
+                      const row = [...values.slice(0, headers.length), error].map(quoteCsvValue).join(',');
+                      errorCsv += row + '\n';
+                    });
                     const bom = new Uint8Array([0xEF, 0xBB, 0xBF]);
-                    const blob = new Blob([bom, csvTemplate], { type: 'text/csv;charset=utf-8;' });
+                    const blob = new Blob([bom, errorCsv], { type: 'text/csv;charset=utf-8;' });
                     const url = URL.createObjectURL(blob);
                     const a = document.createElement('a');
                     a.href = url;
-                    a.download = 'asset_details_template.csv';
+                    a.download = 'bulk_upload_errors.csv';
                     a.click();
                     URL.revokeObjectURL(url);
-                  }}
-                  style={{ padding: '6px 12px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '12px', background: '#fff', cursor: 'pointer' }}
-                >
-                  Download Template
-                </button>
-              </div>
-              {progress && (
-                <div style={{ fontSize: '14px', color: '#3b82f6', marginBottom: '8px' }}>
-                  {progress}
-                </div>
-              )}
-              <input
-                type="file"
-                accept=".csv"
-                onChange={async (e) => {
-                  const file = e.target.files?.[0];
-                  if (!file) return;
+                  }
+                  if (newAssets.length > 0) {
+                    setAssets(prevAssets => [...prevAssets, ...newAssets]);
+                    toast({ 
+                      title: 'Partial Success', 
+                      description: `Imported ${newAssets.length} assets from CSV (${errors.length} errors)` 
+                    });
+                  }
+                } else {
+                  setAssets(prevAssets => [...prevAssets, ...newAssets]);
+                  toast({ 
+                    title: 'Success', 
+                    description: `Imported ${newAssets.length} assets from CSV` 
+                  });
+                }
 
-                  const reader = new FileReader();
-                  reader.onload = async (evt) => {
-                    try {
-                      const text = evt.target?.result as string;
-                      const lines = text.trim().split('\n').filter(line => line.trim());
-                      if (lines.length < 1) throw new Error('CSV must contain at least a header row');
+              } catch (error) {
+                console.error('CSV Processing Error:', error);
+                toast({ 
+                  title: 'Error', 
+                  description: `Failed to parse CSV file. Please check format. Details: ${error.message}`, 
+                  variant: 'destructive' 
+                });
+              }
+            };
+            reader.readAsText(file, 'utf-8');
+          }}
+          style={{ width: '100%', padding: '8px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '14px' }}
+        />
+      </div>
+    </div>
 
-                      const parseCsvLine = (line: string) => {
-                        const values: string[] = [];
-                        let current = '';
-                        let inQuotes = false;
-                        let i = 0;
-
-                        while (i < line.length) {
-                          const char = line[i];
-                          if (char === '"') {
-                            if (inQuotes) {
-                              if (i + 1 < line.length && line[i + 1] === '"') {
-                                current += '"';
-                                i++;
-                              } else {
-                                inQuotes = false;
-                              }
-                            } else {
-                              inQuotes = true;
-                            }
-                          } else if (char === ',' && !inQuotes) {
-                            values.push(current);
-                            current = '';
-                          } else {
-                            current += char;
-                          }
-                          i++;
-                        }
-                        values.push(current);
-                        return values.map(v => {
-                          if (v.startsWith('"') && v.endsWith('"')) {
-                            v = v.slice(1, -1);
-                          }
-                          return v.replace(/""/g, '"');
-                        });
-                      };
-
-                      const headers = parseCsvLine(lines[0]);
-                      const expectedHeaders = ['Serial number', 'Location', 'Asset group', 'FAR Code'];
-                      
-                      if (headers.length !== expectedHeaders.length || !headers.every((h, i) => h.trim() === expectedHeaders[i])) {
-                        throw new Error('CSV header mismatch. Please use the provided template.');
-                      }
-
-                      const errors: { values: string[], error: string }[] = [];
-                      const updatedSerials: string[] = [];
-                      const totalRows = lines.length - 1; // Exclude header
-
-                      for (let i = 1; i < lines.length; i++) {
-                        setProgress(`Updating ${i}/${totalRows}`);
-                        const values = parseCsvLine(lines[i]);
-                        if (values.length !== headers.length) {
-                          errors.push({ values: [...values, ...Array(headers.length - values.length).fill('')], error: 'Incorrect number of columns' });
-                          continue;
-                        }
-
-                        const getValue = (headerName: string) => {
-                          const index = headers.indexOf(headerName);
-                          return index !== -1 ? (values[index] || '').trim() : '';
-                        };
-
-                        const serial = getValue('Serial number');
-                        const location = getValue('Location');
-                        const asset_group = getValue('Asset group');
-                        const far_code = getValue('FAR Code');
-
-                        if (!serial) {
-                          errors.push({ values, error: 'Missing serial number' });
-                          continue;
-                        }
-
-                        const { data: deviceData, error: fetchError } = await supabase
-                          .from('devices')
-                          .select('*')
-                          .eq('serial_number', serial)
-                          .eq('is_deleted', false)
-                          .order('updated_at', { ascending: false })
-                          .limit(1);
-
-                        if (fetchError || !deviceData || deviceData.length === 0) {
-                          errors.push({ values, error: 'Serial number not available' });
-                          continue;
-                        }
-
-                        const device = deviceData[0];
-
-                        if (device.material_type !== 'Inward') {
-                          errors.push({ values, error: 'Not inward material type' });
-                          continue;
-                        }
-
-                        if (device.warehouse !== location) {
-                          errors.push({ values, error: 'Location not matched' });
-                          continue;
-                        }
-
-                        if (device.far_code) {
-                          errors.push({ values, error: `FAR Code already available - Existing FAR Code is ${device.far_code}` });
-                          continue;
-                        }
-
-                        const { error: updateError } = await supabase
-                          .from('devices')
-                          .update({
-                            asset_group,
-                            far_code,
-                            updated_at: new Date().toISOString(),
-                            updated_by: userEmail,
-                          })
-                          .eq('id', device.id);
-
-                        if (updateError) {
-                          errors.push({ values, error: `Update failed: ${updateError.message}` });
-                        } else {
-                          updatedSerials.push(serial);
-                        }
-                      }
-
-                      setProgress(null); // Clear progress after completion
-
-                      if (errors.length > 0) {
-                        const confirmDownload = window.confirm(
-                          `There are ${errors.length} errors. Download error CSV? (OK to download, Cancel to skip)`
-                        );
-                        if (confirmDownload) {
-                          const quoteCsvValue = (value) => {
-                            const str = String(value || '');
-                            const needsQuotes = /["\n\r,]/u.test(str) || str.trimStart() !== str || str.trimEnd() !== str;
-                            const escaped = str.replace(/"/g, '""');
-                            return needsQuotes ? `"${escaped}"` : escaped;
-                          };
-                          let errorCsv = [...headers, 'Error'].map(quoteCsvValue).join(',') + '\n';
-                          errors.forEach(({ values, error }) => {
-                            const row = [...values, error].map(quoteCsvValue).join(',');
-                            errorCsv += row + '\n';
-                          });
-                          const bom = new Uint8Array([0xEF, 0xBB, 0xBF]);
-                          const blob = new Blob([bom, errorCsv], { type: 'text/csv;charset=utf-8;' });
-                          const url = URL.createObjectURL(blob);
-                          const a = document.createElement('a');
-                          a.href = url;
-                          a.download = 'update_errors.csv';
-                          a.click();
-                          URL.revokeObjectURL(url);
-                        }
-                      }
-
-                      toast({ title: 'Success', description: `Updated ${updatedSerials.length} devices successfully` });
-
-                      if (updatedSerials.length > 0) {
-                        await loadDevices();
-                      }
-                    } catch (error) {
-                      setProgress(null); // Clear progress on error
-                      toast({ title: 'Error', description: `Failed to process update CSV. Please check format. Details: ${error.message}`, variant: 'destructive' });
-                    }
-                  };
-                  reader.readAsText(file, 'utf-8');
-                }}
-                style={{ width: '100%', padding: '8px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '14px' }}
-              />
-            </div>
-          </div>
+    <div style={{ flex: 1, border: '1px solid #e5e7eb', borderRadius: '8px', padding: '16px', background: '#fff' }}>
+      <h3 style={{ fontSize: '16px', fontWeight: 'bold', marginBottom: '12px' }}>Bulk Update Asset Details (CSV)</h3>
+      <div style={{ marginTop: '16px', padding: '12px', background: '#f9fafb', borderRadius: '4px' }}>
+        <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginBottom: '8px' }}>
+          <label style={{ fontSize: '14px', fontWeight: 'bold' }}>Bulk Update (CSV)</label>
+          <button
+            onClick={() => {
+              const headers = ['Serial number', 'Asset group', 'FAR Code'];
+              const rows = [
+                ['SN001', '', ''],
+                ['SN002', '', '']
+              ];
+              const quoteCsvValue = (value) => {
+                const str = String(value || '');
+                const needsQuotes = /["\n\r,]/u.test(str) || str.trimStart() !== str || str.trimEnd() !== str;
+                const escaped = str.replace(/"/g, '""');
+                return needsQuotes ? `"${escaped}"` : escaped;
+              };
+              const csvTemplate = headers.map(quoteCsvValue).join(',') + '\n' + rows.map(row => row.map(quoteCsvValue).join(',')).join('\n');
+              const bom = new Uint8Array([0xEF, 0xBB, 0xBF]);
+              const blob = new Blob([bom, csvTemplate], { type: 'text/csv;charset=utf-8;' });
+              const url = URL.createObjectURL(blob);
+              const a = document.createElement('a');
+              a.href = url;
+              a.download = 'asset_details_template.csv';
+              a.click();
+              URL.revokeObjectURL(url);
+            }}
+            style={{ padding: '6px 12px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '12px', background: '#fff', cursor: 'pointer' }}
+          >
+            Download Template
+          </button>
         </div>
-      )}
+        {progress && (
+          <div style={{ fontSize: '14px', color: '#3b82f6', marginBottom: '8px' }}>
+            {progress}
+          </div>
+        )}
+        <input
+          type="file"
+          accept=".csv"
+          onChange={async (e) => {
+            const file = e.target.files?.[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = async (evt) => {
+              try {
+                const text = evt.target?.result as string;
+                const lines = text.trim().split('\n').filter(line => line.trim());
+                if (lines.length < 1) throw new Error('CSV must contain at least a header row');
+
+                const parseCsvLine = (line: string) => {
+                  const values: string[] = [];
+                  let current = '';
+                  let inQuotes = false;
+                  let i = 0;
+
+                  while (i < line.length) {
+                    const char = line[i];
+                    if (char === '"') {
+                      if (inQuotes) {
+                        if (i + 1 < line.length && line[i + 1] === '"') {
+                          current += '"';
+                          i++;
+                        } else {
+                          inQuotes = false;
+                        }
+                      } else {
+                        inQuotes = true;
+                      }
+                    } else if (char === ',' && !inQuotes) {
+                      values.push(current);
+                      current = '';
+                    } else {
+                      current += char;
+                    }
+                    i++;
+                  }
+                  values.push(current);
+                  return values.map(v => {
+                    if (v.startsWith('"') && v.endsWith('"')) {
+                      v = v.slice(1, -1);
+                    }
+                    return v.replace(/""/g, '"');
+                  });
+                };
+
+                const headers = parseCsvLine(lines[0]);
+                const expectedHeaders = ['Serial number', 'Asset group', 'FAR Code'];
+                
+                if (headers.length !== expectedHeaders.length || !headers.every((h, i) => h.trim() === expectedHeaders[i])) {
+                  throw new Error('CSV header mismatch. Please use the provided template.');
+                }
+
+                const errors: { values: string[], error: string }[] = [];
+                const updatedSerials: string[] = [];
+                const totalRows = lines.length - 1;
+
+                for (let i = 1; i < lines.length; i++) {
+                  setProgress(`Updating ${i}/${totalRows}`);
+                  const values = parseCsvLine(lines[i]);
+                  if (values.length !== headers.length) {
+                    errors.push({ values: [...values, ...Array(headers.length - values.length).fill('')], error: 'Incorrect number of columns' });
+                    continue;
+                  }
+
+                  const getValue = (headerName: string) => {
+                    const index = headers.indexOf(headerName);
+                    return index !== -1 ? (values[index] || '').trim() : '';
+                  };
+
+                  const serial = getValue('Serial number');
+                  const asset_group = getValue('Asset group');
+                  const far_code = getValue('FAR Code');
+
+                  if (!serial) {
+                    errors.push({ values, error: 'Missing serial number' });
+                    continue;
+                  }
+
+                  const { data: deviceData, error: fetchError } = await supabase
+                    .from('devices')
+                    .select('*')
+                    .eq('serial_number', serial)
+                    .eq('is_deleted', false)
+                    .order('updated_at', { ascending: false })
+                    .limit(1);
+
+                  if (fetchError || !deviceData || deviceData.length === 0) {
+                    errors.push({ values, error: 'Serial number not available' });
+                    continue;
+                  }
+
+                  const device = deviceData[0];
+
+                  if (device.material_type !== 'Inward') {
+                    errors.push({ values, error: 'Not inward material type' });
+                    continue;
+                  }
+
+                  const { error: updateError } = await supabase
+                    .from('devices')
+                    .update({
+                      asset_group,
+                      far_code,
+                      updated_at: new Date().toISOString(),
+                      updated_by: userEmail,
+                    })
+                    .eq('id', device.id);
+
+                  if (updateError) {
+                    errors.push({ values, error: `Update failed: ${updateError.message}` });
+                  } else {
+                    updatedSerials.push(serial);
+                  }
+                }
+
+                setProgress(null);
+
+                if (errors.length > 0) {
+                  const confirmDownload = window.confirm(
+                    `There are ${errors.length} errors. Download error CSV? (OK to download, Cancel to skip)`
+                  );
+                  if (confirmDownload) {
+                    const quoteCsvValue = (value) => {
+                      const str = String(value || '');
+                      const needsQuotes = /["\n\r,]/u.test(str) || str.trimStart() !== str || str.trimEnd() !== str;
+                      const escaped = str.replace(/"/g, '""');
+                      return needsQuotes ? `"${escaped}"` : escaped;
+                    };
+                    let errorCsv = [...headers, 'Error'].map(quoteCsvValue).join(',') + '\n';
+                    errors.forEach(({ values, error }) => {
+                      const row = [...values, error].map(quoteCsvValue).join(',');
+                      errorCsv += row + '\n';
+                    });
+                    const bom = new Uint8Array([0xEF, 0xBB, 0xBF]);
+                    const blob = new Blob([bom, errorCsv], { type: 'text/csv;charset=utf-8;' });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = 'update_errors.csv';
+                    a.click();
+                    URL.revokeObjectURL(url);
+                  }
+                }
+
+                toast({ title: 'Success', description: `Updated ${updatedSerials.length} devices successfully` });
+
+                if (updatedSerials.length > 0) {
+                  await loadDevices();
+                }
+              } catch (error) {
+                setProgress(null);
+                toast({ title: 'Error', description: `Failed to process update CSV. Please check format. Details: ${error.message}`, variant: 'destructive' });
+              }
+            };
+            reader.readAsText(file, 'utf-8');
+          }}
+          style={{ width: '100%', padding: '8px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '14px' }}
+        />
+      </div>
+    </div>
+  </div>
+)}
 
       <button
         onClick={createOrder}
@@ -1503,7 +1641,7 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
           padding: '12px',
           border: 'none',
           borderRadius: '4px',
-          background: loading || assets.length === 0 ? '#9ca3af' : '#3b82f6',
+          background: loading || assets.length === 0 ? '#3b82f6' : '#3b82f6',
           color: '#fff',
           fontSize: '16px',
           fontWeight: 'bold',
