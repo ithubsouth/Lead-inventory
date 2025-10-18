@@ -118,8 +118,8 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
       quantity: 1,
       location: '',
       serialNumbers: hasSerials ? [''] : [],
-      assetStatuses: [''],
-      assetGroups: [''],
+      assetStatuses: hasSerials ? ['Fresh'] : ['Fresh'], // Default to "Fresh"
+      assetGroups: hasSerials ? ['NFA'] : ['NFA'], // Default to "NFA"
       asset_conditions: [''],
       farCodes: hasSerials ? [''] : [],
       hasSerials,
@@ -143,16 +143,13 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
           let newAssetGroups;
           let newAssetConditions;
           if (asset.hasSerials) {
-            newAssetStatuses = Array(newQuantity).fill('').map((_, i) => currentStatuses[i] || '');
-            newAssetGroups = Array(newQuantity).fill('').map((_, i) => currentGroups[i] || '');
+            newAssetStatuses = Array(newQuantity).fill('Fresh').map((_, i) => currentStatuses[i] || 'Fresh');
+            newAssetGroups = Array(newQuantity).fill('NFA').map((_, i) => currentGroups[i] || 'NFA');
             newAssetConditions = Array(newQuantity).fill('').map((_, i) => currentConditions[i] || '');
           } else {
-            const defaultStatus = currentStatuses[0] || '';
-            const defaultGroup = currentGroups[0] || '';
-            const defaultCondition = currentConditions[0] || '';
-            newAssetStatuses = Array(newQuantity).fill(defaultStatus);
-            newAssetGroups = Array(newQuantity).fill(defaultGroup);
-            newAssetConditions = Array(newQuantity).fill(defaultCondition);
+            newAssetStatuses = Array(newQuantity).fill(currentStatuses[0] || 'Fresh');
+            newAssetGroups = Array(newQuantity).fill(currentGroups[0] || 'NFA');
+            newAssetConditions = Array(newQuantity).fill(currentConditions[0] || '');
           }
           return { 
             ...asset, 
@@ -176,8 +173,8 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
             newFarCodes = [];
           }
           if (!newHasSerials) {
-            const uniformStatuses = Array(asset.quantity).fill(asset.assetStatuses[0] || '');
-            const uniformGroups = Array(asset.quantity).fill(asset.assetGroups[0] || '');
+            const uniformStatuses = Array(asset.quantity).fill(asset.assetStatuses[0] || 'Fresh');
+            const uniformGroups = Array(asset.quantity).fill(asset.assetGroups[0] || 'NFA');
             const uniformConditions = Array(asset.quantity).fill(asset.asset_conditions[0] || '');
             return { 
               ...asset, 
@@ -229,8 +226,8 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
             const newStatuses = [...a.assetStatuses];
             const newGroups = [...a.assetGroups];
             const newFarCodes = [...a.farCodes];
-            newStatuses[index] = '';
-            newGroups[index] = '';
+            newStatuses[index] = 'Fresh'; // Default to "Fresh"
+            newGroups[index] = 'NFA'; // Default to "NFA"
             newFarCodes[index] = '';
             return { 
               ...a, 
@@ -252,8 +249,8 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
           const newStatuses = [...a.assetStatuses];
           const newGroups = [...a.assetGroups];
           const newFarCodes = [...a.farCodes];
-          newStatuses[index] = device.asset_status || '';
-          newGroups[index] = device.asset_group || '';
+          newStatuses[index] = device.asset_status || 'Fresh';
+          newGroups[index] = device.asset_group || 'NFA';
           newFarCodes[index] = device.far_code || '';
           return { 
             ...a, 
@@ -324,8 +321,8 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
               const newStatuses = [...asset.assetStatuses];
               const newGroups = [...asset.assetGroups];
               const newFarCodes = [...asset.farCodes];
-              newStatuses[i] = latestDevice.asset_status || '';
-              newGroups[i] = latestDevice.asset_group || '';
+              newStatuses[i] = latestDevice.asset_status || 'Fresh';
+              newGroups[i] = latestDevice.asset_group || 'NFA';
               newFarCodes[i] = latestDevice.far_code || '';
               setAssets(prevAssets =>
                 prevAssets.map(a =>
@@ -371,8 +368,8 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
             const newStatuses = [...a.assetStatuses];
             const newGroups = [...a.assetGroups];
             const newFarCodes = [...a.farCodes];
-            newStatuses[index] = '';
-            newGroups[index] = '';
+            newStatuses[index] = 'Fresh'; // Default to "Fresh"
+            newGroups[index] = 'NFA'; // Default to "NFA"
             newFarCodes[index] = '';
             return { 
               ...a, 
@@ -521,8 +518,8 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
 
         for (let i = 0; i < asset.quantity; i++) {
           const serialNumber = asset.hasSerials ? (asset.serialNumbers[i] || '') : '';
-          const assetStatus = asset.assetStatuses[i] || '';
-          const assetGroup = asset.assetGroups[i] || '';
+          const assetStatus = asset.assetStatuses[i] || 'Fresh';
+          const assetGroup = asset.assetGroups[i] || 'NFA';
           const assetCondition = asset.asset_conditions[i] || null;
           const farCode = asset.farCodes[i] || null;
 
@@ -845,20 +842,20 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
                 <label style={{ fontSize: '12px', display: 'block', marginBottom: '4px' }}>Asset Status</label>
                 {isInward ? (
                   <select
-                    value={asset.assetStatuses[0] || ''}
+                    value={asset.assetStatuses[0] || 'Fresh'}
                     onChange={(e) => {
                       const newStatuses = Array(asset.quantity).fill(e.target.value);
                       updateAsset(asset.id, 'assetStatuses', newStatuses);
                     }}
                     style={{ width: '100%', padding: '8px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '14px' }}
                   >
-                    <option value="">Select Status</option>
-                    {assetStatuses.map(s => <option key={s} value={s}>{s}</option>)}
+                    <option value="Fresh">Fresh</option>
+                    {assetStatuses.filter(s => s !== 'Fresh').map(s => <option key={s} value={s}>{s}</option>)}
                   </select>
                 ) : (
                   <input
                     type="text"
-                    value={asset.assetStatuses[0] || ''}
+                    value={asset.assetStatuses[0] || 'Fresh'}
                     disabled
                     style={{ width: '100%', padding: '8px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '14px', background: '#f3f4f6' }}
                   />
@@ -868,20 +865,20 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
                 <label style={{ fontSize: '12px', display: 'block', marginBottom: '4px' }}>Asset Group</label>
                 {isInward ? (
                   <select
-                    value={asset.assetGroups[0] || ''}
+                    value={asset.assetGroups[0] || 'NFA'}
                     onChange={(e) => {
                       const newGroups = Array(asset.quantity).fill(e.target.value);
                       updateAsset(asset.id, 'assetGroups', newGroups);
                     }}
                     style={{ width: '100%', padding: '8px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '14px' }}
                   >
-                    <option value="">Select Group</option>
-                    {assetGroups.map(g => <option key={g} value={g}>{g}</option>)}
+                    <option value="NFA">NFA</option>
+                    {assetGroups.filter(g => g !== 'NFA').map(g => <option key={g} value={g}>{g}</option>)}
                   </select>
                 ) : (
                   <input
                     type="text"
-                    value={asset.assetGroups[0] || ''}
+                    value={asset.assetGroups[0] || 'NFA'}
                     disabled
                     style={{ width: '100%', padding: '8px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '14px', background: '#f3f4f6' }}
                   />
@@ -896,7 +893,7 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
                   style={{ width: '100%', padding: '8px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '14px', background: '#f3f4f6' }}
                 />
               </div>
-              {isInward && (asset.assetStatuses[0] || '') === 'Scrap' && (
+              {isInward && (asset.assetStatuses[0] || 'Fresh') === 'Scrap' && (
                 <div>
                   <label style={{ fontSize: '12px', display: 'block', marginBottom: '4px' }}>Asset Condition</label>
                   <input
@@ -948,7 +945,7 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
                   {isInward ? (
                     <>
                       <select
-                        value={asset.assetStatuses[index] || ''}
+                        value={asset.assetStatuses[index] || 'Fresh'}
                         onChange={(e) => {
                           const newStatuses = [...asset.assetStatuses];
                           newStatuses[index] = e.target.value;
@@ -956,11 +953,11 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
                         }}
                         style={{ width: '120px', padding: '8px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '14px', resize: 'none' }}
                       >
-                        <option value="">Select Status</option>
-                        {assetStatuses.map(s => <option key={s} value={s}>{s}</option>)}
+                        <option value="Fresh">Fresh</option>
+                        {assetStatuses.filter(s => s !== 'Fresh').map(s => <option key={s} value={s}>{s}</option>)}
                       </select>
                       <select
-                        value={asset.assetGroups[index] || ''}
+                        value={asset.assetGroups[index] || 'NFA'}
                         onChange={(e) => {
                           const newGroups = [...asset.assetGroups];
                           newGroups[index] = e.target.value;
@@ -968,8 +965,8 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
                         }}
                         style={{ width: '80px', padding: '8px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '14px', resize: 'none' }}
                       >
-                        <option value="">Select Group</option>
-                        {assetGroups.map(g => <option key={g} value={g}>{g}</option>)}
+                        <option value="NFA">NFA</option>
+                        {assetGroups.filter(g => g !== 'NFA').map(g => <option key={g} value={g}>{g}</option>)}
                       </select>
                       <input
                         type="text"
@@ -995,13 +992,13 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
                     <>
                       <input
                         type="text"
-                        value={asset.assetStatuses[index] || ''}
+                        value={asset.assetStatuses[index] || 'Fresh'}
                         disabled
                         style={{ width: '120px', padding: '8px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '14px', background: '#f3f4f6', resize: 'none' }}
                       />
                       <input
                         type="text"
-                        value={asset.assetGroups[index] || ''}
+                        value={asset.assetGroups[index] || 'NFA'}
                         disabled
                         style={{ width: '80px', padding: '8px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '14px', background: '#f3f4f6', resize: 'none' }}
                       />
