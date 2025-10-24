@@ -12,25 +12,26 @@ import { DateRange } from 'react-day-picker';
 import { Device } from './types';
 import debounce from 'lodash/debounce';
 import { excludedAuditItems } from './constants';
+import MultiSelect from './MultiSelect';
 
 interface AuditTableProps {
   devices: Device[];
-  selectedWarehouse: string;
-  setSelectedWarehouse: (value: string) => void;
-  selectedAssetType: string;
-  setSelectedAssetType: (value: string) => void;
-  selectedModel: string;
-  setSelectedModel: (value: string) => void;
-  selectedAssetStatus: string;
-  setSelectedAssetStatus: (value: string) => void;
-  selectedConfiguration: string;
-  setSelectedConfiguration: (value: string) => void;
-  selectedProduct: string;
-  setSelectedProduct: (value: string) => void;
-  selectedOrderType: string;
-  setSelectedOrderType: (value: string) => void;
-  selectedAssetGroup: string;
-  setSelectedAssetGroup: (value: string) => void;
+  selectedWarehouse: string[];
+  setSelectedWarehouse: (value: string[]) => void;
+  selectedAssetType: string[];
+  setSelectedAssetType: (value: string[]) => void;
+  selectedModel: string[];
+  setSelectedModel: (value: string[]) => void;
+  selectedAssetStatus: string[];
+  setSelectedAssetStatus: (value: string[]) => void;
+  selectedConfiguration: string[];
+  setSelectedConfiguration: (value: string[]) => void;
+  selectedProduct: string[];
+  setSelectedProduct: (value: string[]) => void;
+  selectedOrderType: string[];
+  setSelectedOrderType: (value: string[]) => void;
+  selectedAssetGroup: string[];
+  setSelectedAssetGroup: (value: string[]) => void;
   fromDate: DateRange | undefined;
   setFromDate: (range: DateRange | undefined) => void;
   searchQuery: string;
@@ -101,13 +102,11 @@ const AuditTable: React.FC<AuditTableProps> = ({
     orderType: 'order_type',
   };
 
-  // Helper to get effective status (consistent with loadDevices logic)
   const getEffectiveStatus = (d: Device) => {
     return d.order_id && d.material_type === 'Outward' ? 'Assigned' : 'Stock';
   };
 
   const uniqueValues = useMemo(() => {
-    // Deduplicate devices by serial_number, keeping the latest by created_at
     const latestDevices = new Map<string, Device>();
     devices.forEach((d) => {
       const key = d.serial_number || d.id;
@@ -117,7 +116,6 @@ const AuditTable: React.FC<AuditTableProps> = ({
       }
     });
 
-    // Filter to only Stock devices
     const stockDevices = Array.from(latestDevices.values()).filter(
       (d) => getEffectiveStatus(d) === 'Stock' && !d.is_deleted &&
              !excludedAuditItems.assetTypes.includes(d.asset_type || '') &&
@@ -125,21 +123,19 @@ const AuditTable: React.FC<AuditTableProps> = ({
     );
 
     const getFilteredDevices = (excludeFilter: string) => {
-      const selectedFilters = {
-        warehouse: selectedWarehouse,
-        assetType: selectedAssetType,
-        model: selectedModel,
-        configuration: selectedConfiguration,
-        product: selectedProduct,
-        assetStatus: selectedAssetStatus,
-        assetGroup: selectedAssetGroup,
-        orderType: selectedOrderType,
-        assetCheck: filterCheck,
-        fromDate,
-      };
-
       return stockDevices.filter((d) => {
-        const matches = Object.entries(selectedFilters)
+        const matches = Object.entries({
+          warehouse: selectedWarehouse,
+          assetType: selectedAssetType,
+          model: selectedModel,
+          configuration: selectedConfiguration,
+          product: selectedProduct,
+          assetStatus: selectedAssetStatus,
+          assetGroup: selectedAssetGroup,
+          orderType: selectedOrderType,
+          assetCheck: filterCheck,
+          fromDate,
+        })
           .filter(([key]) => key !== excludeFilter)
           .every(([key, filterValue]) => {
             if (key === 'fromDate') {
@@ -162,7 +158,7 @@ const AuditTable: React.FC<AuditTableProps> = ({
             }
             const prop = propertyMap[key as keyof typeof propertyMap];
             const value = d[prop as keyof Device];
-            return filterValue === 'All' || value === filterValue;
+            return (filterValue as string[]).length === 0 || (filterValue as string[]).includes(value);
           });
         const searchMatch = searchQuery.trim() === '' ||
           [d.serial_number, d.model, d.asset_type, d.configuration, d.product, d.asset_status, d.asset_group, d.far_code, d.warehouse, d.order_type, d.sales_order, d.deal_id, d.nucleus_id, d.school_name, d.asset_check || '']
@@ -173,19 +169,18 @@ const AuditTable: React.FC<AuditTableProps> = ({
     };
 
     return {
-      warehouses: ['All', ...[...new Set(getFilteredDevices('warehouse').map((d) => d.warehouse || ''))].filter(Boolean).sort()],
-      assetTypes: ['All', ...[...new Set(getFilteredDevices('assetType').map((d) => d.asset_type || ''))].filter(Boolean).sort()],
-      models: ['All', ...[...new Set(getFilteredDevices('model').map((d) => d.model || ''))].filter(Boolean).sort()],
-      configurations: ['All', ...[...new Set(getFilteredDevices('configuration').map((d) => d.configuration || ''))].filter(Boolean).sort()],
-      products: ['All', ...[...new Set(getFilteredDevices('product').map((d) => d.product || ''))].filter(Boolean).sort()],
-      assetStatuses: ['All', ...[...new Set(getFilteredDevices('assetStatus').map((d) => d.asset_status || ''))].filter(Boolean).sort()],
-      assetGroups: ['All', ...[...new Set(getFilteredDevices('assetGroup').map((d) => d.asset_group || ''))].filter(Boolean).sort()],
-      orderTypes: ['All', ...[...new Set(getFilteredDevices('orderType').map((d) => d.order_type || ''))].filter(Boolean).sort()],
+      warehouses: [...new Set(getFilteredDevices('warehouse').map((d) => d.warehouse || ''))].filter(Boolean).sort(),
+      assetTypes: [...new Set(getFilteredDevices('assetType').map((d) => d.asset_type || ''))].filter(Boolean).sort(),
+      models: [...new Set(getFilteredDevices('model').map((d) => d.model || ''))].filter(Boolean).sort(),
+      configurations: [...new Set(getFilteredDevices('configuration').map((d) => d.configuration || ''))].filter(Boolean).sort(),
+      products: [...new Set(getFilteredDevices('product').map((d) => d.product || ''))].filter(Boolean).sort(),
+      assetStatuses: [...new Set(getFilteredDevices('assetStatus').map((d) => d.asset_status || ''))].filter(Boolean).sort(),
+      assetGroups: [...new Set(getFilteredDevices('assetGroup').map((d) => d.asset_group || ''))].filter(Boolean).sort(),
+      orderTypes: [...new Set(getFilteredDevices('orderType').map((d) => d.order_type || ''))].filter(Boolean).sort(),
     };
   }, [devices, selectedWarehouse, selectedAssetType, selectedModel, selectedConfiguration, selectedProduct, selectedAssetStatus, selectedAssetGroup, selectedOrderType, filterCheck, fromDate, searchQuery]);
 
   const filteredDevices = useMemo(() => {
-    // Deduplicate devices by serial_number, keeping the latest by created_at
     const latestDevices = new Map<string, Device>();
     devices.forEach((d) => {
       const key = d.serial_number || d.id;
@@ -195,19 +190,18 @@ const AuditTable: React.FC<AuditTableProps> = ({
       }
     });
 
-    // Filter to only Stock devices
     return Array.from(latestDevices.values()).filter((d) => {
       const isStock = getEffectiveStatus(d) === 'Stock' && !d.is_deleted &&
                       !excludedAuditItems.assetTypes.includes(d.asset_type || '') &&
                       !excludedAuditItems.models.includes(d.model || '');
-      const warehouseMatch = selectedWarehouse === 'All' || d.warehouse === selectedWarehouse;
-      const assetTypeMatch = selectedAssetType === 'All' || d.asset_type === selectedAssetType;
-      const modelMatch = selectedModel === 'All' || d.model === selectedModel;
-      const configMatch = selectedConfiguration === 'All' || d.configuration === selectedConfiguration;
-      const productMatch = selectedProduct === 'All' || d.product === selectedProduct;
-      const assetStatusMatch = selectedAssetStatus === 'All' || d.asset_status === selectedAssetStatus;
-      const assetGroupMatch = selectedAssetGroup === 'All' || d.asset_group === selectedAssetGroup;
-      const orderTypeMatch = selectedOrderType === 'All' || d.order_type === selectedOrderType;
+      const warehouseMatch = selectedWarehouse.length === 0 || selectedWarehouse.includes(d.warehouse || '');
+      const assetTypeMatch = selectedAssetType.length === 0 || selectedAssetType.includes(d.asset_type || '');
+      const modelMatch = selectedModel.length === 0 || selectedModel.includes(d.model || '');
+      const configMatch = selectedConfiguration.length === 0 || selectedConfiguration.includes(d.configuration || '');
+      const productMatch = selectedProduct.length === 0 || selectedProduct.includes(d.product || '');
+      const assetStatusMatch = selectedAssetStatus.length === 0 || selectedAssetStatus.includes(d.asset_status || '');
+      const assetGroupMatch = selectedAssetGroup.length === 0 || selectedAssetGroup.includes(d.asset_group || '');
+      const orderTypeMatch = selectedOrderType.length === 0 || selectedOrderType.includes(d.order_type || '');
       const dateMatch = !fromDate?.from || !fromDate?.to || (() => {
         const createdAt = new Date(d.created_at);
         const startOfDay = new Date(createdAt);
@@ -248,14 +242,14 @@ const AuditTable: React.FC<AuditTableProps> = ({
   const unmatchedCount = filteredDevices.length - matchedCount;
 
   const clearFilters = () => {
-    setSelectedWarehouse('All');
-    setSelectedAssetType('All');
-    setSelectedModel('All');
-    setSelectedConfiguration('All');
-    setSelectedProduct('All');
-    setSelectedAssetStatus('All');
-    setSelectedAssetGroup('All');
-    setSelectedOrderType('All');
+    setSelectedWarehouse([]);
+    setSelectedAssetType([]);
+    setSelectedModel([]);
+    setSelectedConfiguration([]);
+    setSelectedProduct([]);
+    setSelectedAssetStatus([]);
+    setSelectedAssetGroup([]);
+    setSelectedOrderType([]);
     setFromDate(undefined);
     setSearchQuery('');
     setCurrentPage(1);
@@ -268,13 +262,14 @@ const AuditTable: React.FC<AuditTableProps> = ({
     if (!trimmedInput) return;
 
     setScannerInput('');
-    // Search only among filtered devices (already Stock and not excluded)
     const matchedDevice = filteredDevices.find(
       (device) => device.serial_number === trimmedInput || device.id === trimmedInput
     );
 
     if (matchedDevice) {
-      const checkStatus = selectedWarehouse === 'All' || matchedDevice.warehouse === selectedWarehouse ? 'Matched' : `Found in ${matchedDevice.warehouse}`;
+      const checkStatus = selectedWarehouse.length === 0 || selectedWarehouse.includes(matchedDevice.warehouse || '')
+        ? 'Matched'
+        : `Found in ${matchedDevice.warehouse}`;
       setUpdatingDeviceId(matchedDevice.id);
       onUpdateAssetCheck(matchedDevice.id, checkStatus)
         .then(() => {
@@ -337,9 +332,15 @@ const AuditTable: React.FC<AuditTableProps> = ({
   };
 
   const handleClearAllChecks = () => {
-    if (filteredDevices.length === 0) return;
+    const matchedDeviceIds = filteredDevices
+      .filter((d) => d.asset_check === 'Matched')
+      .map((d) => d.id);
+    if (matchedDeviceIds.length === 0) {
+      setError('No matched devices to clear.');
+      return;
+    }
     setIsClearing(true);
-    onClearAllChecks(filteredDevices.map((d) => d.id))
+    onClearAllChecks(matchedDeviceIds)
       .catch((err) => {
         setError(`Failed to clear checks: ${err.message}`);
       })
@@ -351,7 +352,6 @@ const AuditTable: React.FC<AuditTableProps> = ({
   const canEdit = userRole === 'Super Admin' || userRole === 'Admin' || userRole === 'Operator';
   const isAllMatched = matchedCount === filteredDevices.length;
 
-  // Pagination logic for dynamic page range
   const siblingCount = 2;
   const pageRange = [];
   for (let i = Math.max(1, currentPage - siblingCount); i <= Math.min(totalPages, currentPage + siblingCount); i++) {
@@ -419,7 +419,7 @@ const AuditTable: React.FC<AuditTableProps> = ({
               size="sm"
               style={{ border: '1px solid #d1d5db', borderRadius: '4px', padding: '4px 6px', fontSize: '12px', height: '28px', background: '#fff', color: '#ef4444' }}
               onClick={handleClearAllChecks}
-              disabled={filteredDevices.length === 0 || isClearing}
+              disabled={filteredDevices.length === 0 || isClearing || matchedCount === 0}
             >
               {isClearing ? 'Clearing...' : 'Clear All'}
             </Button>
@@ -430,110 +430,70 @@ const AuditTable: React.FC<AuditTableProps> = ({
             <span style={{ color: '#ef4444' }}>Unmatched: {unmatchedCount}</span>
           </div>
           <div style={{ display: 'flex', gap: '4px', marginTop: '4px', maxWidth: '1200px', overflowX: 'auto', whiteSpace: 'nowrap' }}>
-            <div style={{ flex: '1', minWidth: '120px' }}>
-              <label htmlFor="warehouseFilter" style={{ fontSize: '12px', color: '#6b7280', display: 'block', marginBottom: '2px', whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' }}>Warehouse</label>
-              <Select value={selectedWarehouse} onValueChange={setSelectedWarehouse}>
-                <SelectTrigger id="warehouseFilter" style={{ fontSize: '12px', width: '100%', border: '1px solid #d1d5db', borderRadius: '4px', padding: '6px', whiteSpace: 'nowrap', textOverflow: 'ellipsis', height: '28px' }}>
-                  <SelectValue placeholder="All Warehouses" />
-                </SelectTrigger>
-                <SelectContent>
-                  {uniqueValues.warehouses.map((w) => (
-                    <SelectItem key={w} value={w} style={{ fontSize: '12px' }}>{w}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div style={{ flex: '1', minWidth: '120px' }}>
-              <label htmlFor="assetTypeFilter" style={{ fontSize: '12px', color: '#6b7280', display: 'block', marginBottom: '2px', whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' }}>Asset Type</label>
-              <Select value={selectedAssetType} onValueChange={setSelectedAssetType}>
-                <SelectTrigger id="assetTypeFilter" style={{ fontSize: '12px', width: '100%', border: '1px solid #d1d5db', borderRadius: '4px', padding: '6px', whiteSpace: 'nowrap', textOverflow: 'ellipsis', height: '28px' }}>
-                  <SelectValue placeholder="All Types" />
-                </SelectTrigger>
-                <SelectContent>
-                  {uniqueValues.assetTypes.map((at) => (
-                    <SelectItem key={at} value={at} style={{ fontSize: '12px' }}>{at}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div style={{ flex: '1', minWidth: '120px' }}>
-              <label htmlFor="modelFilter" style={{ fontSize: '12px', color: '#6b7280', display: 'block', marginBottom: '2px', whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' }}>Model</label>
-              <Select value={selectedModel} onValueChange={setSelectedModel}>
-                <SelectTrigger id="modelFilter" style={{ fontSize: '12px', width: '100%', border: '1px solid #d1d5db', borderRadius: '4px', padding: '6px', whiteSpace: 'nowrap', textOverflow: 'ellipsis', height: '28px' }}>
-                  <SelectValue placeholder="All Models" />
-                </SelectTrigger>
-                <SelectContent>
-                  {uniqueValues.models.map((m) => (
-                    <SelectItem key={m} value={m} style={{ fontSize: '12px' }}>{m}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div style={{ flex: '1', minWidth: '120px' }}>
-              <label htmlFor="configurationFilter" style={{ fontSize: '12px', color: '#6b7280', display: 'block', marginBottom: '2px', whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' }}>Configuration</label>
-              <Select value={selectedConfiguration} onValueChange={setSelectedConfiguration}>
-                <SelectTrigger id="configurationFilter" style={{ fontSize: '12px', width: '100%', border: '1px solid #d1d5db', borderRadius: '4px', padding: '6px', whiteSpace: 'nowrap', textOverflow: 'ellipsis', height: '28px' }}>
-                  <SelectValue placeholder="All Configurations" />
-                </SelectTrigger>
-                <SelectContent>
-                  {uniqueValues.configurations.map((c) => (
-                    <SelectItem key={c} value={c} style={{ fontSize: '12px' }}>{c}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div style={{ flex: '1', minWidth: '120px' }}>
-              <label htmlFor="productFilter" style={{ fontSize: '12px', color: '#6b7280', display: 'block', marginBottom: '2px', whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' }}>Product</label>
-              <Select value={selectedProduct} onValueChange={setSelectedProduct}>
-                <SelectTrigger id="productFilter" style={{ fontSize: '12px', width: '100%', border: '1px solid #d1d5db', borderRadius: '4px', padding: '6px', whiteSpace: 'nowrap', textOverflow: 'ellipsis', height: '28px' }}>
-                  <SelectValue placeholder="All Products" />
-                </SelectTrigger>
-                <SelectContent>
-                  {uniqueValues.products.map((p) => (
-                    <SelectItem key={p} value={p} style={{ fontSize: '12px' }}>{p}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div style={{ flex: '1', minWidth: '120px' }}>
-              <label htmlFor="assetStatusFilter" style={{ fontSize: '12px', color: '#6b7280', display: 'block', marginBottom: '2px', whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' }}>Asset Status</label>
-              <Select value={selectedAssetStatus} onValueChange={setSelectedAssetStatus}>
-                <SelectTrigger id="assetStatusFilter" style={{ fontSize: '12px', width: '100%', border: '1px solid #d1d5db', borderRadius: '4px', padding: '6px', whiteSpace: 'nowrap', textOverflow: 'ellipsis', height: '28px' }}>
-                  <SelectValue placeholder="All Asset Statuses" />
-                </SelectTrigger>
-                <SelectContent>
-                  {uniqueValues.assetStatuses.map((as) => (
-                    <SelectItem key={as} value={as} style={{ fontSize: '12px' }}>{as}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div style={{ flex: '1', minWidth: '120px' }}>
-              <label htmlFor="assetGroupFilter" style={{ fontSize: '12px', color: '#6b7280', display: 'block', marginBottom: '2px', whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' }}>Asset Group</label>
-              <Select value={selectedAssetGroup} onValueChange={setSelectedAssetGroup}>
-                <SelectTrigger id="assetGroupFilter" style={{ fontSize: '12px', width: '100%', border: '1px solid #d1d5db', borderRadius: '4px', padding: '6px', whiteSpace: 'nowrap', textOverflow: 'ellipsis', height: '28px' }}>
-                  <SelectValue placeholder="All Asset Groups" />
-                </SelectTrigger>
-                <SelectContent>
-                  {uniqueValues.assetGroups.map((ag) => (
-                    <SelectItem key={ag} value={ag} style={{ fontSize: '12px' }}>{ag}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div style={{ flex: '1', minWidth: '120px' }}>
-              <label htmlFor="orderTypeFilter" style={{ fontSize: '12px', color: '#6b7280', display: 'block', marginBottom: '2px', whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' }}>Order Type</label>
-              <Select value={selectedOrderType} onValueChange={setSelectedOrderType}>
-                <SelectTrigger id="orderTypeFilter" style={{ fontSize: '12px', width: '100%', border: '1px solid #d1d5db', borderRadius: '4px', padding: '6px', whiteSpace: 'nowrap', textOverflow: 'ellipsis', height: '28px' }}>
-                  <SelectValue placeholder="All Order Types" />
-                </SelectTrigger>
-                <SelectContent>
-                  {uniqueValues.orderTypes.map((ot) => (
-                    <SelectItem key={ot} value={ot} style={{ fontSize: '12px' }}>{ot}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+            <MultiSelect
+              id="warehouseFilter"
+              label="Warehouse"
+              options={uniqueValues.warehouses}
+              value={selectedWarehouse}
+              onChange={setSelectedWarehouse}
+              placeholder="Select Warehouses"
+            />
+            <MultiSelect
+              id="assetTypeFilter"
+              label="Asset Type"
+              options={uniqueValues.assetTypes}
+              value={selectedAssetType}
+              onChange={setSelectedAssetType}
+              placeholder="Select Types"
+            />
+            <MultiSelect
+              id="modelFilter"
+              label="Model"
+              options={uniqueValues.models}
+              value={selectedModel}
+              onChange={setSelectedModel}
+              placeholder="Select Models"
+            />
+            <MultiSelect
+              id="configurationFilter"
+              label="Configuration"
+              options={uniqueValues.configurations}
+              value={selectedConfiguration}
+              onChange={setSelectedConfiguration}
+              placeholder="Select Configurations"
+            />
+            <MultiSelect
+              id="productFilter"
+              label="Product"
+              options={uniqueValues.products}
+              value={selectedProduct}
+              onChange={setSelectedProduct}
+              placeholder="Select Products"
+            />
+            <MultiSelect
+              id="assetStatusFilter"
+              label="Asset Status"
+              options={uniqueValues.assetStatuses}
+              value={selectedAssetStatus}
+              onChange={setSelectedAssetStatus}
+              placeholder="Select Asset Statuses"
+            />
+            <MultiSelect
+              id="assetGroupFilter"
+              label="Asset Group"
+              options={uniqueValues.assetGroups}
+              value={selectedAssetGroup}
+              onChange={setSelectedAssetGroup}
+              placeholder="Select Asset Groups"
+            />
+            <MultiSelect
+              id="orderTypeFilter"
+              label="Order Type"
+              options={uniqueValues.orderTypes}
+              value={selectedOrderType}
+              onChange={setSelectedOrderType}
+              placeholder="Select Order Types"
+            />
             <div style={{ flex: '1', minWidth: '120px' }}>
               <label htmlFor="assetCheckFilter" style={{ fontSize: '12px', color: '#6b7280', display: 'block', marginBottom: '2px', whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' }}>Asset Check</label>
               <Select value={filterCheck} onValueChange={(value) => setFilterCheck(value as 'all' | 'matched' | 'unmatched')}>
@@ -633,26 +593,23 @@ const AuditTable: React.FC<AuditTableProps> = ({
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '4px', fontSize: '12px' }}>
           <div>
             <span>Showing {((currentPage - 1) * rowsPerPage) + 1} to {Math.min(currentPage * rowsPerPage, filteredDevices.length)} of {filteredDevices.length} assets</span>
-            <select
-              value={rowsPerPage}
-              onChange={(e) => {
-                setRowsPerPage(Number(e.target.value));
+            <Select
+              value={rowsPerPage.toString()}
+              onValueChange={(value) => {
+                setRowsPerPage(Number(value));
                 setCurrentPage(1);
               }}
-              style={{ 
-                fontSize: '12px', 
-                border: '1px solid #d1d5db', 
-                borderRadius: '4px', 
-                padding: '4px', 
-                marginLeft: '8px', 
-                height: '28px' 
-              }}
             >
-              <option value={10}>10</option>
-              <option value={25}>25</option>
-              <option value={50}>50</option>
-              <option value={100}>100</option>
-            </select>
+              <SelectTrigger style={{ fontSize: '12px', border: '1px solid #d1d5db', borderRadius: '4px', padding: '4px', height: '28px' }}>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="10">10</SelectItem>
+                <SelectItem value="25">25</SelectItem>
+                <SelectItem value="50">50</SelectItem>
+                <SelectItem value="100">100</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
             <Button
@@ -665,9 +622,10 @@ const AuditTable: React.FC<AuditTableProps> = ({
               Previous
             </Button>
             {pageRange.map((page, index) => (
-              <button
+              <Button
                 key={index}
-                onClick={() => typeof page === 'number' && setCurrentPage(page)}
+                variant={currentPage === page ? 'default' : 'outline'}
+                size="sm"
                 style={{
                   border: '1px solid #d1d5db',
                   borderRadius: '4px',
@@ -679,9 +637,10 @@ const AuditTable: React.FC<AuditTableProps> = ({
                   opacity: typeof page === 'number' ? 1 : 0.5,
                 }}
                 disabled={typeof page !== 'number'}
+                onClick={() => typeof page === 'number' && setCurrentPage(page)}
               >
                 {page}
-              </button>
+              </Button>
             ))}
             <Button
               variant="outline"

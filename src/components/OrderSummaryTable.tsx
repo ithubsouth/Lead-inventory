@@ -2,25 +2,31 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { Search, Download } from 'lucide-react';
 import { OrderSummary, Device } from './types';
 import { formatDate } from './utils';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Input } from '@/components/ui/input';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import MultiSelect from './MultiSelect';
+import { DatePickerWithRange } from './DatePickerWithRange';
+import { DateRange } from 'react-day-picker';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 interface OrderSummaryTableProps {
   devices: Device[];
-  selectedWarehouse: string;
-  setSelectedWarehouse: (value: string) => void;
-  selectedAssetType: string;
-  setSelectedAssetType: (value: string) => void;
-  selectedModel: string;
-  setSelectedModel: (value: string) => void;
-  selectedAssetStatus: string;
-  setSelectedAssetStatus: (value: string) => void;
-  selectedAssetGroup: string;
-  setSelectedAssetGroup: (value: string) => void;
-  selectedProduct: string;
-  setSelectedProduct: (value: string) => void;
-  fromDate: string;
-  setFromDate: (value: string) => void;
-  toDate: string;
-  setToDate: (value: string) => void;
+  selectedWarehouse: string[];
+  setSelectedWarehouse: (value: string[]) => void;
+  selectedAssetType: string[];
+  setSelectedAssetType: (value: string[]) => void;
+  selectedModel: string[];
+  setSelectedModel: (value: string[]) => void;
+  selectedAssetStatus: string[];
+  setSelectedAssetStatus: (value: string[]) => void;
+  selectedAssetGroup: string[];
+  setSelectedAssetGroup: (value: string[]) => void;
+  selectedProduct: string[];
+  setSelectedProduct: (value: string[]) => void;
+  fromDate: DateRange | undefined;
+  setFromDate: (range: DateRange | undefined) => void;
   showDeleted: boolean;
   setShowDeleted: (value: boolean) => void;
   searchQuery: string;
@@ -43,8 +49,6 @@ const OrderSummaryTable: React.FC<OrderSummaryTableProps> = ({
   setSelectedProduct,
   fromDate,
   setFromDate,
-  toDate,
-  setToDate,
   showDeleted,
   setShowDeleted,
   searchQuery,
@@ -62,92 +66,92 @@ const OrderSummaryTable: React.FC<OrderSummaryTableProps> = ({
   const activeDevices = useMemo(() => devices.filter(d => !d.is_deleted), [devices]);
 
   // Dynamic filter options
-  const warehouseOptions = useMemo(() => 
-    ['All', ...new Set(activeDevices.map(d => d.warehouse).filter(Boolean))].sort(), 
-    [activeDevices]
-  );
+  const uniqueValues = useMemo(() => {
+    let filteredDevices = activeDevices;
 
-  const assetTypeOptions = useMemo(() => {
-    const filteredDevices = selectedWarehouse === 'All' 
-      ? activeDevices 
-      : activeDevices.filter(d => d.warehouse === selectedWarehouse);
-    return ['All', ...new Set(filteredDevices.map(d => d.asset_type).filter(Boolean))].sort();
-  }, [activeDevices, selectedWarehouse]);
-
-  const modelOptions = useMemo(() => {
-    let filteredDevices = selectedWarehouse === 'All' 
-      ? activeDevices 
-      : activeDevices.filter(d => d.warehouse === selectedWarehouse);
-    if (selectedAssetType !== 'All') {
-      filteredDevices = filteredDevices.filter(d => d.asset_type === selectedAssetType);
+    if (fromDate?.from) {
+      filteredDevices = filteredDevices.filter(d => new Date(d.created_at || d.updated_at || '1970-01-01') >= new Date(fromDate.from));
     }
-    return ['All', ...new Set(filteredDevices.map(d => d.model).filter(Boolean))].sort();
-  }, [activeDevices, selectedWarehouse, selectedAssetType]);
+    if (fromDate?.to) {
+      filteredDevices = filteredDevices.filter(d => new Date(d.created_at || d.updated_at || '1970-01-01') <= new Date(fromDate.to));
+    }
 
-  const productOptions = useMemo(() => {
-    const filteredDevices = selectedWarehouse === 'All' 
-      ? activeDevices 
-      : activeDevices.filter(d => d.warehouse === selectedWarehouse);
-    return ['All', ...new Set(filteredDevices.map(d => d.product).filter(Boolean))].sort();
-  }, [activeDevices, selectedWarehouse]);
-
-  const assetStatusOptions = useMemo(() => {
-    const filteredDevices = selectedWarehouse === 'All' 
-      ? activeDevices 
-      : activeDevices.filter(d => d.warehouse === selectedWarehouse);
-    return ['All', ...new Set(filteredDevices.map(d => d.asset_status).filter(Boolean))].sort();
-  }, [activeDevices, selectedWarehouse]);
-
-  const assetGroupOptions = useMemo(() => {
-    const filteredDevices = selectedWarehouse === 'All' 
-      ? activeDevices 
-      : activeDevices.filter(d => d.warehouse === selectedWarehouse);
-    return ['All', ...new Set(filteredDevices.map(d => d.asset_group).filter(Boolean))].sort();
-  }, [activeDevices, selectedWarehouse]);
+    return {
+      warehouses: [...new Set(filteredDevices.map(d => d.warehouse).filter(Boolean))].sort() as string[],
+      assetTypes: [...new Set(filteredDevices.map(d => d.asset_type).filter(Boolean))].sort() as string[],
+      models: [...new Set(filteredDevices.map(d => d.model).filter(Boolean))].sort() as string[],
+      products: [...new Set(filteredDevices.map(d => d.product).filter(Boolean))].sort() as string[],
+      assetStatuses: [...new Set(filteredDevices.map(d => d.asset_status).filter(Boolean))].sort() as string[],
+      assetGroups: [...new Set(filteredDevices.map(d => d.asset_group).filter(Boolean))].sort() as string[],
+    };
+  }, [activeDevices, fromDate]);
 
   // Reset invalid selections
   useEffect(() => {
-    if (selectedAssetType !== 'All' && !assetTypeOptions.includes(selectedAssetType)) {
-      setSelectedAssetType('All');
+    if (selectedWarehouse.length > 0 && !selectedWarehouse.every(w => uniqueValues.warehouses.includes(w))) {
+      setSelectedWarehouse([]);
     }
-  }, [assetTypeOptions, selectedAssetType, setSelectedAssetType]);
+  }, [uniqueValues.warehouses, selectedWarehouse, setSelectedWarehouse]);
 
   useEffect(() => {
-    if (selectedModel !== 'All' && !modelOptions.includes(selectedModel)) {
-      setSelectedModel('All');
+    if (selectedAssetType.length > 0 && !selectedAssetType.every(a => uniqueValues.assetTypes.includes(a))) {
+      setSelectedAssetType([]);
+      setSelectedModel([]);
     }
-  }, [modelOptions, selectedModel, setSelectedModel]);
+  }, [uniqueValues.assetTypes, selectedAssetType, setSelectedAssetType, setSelectedModel]);
 
   useEffect(() => {
-    if (selectedProduct !== 'All' && !productOptions.includes(selectedProduct)) {
-      setSelectedProduct('All');
+    if (selectedModel.length > 0 && !selectedModel.every(m => uniqueValues.models.includes(m))) {
+      setSelectedModel([]);
     }
-  }, [productOptions, selectedProduct, setSelectedProduct]);
+  }, [uniqueValues.models, selectedModel, setSelectedModel]);
 
   useEffect(() => {
-    if (selectedAssetStatus !== 'All' && !assetStatusOptions.includes(selectedAssetStatus)) {
-      setSelectedAssetStatus('All');
+    if (selectedProduct.length > 0 && !selectedProduct.every(p => uniqueValues.products.includes(p))) {
+      setSelectedProduct([]);
     }
-  }, [assetStatusOptions, selectedAssetStatus, setSelectedAssetStatus]);
+  }, [uniqueValues.products, selectedProduct, setSelectedProduct]);
 
   useEffect(() => {
-    if (selectedAssetGroup !== 'All' && !assetGroupOptions.includes(selectedAssetGroup)) {
-      setSelectedAssetGroup('All');
+    if (selectedAssetStatus.length > 0 && !selectedAssetStatus.every(s => uniqueValues.assetStatuses.includes(s))) {
+      setSelectedAssetStatus([]);
     }
-  }, [assetGroupOptions, selectedAssetGroup, setSelectedAssetGroup]);
+  }, [uniqueValues.assetStatuses, selectedAssetStatus, setSelectedAssetStatus]);
+
+  useEffect(() => {
+    if (selectedAssetGroup.length > 0 && !selectedAssetGroup.every(g => uniqueValues.assetGroups.includes(g))) {
+      setSelectedAssetGroup([]);
+    }
+  }, [uniqueValues.assetGroups, selectedAssetGroup, setSelectedAssetGroup]);
 
   // Compute summaries
   const summaries = useMemo(() => {
     let filteredDevices = showDeleted ? devices : activeDevices;
 
-    if (selectedWarehouse !== 'All') filteredDevices = filteredDevices.filter(d => d.warehouse === selectedWarehouse);
-    if (selectedAssetType !== 'All') filteredDevices = filteredDevices.filter(d => d.asset_type === selectedAssetType);
-    if (selectedModel !== 'All') filteredDevices = filteredDevices.filter(d => d.model === selectedModel);
-    if (selectedProduct !== 'All') filteredDevices = filteredDevices.filter(d => d.product === selectedProduct);
-    if (selectedAssetStatus !== 'All') filteredDevices = filteredDevices.filter(d => d.asset_status === selectedAssetStatus);
-    if (selectedAssetGroup !== 'All') filteredDevices = filteredDevices.filter(d => d.asset_group === selectedAssetGroup);
-    if (fromDate) filteredDevices = filteredDevices.filter(d => new Date(d.created_at || d.updated_at || '1970-01-01') >= new Date(fromDate));
-    if (toDate) filteredDevices = filteredDevices.filter(d => new Date(d.created_at || d.updated_at || '1970-01-01') <= new Date(toDate));
+    if (selectedWarehouse.length > 0) {
+      filteredDevices = filteredDevices.filter(d => selectedWarehouse.includes(d.warehouse || ''));
+    }
+    if (selectedAssetType.length > 0) {
+      filteredDevices = filteredDevices.filter(d => selectedAssetType.includes(d.asset_type || ''));
+    }
+    if (selectedModel.length > 0) {
+      filteredDevices = filteredDevices.filter(d => selectedModel.includes(d.model || ''));
+    }
+    if (selectedProduct.length > 0) {
+      filteredDevices = filteredDevices.filter(d => selectedProduct.includes(d.product || ''));
+    }
+    if (selectedAssetStatus.length > 0) {
+      filteredDevices = filteredDevices.filter(d => selectedAssetStatus.includes(d.asset_status || ''));
+    }
+    if (selectedAssetGroup.length > 0) {
+      filteredDevices = filteredDevices.filter(d => selectedAssetGroup.includes(d.asset_group || ''));
+    }
+    if (fromDate?.from) {
+      filteredDevices = filteredDevices.filter(d => new Date(d.created_at || d.updated_at || '1970-01-01') >= new Date(fromDate.from));
+    }
+    if (fromDate?.to) {
+      filteredDevices = filteredDevices.filter(d => new Date(d.created_at || d.updated_at || '1970-01-01') <= new Date(fromDate.to));
+    }
 
     const summaryMap = new Map<string, OrderSummary>();
 
@@ -166,7 +170,6 @@ const OrderSummaryTable: React.FC<OrderSummaryTableProps> = ({
         });
       }
       const s = summaryMap.get(key)!;
-      // Increment inward only for inward transactions or non-assigned devices
       if (d.transaction_type === 'Inward' || (!d.transaction_type && d.status !== 'Assigned')) {
         s.inward += 1;
       }
@@ -194,8 +197,7 @@ const OrderSummaryTable: React.FC<OrderSummaryTableProps> = ({
       }
     });
 
-    // Calculate stock as inward - outward for each summary
-    for (let [key, s] of summaryMap) {
+    for (let [, s] of summaryMap) {
       s.stock = s.inward - s.outward;
     }
 
@@ -230,18 +232,30 @@ const OrderSummaryTable: React.FC<OrderSummaryTableProps> = ({
     selectedAssetStatus,
     selectedAssetGroup,
     fromDate,
-    toDate,
     searchQuery,
   ]);
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [selectedWarehouse, selectedAssetType, selectedModel, selectedProduct, selectedAssetStatus, selectedAssetGroup, fromDate, toDate, showDeleted, searchQuery, rowsPerPage]);
+  }, [
+    selectedWarehouse,
+    selectedAssetType,
+    selectedModel,
+    selectedProduct,
+    selectedAssetStatus,
+    selectedAssetGroup,
+    fromDate,
+    showDeleted,
+    searchQuery,
+    rowsPerPage,
+  ]);
 
-  const paginatedSummary = summaries.slice(
-    (currentPage - 1) * rowsPerPage,
-    currentPage * rowsPerPage
-  );
+  const paginatedSummary = useMemo(() => {
+    return summaries.slice(
+      (currentPage - 1) * rowsPerPage,
+      currentPage * rowsPerPage
+    );
+  }, [summaries, currentPage, rowsPerPage]);
 
   const totalPages = Math.ceil(summaries.length / rowsPerPage);
 
@@ -283,6 +297,19 @@ const OrderSummaryTable: React.FC<OrderSummaryTableProps> = ({
     window.URL.revokeObjectURL(url);
   };
 
+  const clearFilters = () => {
+    setSelectedWarehouse([]);
+    setSelectedAssetType([]);
+    setSelectedModel([]);
+    setSelectedAssetStatus([]);
+    setSelectedAssetGroup([]);
+    setSelectedProduct([]);
+    setFromDate(undefined);
+    setSearchQuery('');
+    setShowDeleted(false);
+    setCurrentPage(1);
+  };
+
   const columnWidths = {
     warehouse: '150px',
     asset_type: '120px',
@@ -293,155 +320,127 @@ const OrderSummaryTable: React.FC<OrderSummaryTableProps> = ({
   };
 
   return (
-    <div style={{ border: '1px solid #e2e8f0', borderRadius: '8px', background: '#fff', padding: '16px' }}>
-      <div style={{ padding: '8px 0' }}></div>
-      <div style={{ padding: '16px' }}>
-        <div style={{ marginBottom: '16px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <div style={{ flex: 1, maxWidth: '1200px' }}>
-              <div style={{ position: 'relative' }}>
-                <Search style={{ position: 'absolute', left: '8px', top: '8px', width: '12px', height: '12px', color: '#6b7280' }} />
-                <input
+    <Card style={{ border: '1px solid #e2e8f0', borderRadius: '8px', background: '#fff', padding: '8px' }}>
+      <CardHeader style={{ paddingBottom: '2px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <CardTitle style={{ display: 'flex', alignItems: 'center', gap: '1px', fontSize: '12px' }}>
+            Order Summary
+          </CardTitle>
+          <Button
+            variant="outline"
+            size="sm"
+            style={{ border: '1px solid #d1d5db', borderRadius: '4px', padding: '4px 6px', fontSize: '12px', height: '28px' }}
+            onClick={clearFilters}
+          >
+            Clear Filters
+          </Button>
+        </div>
+      </CardHeader>
+      <CardContent style={{ paddingTop: '2px' }}>
+        <div style={{ marginBottom: '8px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '4px', flexWrap: 'wrap' }}>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ position: 'relative', width: '100%' }}>
+                <Search style={{ position: 'absolute', left: '8px', top: '50%', transform: 'translateY(-50%)', width: '12px', height: '12px', color: '#6b7280' }} />
+                <Input
                   id="search"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   placeholder="Search by Warehouse, Asset Type, or Model"
-                  style={{ paddingLeft: '28px', fontSize: '12px', width: '100%', border: '1px solid #d1d5db', borderRadius: '4px', padding: '8px' }}
+                  style={{ paddingLeft: '28px', fontSize: '12px', width: '100%', height: '28px' }}
                 />
               </div>
             </div>
-            <button
+            <Button
+              variant="outline"
+              size="sm"
+              style={{ border: '1px solid #d1d5db', borderRadius: '4px', padding: '4px 6px', fontSize: '12px', height: '28px' }}
               onClick={() => downloadCSV(summaries, 'order_summary_export.csv')}
-              style={{ border: '1px solid #d1d5db', borderRadius: '4px', padding: '4px 8px', fontSize: '12px', display: 'flex', alignItems: 'center' }}
             >
               <Download style={{ width: '12px', height: '12px' }} />
-            </button>
-            <button
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              style={{ border: '1px solid #d1d5db', borderRadius: '4px', padding: '4px 6px', fontSize: '12px', height: '28px' }}
               onClick={() => setShowDeleted(!showDeleted)}
-              style={{ border: '1px solid #d1d5db', borderRadius: '4px', padding: '4px 8px', fontSize: '12px' }}
             >
-              {showDeleted ? 'Hide Zero Stock' : 'Show Zero Stock'}
-            </button>
+              {showDeleted ? 'Show Active' : 'Show Deleted'}
+            </Button>
           </div>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginTop: '8px' }}>
-            <div style={{ flex: 1, minWidth: '150px' }}>
-              <label htmlFor="warehouseFilter" style={{ fontSize: '12px', color: '#6b7280', display: 'block', marginBottom: '4px' }}>Warehouse</label>
-              <select
-                id="warehouseFilter"
-                value={selectedWarehouse}
-                onChange={(e) => setSelectedWarehouse(e.target.value)}
-                style={{ fontSize: '12px', width: '100%', border: '1px solid #d1d5db', borderRadius: '4px', padding: '8px' }}
-              >
-                {warehouseOptions.map(warehouse => (
-                  <option key={warehouse} value={warehouse} style={{ fontSize: '12px' }}>
-                    {warehouse}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div style={{ flex: 1, minWidth: '150px' }}>
-              <label htmlFor="assetTypeFilter" style={{ fontSize: '12px', color: '#6b7280', display: 'block', marginBottom: '4px' }}>Asset Type</label>
-              <select
-                id="assetTypeFilter"
-                value={selectedAssetType}
-                onChange={(e) => {
-                  setSelectedAssetType(e.target.value);
-                  setSelectedModel('All');
-                }}
-                style={{ fontSize: '12px', width: '100%', border: '1px solid #d1d5db', borderRadius: '4px', padding: '8px' }}
-              >
-                {assetTypeOptions.map(assetType => (
-                  <option key={assetType} value={assetType} style={{ fontSize: '12px' }}>
-                    {assetType}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div style={{ flex: 1, minWidth: '150px' }}>
-              <label htmlFor="modelFilter" style={{ fontSize: '12px', color: '#6b7280', display: 'block', marginBottom: '4px' }}>Model</label>
-              <select
-                id="modelFilter"
-                value={selectedModel}
-                onChange={(e) => setSelectedModel(e.target.value)}
-                style={{ fontSize: '12px', width: '100%', border: '1px solid #d1d5db', borderRadius: '4px', padding: '8px' }}
-              >
-                {modelOptions.map(model => (
-                  <option key={model} value={model} style={{ fontSize: '12px' }}>
-                    {model}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div style={{ flex: 1, minWidth: '150px' }}>
-              <label htmlFor="productFilter" style={{ fontSize: '12px', color: '#6b7280', display: 'block', marginBottom: '4px' }}>Product</label>
-              <select
-                id="productFilter"
-                value={selectedProduct}
-                onChange={(e) => setSelectedProduct(e.target.value)}
-                style={{ fontSize: '12px', width: '100%', border: '1px solid #d1d5db', borderRadius: '4px', padding: '8px' }}
-              >
-                {productOptions.map(product => (
-                  <option key={product} value={product} style={{ fontSize: '12px' }}>
-                    {product}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div style={{ flex: 1, minWidth: '150px' }}>
-              <label htmlFor="assetStatusFilter" style={{ fontSize: '12px', color: '#6b7280', display: 'block', marginBottom: '4px' }}>Asset Status</label>
-              <select
-                id="assetStatusFilter"
-                value={selectedAssetStatus}
-                onChange={(e) => setSelectedAssetStatus(e.target.value)}
-                style={{ fontSize: '12px', width: '100%', border: '1px solid #d1d5db', borderRadius: '4px', padding: '8px' }}
-              >
-                {assetStatusOptions.map(status => (
-                  <option key={status} value={status} style={{ fontSize: '12px' }}>
-                    {status}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div style={{ flex: 1, minWidth: '150px' }}>
-              <label htmlFor="assetGroupFilter" style={{ fontSize: '12px', color: '#6b7280', display: 'block', marginBottom: '4px' }}>Asset Group</label>
-              <select
-                id="assetGroupFilter"
-                value={selectedAssetGroup}
-                onChange={(e) => setSelectedAssetGroup(e.target.value)}
-                style={{ fontSize: '12px', width: '100%', border: '1px solid #d1d5db', borderRadius: '4px', padding: '8px' }}
-              >
-                {assetGroupOptions.map(group => (
-                  <option key={group} value={group} style={{ fontSize: '12px' }}>
-                    {group}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div style={{ flex: 1, minWidth: '150px' }}>
-              <label htmlFor="fromDate" style={{ fontSize: '12px', color: '#6b7280', display: 'block', marginBottom: '4px' }}>From Date</label>
-              <input
-                type="date"
-                id="fromDate"
-                value={fromDate}
-                onChange={(e) => setFromDate(e.target.value)}
-                style={{ fontSize: '12px', width: '100%', border: '1px solid #d1d5db', borderRadius: '4px', padding: '8px' }}
-              />
-            </div>
-            <div style={{ flex: 1, minWidth: '150px' }}>
-              <label htmlFor="toDate" style={{ fontSize: '12px', color: '#6b7280', display: 'block', marginBottom: '4px' }}>To Date</label>
-              <input
-                type="date"
-                id="toDate"
-                value={toDate}
-                onChange={(e) => setToDate(e.target.value)}
-                style={{ fontSize: '12px', width: '100%', border: '1px solid #d1d5db', borderRadius: '4px', padding: '8px' }}
+          <div style={{ display: 'flex', gap: '4px', marginTop: '4px', maxWidth: '1200px', overflowX: 'auto', whiteSpace: 'nowrap', flexWrap: 'wrap' }}>
+            <MultiSelect
+              id="warehouseFilter"
+              label="Warehouse"
+              options={uniqueValues.warehouses}
+              value={selectedWarehouse}
+              onChange={(value) => {
+                setSelectedWarehouse(value);
+                setSelectedAssetType([]);
+                setSelectedModel([]);
+                setSelectedAssetStatus([]);
+                setSelectedAssetGroup([]);
+                setSelectedProduct([]);
+              }}
+              placeholder="Select Warehouses"
+            />
+            <MultiSelect
+              id="assetTypeFilter"
+              label="Asset Type"
+              options={uniqueValues.assetTypes}
+              value={selectedAssetType}
+              onChange={(value) => {
+                setSelectedAssetType(value);
+                setSelectedModel([]);
+              }}
+              placeholder="Select Asset Types"
+            />
+            <MultiSelect
+              id="modelFilter"
+              label="Model"
+              options={uniqueValues.models}
+              value={selectedModel}
+              onChange={setSelectedModel}
+              placeholder="Select Models"
+            />
+            <MultiSelect
+              id="productFilter"
+              label="Product"
+              options={uniqueValues.products}
+              value={selectedProduct}
+              onChange={setSelectedProduct}
+              placeholder="Select Products"
+            />
+            <MultiSelect
+              id="assetStatusFilter"
+              label="Asset Status"
+              options={uniqueValues.assetStatuses}
+              value={selectedAssetStatus}
+              onChange={setSelectedAssetStatus}
+              placeholder="Select Asset Statuses"
+            />
+            <MultiSelect
+              id="assetGroupFilter"
+              label="Asset Group"
+              options={uniqueValues.assetGroups}
+              value={selectedAssetGroup}
+              onChange={setSelectedAssetGroup}
+              placeholder="Select Asset Groups"
+            />
+            <div style={{ flex: '1', minWidth: '150px' }}>
+              <label htmlFor="dateRangeFilter" style={{ fontSize: '12px', color: '#6b7280', display: 'block', marginBottom: '2px', whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' }}>Date Range</label>
+              <DatePickerWithRange
+                date={fromDate}
+                setDate={setFromDate}
+                className="h-7 w-full"
+                style={{ fontSize: '12px', border: '1px solid #d1d5db', borderRadius: '4px', padding: '6px', height: '28px' }}
               />
             </div>
           </div>
         </div>
 
         {devices.length === 0 ? (
-          <div style={{ fontSize: '12px' }}>No devices available. Load devices or check your database.</div>
+          <div style={{ fontSize: '12px', padding: '8px' }}>No devices available. Load devices or check your database.</div>
         ) : (
           <>
             <div
@@ -452,76 +451,76 @@ const OrderSummaryTable: React.FC<OrderSummaryTableProps> = ({
                 position: 'relative',
               }}
             >
-              <table style={{ width: '100%', minWidth: '800px', borderCollapse: 'collapse' }}>
-                <thead>
-                  <tr>
-                    <th style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', textAlign: 'left', position: 'sticky', top: 0, background: '#fff', zIndex: 20, width: columnWidths.warehouse }}>Warehouse</th>
-                    <th style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', textAlign: 'left', position: 'sticky', top: 0, background: '#fff', zIndex: 20, width: columnWidths.asset_type }}>Asset Type</th>
-                    <th style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', textAlign: 'left', position: 'sticky', top: 0, background: '#fff', zIndex: 20, width: columnWidths.model }}>Model</th>
-                    <th style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', textAlign: 'left', position: 'sticky', top: 0, background: '#fff', zIndex: 20, width: columnWidths.inward }}>Inward</th>
-                    <th style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', textAlign: 'left', position: 'sticky', top: 0, background: '#fff', zIndex: 20, width: columnWidths.outward }}>Outward</th>
-                    <th style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', textAlign: 'left', position: 'sticky', top: 0, background: '#fff', zIndex: 20, width: columnWidths.stock }}>Stock</th>
-                  </tr>
-                </thead>
-                <tbody>
+              <Table style={{ minWidth: '800px' }}>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', textAlign: 'left', position: 'sticky', top: 0, background: '#fff', zIndex: 20, width: columnWidths.warehouse }}>Warehouse</TableHead>
+                    <TableHead style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', textAlign: 'left', position: 'sticky', top: 0, background: '#fff', zIndex: 20, width: columnWidths.asset_type }}>Asset Type</TableHead>
+                    <TableHead style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', textAlign: 'left', position: 'sticky', top: 0, background: '#fff', zIndex: 20, width: columnWidths.model }}>Model</TableHead>
+                    <TableHead style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', textAlign: 'left', position: 'sticky', top: 0, background: '#fff', zIndex: 20, width: columnWidths.inward }}>Inward</TableHead>
+                    <TableHead style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', textAlign: 'left', position: 'sticky', top: 0, background: '#fff', zIndex: 20, width: columnWidths.outward }}>Outward</TableHead>
+                    <TableHead style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', textAlign: 'left', position: 'sticky', top: 0, background: '#fff', zIndex: 20, width: columnWidths.stock }}>Stock</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
                   {paginatedSummary.length === 0 ? (
-                    <tr>
-                      <td colSpan={6} style={{ textAlign: 'center', fontSize: '12px', padding: '8px' }}>
+                    <TableRow>
+                      <TableCell colSpan={6} style={{ textAlign: 'center', fontSize: '12px', padding: '8px' }}>
                         No summary data found with current filters. Try adjusting the filters.
-                      </td>
-                    </tr>
+                      </TableCell>
+                    </TableRow>
                   ) : (
                     paginatedSummary.map((summary, index) => (
-                      <tr key={index}>
-                        <td style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', width: columnWidths.warehouse }}>{summary.warehouse}</td>
-                        <td style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', width: columnWidths.asset_type }}>{summary.asset_type}</td>
-                        <td style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', width: columnWidths.model }}>{summary.model}</td>
-                        <td style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', width: columnWidths.inward }}>{summary.inward}</td>
-                        <td style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', width: columnWidths.outward }}>{summary.outward}</td>
-                        <td style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', width: columnWidths.stock }}>{summary.stock}</td>
-                      </tr>
+                      <TableRow key={`${summary.warehouse}-${summary.asset_type}-${summary.model}-${index}`}>
+                        <TableCell style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', width: columnWidths.warehouse }}>{summary.warehouse}</TableCell>
+                        <TableCell style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', width: columnWidths.asset_type }}>{summary.asset_type}</TableCell>
+                        <TableCell style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', width: columnWidths.model }}>{summary.model}</TableCell>
+                        <TableCell style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', width: columnWidths.inward }}>{summary.inward}</TableCell>
+                        <TableCell style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', width: columnWidths.outward }}>{summary.outward}</TableCell>
+                        <TableCell style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', width: columnWidths.stock }}>{summary.stock}</TableCell>
+                      </TableRow>
                     ))
                   )}
-                </tbody>
-              </table>
+                </TableBody>
+              </Table>
             </div>
 
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '8px', fontSize: '12px' }}>
-              <div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '4px', fontSize: '12px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <span>Showing {((currentPage - 1) * rowsPerPage) + 1} to {Math.min(currentPage * rowsPerPage, summaries.length)} of {summaries.length} summaries</span>
-                <select
-                  value={rowsPerPage}
-                  onChange={(e) => {
-                    setRowsPerPage(Number(e.target.value));
+                <Select
+                  value={rowsPerPage.toString()}
+                  onValueChange={(value) => {
+                    setRowsPerPage(Number(value));
                     setCurrentPage(1);
                   }}
-                  style={{ 
-                    fontSize: '12px', 
-                    border: '1px solid #d1d5db', 
-                    borderRadius: '4px', 
-                    padding: '4px', 
-                    marginLeft: '8px', 
-                    height: '28px' 
-                  }}
                 >
-                  <option value={10}>10</option>
-                  <option value={25}>25</option>
-                  <option value={50}>50</option>
-                  <option value={100}>100</option>
-                </select>
+                  <SelectTrigger style={{ fontSize: '12px', border: '1px solid #d1d5db', borderRadius: '4px', padding: '4px', height: '28px' }}>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="10">10</SelectItem>
+                    <SelectItem value="25">25</SelectItem>
+                    <SelectItem value="50">50</SelectItem>
+                    <SelectItem value="100">100</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                <button
-                  onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
-                  disabled={currentPage === 1}
+                <Button
+                  variant="outline"
+                  size="sm"
                   style={{ border: '1px solid #d1d5db', borderRadius: '4px', padding: '4px 8px', fontSize: '12px', opacity: currentPage === 1 ? 0.5 : 1 }}
+                  disabled={currentPage === 1}
+                  onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
                 >
                   Previous
-                </button>
+                </Button>
                 {pageRange.map((page, index) => (
-                  <button
+                  <Button
                     key={index}
-                    onClick={() => typeof page === 'number' && setCurrentPage(page)}
+                    variant={currentPage === page ? 'default' : 'outline'}
+                    size="sm"
                     style={{
                       border: '1px solid #d1d5db',
                       borderRadius: '4px',
@@ -533,23 +532,26 @@ const OrderSummaryTable: React.FC<OrderSummaryTableProps> = ({
                       opacity: typeof page === 'number' ? 1 : 0.5,
                     }}
                     disabled={typeof page !== 'number'}
+                    onClick={() => typeof page === 'number' && setCurrentPage(page)}
                   >
                     {page}
-                  </button>
+                  </Button>
                 ))}
-                <button
-                  onClick={() => setCurrentPage((prev) => Math.min(prev + 1, totalPages))}
-                  disabled={currentPage === totalPages}
+                <Button
+                  variant="outline"
+                  size="sm"
                   style={{ border: '1px solid #d1d5db', borderRadius: '4px', padding: '4px 8px', fontSize: '12px', opacity: currentPage === totalPages ? 0.5 : 1 }}
+                  disabled={currentPage === totalPages}
+                  onClick={() => setCurrentPage((prev) => Math.min(prev + 1, totalPages))}
                 >
                   Next
-                </button>
+                </Button>
               </div>
             </div>
           </>
         )}
-      </div>
-    </div>
+      </CardContent>
+    </Card>
   );
 };
 

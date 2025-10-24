@@ -21,15 +21,15 @@ const InventoryManagement = () => {
   const [isClearing, setIsClearing] = useState(false);
   const [showScanner, setShowScanner] = useState(false);
   const [currentSerialIndex, setCurrentSerialIndex] = useState<{ itemId: string; index: number; type: 'tablet' | 'tv' } | null>(null);
-  const [selectedWarehouse, setSelectedWarehouse] = useState<string>('All');
-  const [selectedAssetType, setSelectedAssetType] = useState<string>('All');
-  const [selectedModel, setSelectedModel] = useState<string>('All');
-  const [selectedAssetStatus, setSelectedAssetStatus] = useState<string>('All');
-  const [selectedConfiguration, setSelectedConfiguration] = useState<string>('All');
-  const [selectedProduct, setSelectedProduct] = useState<string>('All');
-  const [selectedStatus, setSelectedStatus] = useState<string>('All');
-  const [selectedOrderType, setSelectedOrderType] = useState<string>('All');
-  const [selectedAssetGroup, setSelectedAssetGroup] = useState<string>('All');
+  const [selectedWarehouse, setSelectedWarehouse] = useState<string[]>([]); // Changed from 'All'
+  const [selectedAssetType, setSelectedAssetType] = useState<string[]>([]); // Changed from 'All'
+  const [selectedModel, setSelectedModel] = useState<string[]>([]); // Changed from 'All'
+  const [selectedAssetStatus, setSelectedAssetStatus] = useState<string[]>([]); // Changed from 'All'
+  const [selectedConfiguration, setSelectedConfiguration] = useState<string[]>([]); // Changed from 'All'
+  const [selectedProduct, setSelectedProduct] = useState<string[]>([]); // Changed from 'All'
+  const [selectedStatus, setSelectedStatus] = useState<string[]>([]); // Changed from 'All'
+  const [selectedOrderType, setSelectedOrderType] = useState<string[]>([]); // Changed from 'All'
+  const [selectedAssetGroup, setSelectedAssetGroup] = useState<string[]>([]); // Changed from 'All'
   const [fromDate, setFromDate] = useState<string>('');
   const [toDate, setToDate] = useState<string>('');
   const [showDeleted, setShowDeleted] = useState<boolean>(false);
@@ -44,7 +44,7 @@ const InventoryManagement = () => {
   const { toast } = useToast();
   const [userEmail, setUserEmail] = useState<string | null>(null);
   const [userRole, setUserRole] = useState<string | null>(null);
-
+  
   useEffect(() => {
     const fetchUser = async () => {
       try {

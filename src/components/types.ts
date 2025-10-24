@@ -115,6 +115,7 @@ export interface Device {
   deleted_at?: string | null;
   is_deleted: boolean;
   order_id: string;
+  asset_condition?: string;
   material_type?: 'Inward' | 'Outward';
 }
 
