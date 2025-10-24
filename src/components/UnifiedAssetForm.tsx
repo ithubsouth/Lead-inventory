@@ -118,10 +118,10 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
       quantity: 1,
       location: '',
       serialNumbers: hasSerials ? [''] : [],
-      assetStatuses: hasSerials ? ['Fresh'] : ['Fresh'], // Default to "Fresh"
-      assetGroups: hasSerials ? ['NFA'] : ['NFA'], // Default to "NFA"
+      assetStatuses: ['Fresh'], // Default to "Fresh"
+      assetGroups: ['NFA'], // Default to "NFA"
       asset_conditions: [''],
-      farCodes: hasSerials ? [''] : [],
+      farCodes: [''], // FIXED: Always initialize with length 1 (blank) to match quantity
       hasSerials,
     };
     setAssets([...assets, newAsset]);
@@ -138,18 +138,25 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
           const currentConditions = asset.asset_conditions || [];
           const currentFarCodes = asset.farCodes || [];
           const newSerialNumbers = asset.hasSerials ? Array(newQuantity).fill('').map((_, i) => currentSerials[i] || '') : [];
-          const newFarCodes = asset.hasSerials ? Array(newQuantity).fill('').map((_, i) => currentFarCodes[i] || '') : [];
           let newAssetStatuses;
           let newAssetGroups;
           let newAssetConditions;
+          let newFarCodes;
           if (asset.hasSerials) {
             newAssetStatuses = Array(newQuantity).fill('Fresh').map((_, i) => currentStatuses[i] || 'Fresh');
             newAssetGroups = Array(newQuantity).fill('NFA').map((_, i) => currentGroups[i] || 'NFA');
             newAssetConditions = Array(newQuantity).fill('').map((_, i) => currentConditions[i] || '');
+            newFarCodes = Array(newQuantity).fill('').map((_, i) => currentFarCodes[i] || '');
           } else {
-            newAssetStatuses = Array(newQuantity).fill(currentStatuses[0] || 'Fresh');
-            newAssetGroups = Array(newQuantity).fill(currentGroups[0] || 'NFA');
-            newAssetConditions = Array(newQuantity).fill(currentConditions[0] || '');
+            // FIXED: For non-serial assets, uniformize all fields (replicate [0] value)
+            const uniformStatus = currentStatuses[0] || 'Fresh';
+            const uniformGroup = currentGroups[0] || 'NFA';
+            const uniformCondition = currentConditions[0] || '';
+            const uniformFar = currentFarCodes[0] || '';
+            newAssetStatuses = Array(newQuantity).fill(uniformStatus);
+            newAssetGroups = Array(newQuantity).fill(uniformGroup);
+            newAssetConditions = Array(newQuantity).fill(uniformCondition);
+            newFarCodes = Array(newQuantity).fill(uniformFar);
           }
           return { 
             ...asset, 
@@ -167,10 +174,13 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
           let newFarCodes = asset.farCodes;
           if (newHasSerials && newSerialNumbers.length === 0) {
             newSerialNumbers = Array(asset.quantity).fill('');
+            // FIXED: Initialize farCodes as per-item blanks if enabling serials
             newFarCodes = Array(asset.quantity).fill('');
           } else if (!newHasSerials) {
             newSerialNumbers = [];
-            newFarCodes = [];
+            // FIXED: Uniformize farCodes when disabling serials (replicate [0])
+            const uniformFar = asset.farCodes[0] || '';
+            newFarCodes = Array(asset.quantity).fill(uniformFar);
           }
           if (!newHasSerials) {
             const uniformStatuses = Array(asset.quantity).fill(asset.assetStatuses[0] || 'Fresh');
@@ -315,29 +325,14 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
 
           const latestDevice = latestBySerial[serial];
           if (latestDevice) {
-            if (isInward) {
-              // Allow user-defined values for Inward, fetched values are editable
-            } else {
-              const newStatuses = [...asset.assetStatuses];
-              const newGroups = [...asset.assetGroups];
-              const newFarCodes = [...asset.farCodes];
-              newStatuses[i] = latestDevice.asset_status || 'Fresh';
-              newGroups[i] = latestDevice.asset_group || 'NFA';
-              newFarCodes[i] = latestDevice.far_code || '';
-              setAssets(prevAssets =>
-                prevAssets.map(a =>
-                  a.id === asset.id ? { ...a, assetStatuses: newStatuses, assetGroups: newGroups, farCodes: newFarCodes } : a
-                )
-              );
-
-              // Additional validation for location and material type
-              if (isInward && latestDevice.material_type === 'Inward' && latestDevice.warehouse !== asset.location) {
-                serialErrors[i] = `Currently Inward in ${latestDevice.warehouse}`;
-              } else if (!isInward && latestDevice.material_type === 'Outward' && latestDevice.warehouse !== asset.location) {
-                serialErrors[i] = `Currently Outward in ${latestDevice.warehouse}`;
-              } else if (!isInward && latestDevice.material_type === 'Inward' && latestDevice.warehouse !== asset.location) {
-                serialErrors[i] = `Currently Inward in ${latestDevice.warehouse}`;
-              }
+            // FIXED: For Outward, do not overwrite values here (already set by fetchAssetDetails); only validate
+            // Additional validation for location and material type (applies to both Inward and Outward)
+            if (isInward && latestDevice.material_type === 'Inward' && latestDevice.warehouse !== asset.location) {
+              serialErrors[i] = `Currently Inward in ${latestDevice.warehouse}`;
+            } else if (!isInward && latestDevice.material_type === 'Outward' && latestDevice.warehouse !== asset.location) {
+              serialErrors[i] = `Currently Outward in ${latestDevice.warehouse}`;
+            } else if (!isInward && latestDevice.material_type === 'Inward' && latestDevice.warehouse !== asset.location) {
+              serialErrors[i] = `Currently Inward in ${latestDevice.warehouse}`;
             }
           } else {
             if (!isInward) {
@@ -1305,7 +1300,7 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
                         assetStatuses: [],
                         assetGroups: [],
                         asset_conditions: [],
-                        farCodes: [],
+                        farCodes: [], // FIXED: Initialize empty, will be set below
                         hasSerials: !!serialVal || defaultHasSerials(assetTypeVal),
                         lastFetchedOrderType: undefined,
                       };
@@ -1321,19 +1316,13 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
                       currentAsset.assetStatuses.push(statusVal);
                       currentAsset.assetGroups.push(groupVal);
                       currentAsset.asset_conditions.push('');
-                      currentAsset.farCodes.push('');
+                      currentAsset.farCodes.push(''); // FIXED: Blank for serial items
                     }
 
-                    if (currentAsset.serialNumbers.length === 0 && currentAsset.quantity > 0) {
-                      if (!currentAsset.assetStatuses[0]) {
-                        currentAsset.assetStatuses[0] = statusVal;
-                      }
-                      if (!currentAsset.assetGroups[0]) {
-                        currentAsset.assetGroups[0] = groupVal;
-                      }
-                      if (!currentAsset.farCodes[0]) {
-                        currentAsset.farCodes[0] = '';
-                      }
+                    // FIXED: Ensure farCodes is always length === quantity (uniform if no serials)
+                    if (currentAsset.farCodes.length === 0 && currentAsset.quantity > 0) {
+                      const uniformFar = ''; // Default blank for bulk
+                      currentAsset.farCodes = Array(currentAsset.quantity).fill(uniformFar);
                     }
 
                     if (salesOrderVal && !salesOrder) setSalesOrder(salesOrderVal);
@@ -1365,7 +1354,7 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
                   asset_conditions: Array(asset.quantity).fill(''),
                   farCodes: asset.farCodes.length 
                     ? asset.farCodes 
-                    : Array(asset.quantity).fill(asset.farCodes[0] || ''),
+                    : Array(asset.quantity).fill(''), // FIXED: Ensure length match with blanks
                 }));
 
                 if (errors.length > 0) {
