@@ -1,4 +1,3 @@
-// types.ts
 export type ORDER_TYPES = typeof import('./constants').orderTypes[number];
 export type TABLET_MODELS = typeof import('./constants').tabletModels[number];
 export type TV_MODELS = typeof import('./constants').tvModels[number];
@@ -106,7 +105,8 @@ export interface Device {
   product?: string | null;
   asset_status?: string | null;
   asset_group?: string | null;
-  asset_check?: string | null;
+  asset_condition?: string | null;
+  far_code?: string | null; // Added to match DevicesTable usage
   status: 'Stock' | 'Assigned' | 'Available';
   created_at: string;
   created_by?: string;
@@ -115,7 +115,6 @@ export interface Device {
   deleted_at?: string | null;
   is_deleted: boolean;
   order_id: string;
-  asset_condition?: string;
   material_type?: 'Inward' | 'Outward';
 }
 
