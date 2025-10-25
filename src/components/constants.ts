@@ -156,5 +156,5 @@ export const deviceStatuses = [
 // New constant for excluded items in AuditTable
 export const excludedAuditItems = {
   assetTypes: ['Cover', 'SD Card', 'Pendrive'] as const,
-  models: ['SD Card Box', 'Envelope', 'HDMI Cable'] as const,
+  models: ['SD Card Box', 'Envelope', 'HDMI Cable', 'USB Wall Adapter', 'Dongle'] as const,
 };

@@ -21,15 +21,16 @@ const InventoryManagement = () => {
   const [isClearing, setIsClearing] = useState(false);
   const [showScanner, setShowScanner] = useState(false);
   const [currentSerialIndex, setCurrentSerialIndex] = useState<{ itemId: string; index: number; type: 'tablet' | 'tv' } | null>(null);
-  const [selectedWarehouse, setSelectedWarehouse] = useState<string[]>([]); // Changed from 'All'
-  const [selectedAssetType, setSelectedAssetType] = useState<string[]>([]); // Changed from 'All'
-  const [selectedModel, setSelectedModel] = useState<string[]>([]); // Changed from 'All'
-  const [selectedAssetStatus, setSelectedAssetStatus] = useState<string[]>([]); // Changed from 'All'
-  const [selectedConfiguration, setSelectedConfiguration] = useState<string[]>([]); // Changed from 'All'
-  const [selectedProduct, setSelectedProduct] = useState<string[]>([]); // Changed from 'All'
-  const [selectedStatus, setSelectedStatus] = useState<string[]>([]); // Changed from 'All'
-  const [selectedOrderType, setSelectedOrderType] = useState<string[]>([]); // Changed from 'All'
-  const [selectedAssetGroup, setSelectedAssetGroup] = useState<string[]>([]); // Changed from 'All'
+  const [selectedWarehouse, setSelectedWarehouse] = useState<string[]>([]);
+  const [selectedAssetType, setSelectedAssetType] = useState<string[]>([]);
+  const [selectedModel, setSelectedModel] = useState<string[]>([]);
+  const [selectedAssetStatus, setSelectedAssetStatus] = useState<string[]>([]);
+  const [selectedConfiguration, setSelectedConfiguration] = useState<string[]>([]);
+  const [selectedProduct, setSelectedProduct] = useState<string[]>([]);
+  const [selectedStatus, setSelectedStatus] = useState<string[]>([]);
+  const [selectedOrderType, setSelectedOrderType] = useState<string[]>([]);
+  const [selectedAssetGroup, setSelectedAssetGroup] = useState<string[]>([]);
+  const [selectedAssetCondition, setSelectedAssetCondition] = useState<string[]>([]);
   const [fromDate, setFromDate] = useState<string>('');
   const [toDate, setToDate] = useState<string>('');
   const [showDeleted, setShowDeleted] = useState<boolean>(false);
@@ -653,6 +654,16 @@ const InventoryManagement = () => {
     }
   };
 
+  const devicesFromDate: DateRange | undefined = fromDate || toDate ? {
+    from: fromDate ? new Date(fromDate) : undefined,
+    to: toDate ? new Date(toDate) : undefined
+  } : undefined;
+
+  const setDevicesFromDate = (range: DateRange | undefined) => {
+    setFromDate(range?.from ? range.from.toISOString().split('T')[0] : '');
+    setToDate(range?.to ? range.to.toISOString().split('T')[0] : '');
+  };
+
   return (
     <div className='min-h-screen max-h-screen overflow-hidden bg-gradient-to-br from-background to-secondary/20 flex flex-col'>
       <div className='w-full bg-card/80 backdrop-blur-sm border-b border-border/50 fixed top-0 left-0 right-0 z-50 shadow-sm'>
@@ -773,6 +784,8 @@ const InventoryManagement = () => {
                 setSelectedAssetGroup={setSelectedAssetGroup}
                 selectedProduct={selectedProduct}
                 setSelectedProduct={setSelectedProduct}
+                selectedAssetCondition={selectedAssetCondition}
+                setSelectedAssetCondition={setSelectedAssetCondition}                
                 fromDate={fromDate}
                 setFromDate={setFromDate}
                 toDate={toDate}
@@ -804,10 +817,10 @@ const InventoryManagement = () => {
                 setSelectedOrderType={setSelectedOrderType}
                 selectedAssetGroup={selectedAssetGroup}
                 setSelectedAssetGroup={setSelectedAssetGroup}
-                fromDate={fromDate}
-                setFromDate={setFromDate}
-                toDate={toDate}
-                setToDate={setToDate}
+                selectedAssetCondition={selectedAssetCondition}
+                setSelectedAssetCondition={setSelectedAssetCondition}
+                fromDate={devicesFromDate}
+                setFromDate={setDevicesFromDate}
                 showDeleted={showDeleted}
                 setShowDeleted={setShowDeleted}
                 searchQuery={searchQuery}
@@ -833,6 +846,8 @@ const InventoryManagement = () => {
                 setSelectedOrderType={setSelectedOrderType}
                 selectedAssetGroup={selectedAssetGroup}
                 setSelectedAssetGroup={setSelectedAssetGroup}
+                selectedAssetCondition={selectedAssetCondition}
+                setSelectedAssetCondition={setSelectedAssetCondition}
                 fromDate={fromDate ? { from: new Date(fromDate), to: undefined } : undefined}
                 setFromDate={(range) => setFromDate(range?.from?.toISOString().split('T')[0] || '')}
                 searchQuery={searchQuery}

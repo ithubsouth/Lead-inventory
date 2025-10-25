@@ -25,6 +25,8 @@ interface OrderSummaryTableProps {
   setSelectedAssetGroup: (value: string[]) => void;
   selectedProduct: string[];
   setSelectedProduct: (value: string[]) => void;
+  selectedAssetCondition: string[]; // New prop for asset condition filter
+  setSelectedAssetCondition: (value: string[]) => void; // New prop for setting asset condition
   fromDate: DateRange | undefined;
   setFromDate: (range: DateRange | undefined) => void;
   showDeleted: boolean;
@@ -47,6 +49,8 @@ const OrderSummaryTable: React.FC<OrderSummaryTableProps> = ({
   setSelectedAssetGroup,
   selectedProduct,
   setSelectedProduct,
+  selectedAssetCondition, // New prop
+  setSelectedAssetCondition, // New prop
   fromDate,
   setFromDate,
   showDeleted,
@@ -83,6 +87,7 @@ const OrderSummaryTable: React.FC<OrderSummaryTableProps> = ({
       products: [...new Set(filteredDevices.map(d => d.product).filter(Boolean))].sort() as string[],
       assetStatuses: [...new Set(filteredDevices.map(d => d.asset_status).filter(Boolean))].sort() as string[],
       assetGroups: [...new Set(filteredDevices.map(d => d.asset_group).filter(Boolean))].sort() as string[],
+      assetConditions: [...new Set(filteredDevices.map(d => d.asset_condition).filter(Boolean))].sort() as string[], // Added for asset condition
     };
   }, [activeDevices, fromDate]);
 
@@ -124,6 +129,12 @@ const OrderSummaryTable: React.FC<OrderSummaryTableProps> = ({
     }
   }, [uniqueValues.assetGroups, selectedAssetGroup, setSelectedAssetGroup]);
 
+  useEffect(() => {
+    if (selectedAssetCondition.length > 0 && !selectedAssetCondition.every(c => uniqueValues.assetConditions.includes(c))) {
+      setSelectedAssetCondition([]); // Added for asset condition
+    }
+  }, [uniqueValues.assetConditions, selectedAssetCondition, setSelectedAssetCondition]);
+
   // Compute summaries
   const summaries = useMemo(() => {
     let filteredDevices = showDeleted ? devices : activeDevices;
@@ -145,6 +156,9 @@ const OrderSummaryTable: React.FC<OrderSummaryTableProps> = ({
     }
     if (selectedAssetGroup.length > 0) {
       filteredDevices = filteredDevices.filter(d => selectedAssetGroup.includes(d.asset_group || ''));
+    }
+    if (selectedAssetCondition.length > 0) {
+      filteredDevices = filteredDevices.filter(d => selectedAssetCondition.includes(d.asset_condition || '')); // Added for asset condition
     }
     if (fromDate?.from) {
       filteredDevices = filteredDevices.filter(d => new Date(d.created_at || d.updated_at || '1970-01-01') >= new Date(fromDate.from));
@@ -231,6 +245,7 @@ const OrderSummaryTable: React.FC<OrderSummaryTableProps> = ({
     selectedProduct,
     selectedAssetStatus,
     selectedAssetGroup,
+    selectedAssetCondition, // Added dependency
     fromDate,
     searchQuery,
   ]);
@@ -244,6 +259,7 @@ const OrderSummaryTable: React.FC<OrderSummaryTableProps> = ({
     selectedProduct,
     selectedAssetStatus,
     selectedAssetGroup,
+    selectedAssetCondition, // Added dependency
     fromDate,
     showDeleted,
     searchQuery,
@@ -304,6 +320,7 @@ const OrderSummaryTable: React.FC<OrderSummaryTableProps> = ({
     setSelectedAssetStatus([]);
     setSelectedAssetGroup([]);
     setSelectedProduct([]);
+    setSelectedAssetCondition([]); // Added for asset condition
     setFromDate(undefined);
     setSearchQuery('');
     setShowDeleted(false);
@@ -381,6 +398,7 @@ const OrderSummaryTable: React.FC<OrderSummaryTableProps> = ({
                 setSelectedAssetStatus([]);
                 setSelectedAssetGroup([]);
                 setSelectedProduct([]);
+                setSelectedAssetCondition([]); // Reset asset condition
               }}
               placeholder="Select Warehouses"
             />
@@ -392,6 +410,7 @@ const OrderSummaryTable: React.FC<OrderSummaryTableProps> = ({
               onChange={(value) => {
                 setSelectedAssetType(value);
                 setSelectedModel([]);
+                setSelectedAssetCondition([]); // Reset asset condition
               }}
               placeholder="Select Asset Types"
             />
@@ -426,6 +445,14 @@ const OrderSummaryTable: React.FC<OrderSummaryTableProps> = ({
               value={selectedAssetGroup}
               onChange={setSelectedAssetGroup}
               placeholder="Select Asset Groups"
+            />
+            <MultiSelect
+              id="assetConditionFilter"
+              label="Asset Condition"
+              options={uniqueValues.assetConditions}
+              value={selectedAssetCondition}
+              onChange={setSelectedAssetCondition}
+              placeholder="Select Asset Conditions"
             />
             <div style={{ flex: '1', minWidth: '150px' }}>
               <label htmlFor="dateRangeFilter" style={{ fontSize: '12px', color: '#6b7280', display: 'block', marginBottom: '2px', whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' }}>Date Range</label>

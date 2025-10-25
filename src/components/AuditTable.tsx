@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useCallback } from 'react';
+import React, { useMemo, useState, useCallback, useRef } from 'react';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -6,13 +6,24 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
-import { Filter, Search } from 'lucide-react';
+import { Filter, Search, ScanLine } from 'lucide-react';
 import { DatePickerWithRange } from './DatePickerWithRange';
 import { DateRange } from 'react-day-picker';
 import { Device } from './types';
 import debounce from 'lodash/debounce';
 import { excludedAuditItems } from './constants';
 import MultiSelect from './MultiSelect';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
+import { EnhancedBarcodeScanner } from './EnhancedBarcodeScanner';
 
 interface AuditTableProps {
   devices: Device[];
@@ -32,6 +43,8 @@ interface AuditTableProps {
   setSelectedOrderType: (value: string[]) => void;
   selectedAssetGroup: string[];
   setSelectedAssetGroup: (value: string[]) => void;
+  selectedAssetCondition: string[]; // New prop for asset condition filter
+  setSelectedAssetCondition: (value: string[]) => void; // New prop for setting asset condition
   fromDate: DateRange | undefined;
   setFromDate: (range: DateRange | undefined) => void;
   searchQuery: string;
@@ -59,6 +72,8 @@ const AuditTable: React.FC<AuditTableProps> = ({
   setSelectedOrderType,
   selectedAssetGroup,
   setSelectedAssetGroup,
+  selectedAssetCondition, // New prop
+  setSelectedAssetCondition, // New prop
   fromDate,
   setFromDate,
   searchQuery,
@@ -69,14 +84,18 @@ const AuditTable: React.FC<AuditTableProps> = ({
 }) => {
   const [scannerInput, setScannerInput] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
-  const [filterCheck, setFilterCheck] = useState<'all' | 'matched' | 'unmatched'>('all');
+  const [selectedAssetChecks, setSelectedAssetChecks] = useState<string[]>([]);
   const [showPopup, setShowPopup] = useState(false);
   const [scanResult, setScanResult] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [updatingDeviceId, setUpdatingDeviceId] = useState<string | null>(null);
   const [isClearing, setIsClearing] = useState(false);
   const [rowsPerPage, setRowsPerPage] = useState(10);
+  const [clearConfirmOpen, setClearConfirmOpen] = useState(false);
+  const [isScannerOpen, setIsScannerOpen] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null); // Ref for focusing input after scan
 
+  // Clear scan result and error messages after a timeout
   React.useEffect(() => {
     if (scanResult) {
       const timer = setTimeout(() => setScanResult(null), 3000);
@@ -100,6 +119,8 @@ const AuditTable: React.FC<AuditTableProps> = ({
     assetStatus: 'asset_status',
     assetGroup: 'asset_group',
     orderType: 'order_type',
+    assetCheck: 'asset_check',
+    assetCondition: 'asset_condition', // Added for asset condition filter
   };
 
   const getEffectiveStatus = (d: Device) => {
@@ -117,9 +138,11 @@ const AuditTable: React.FC<AuditTableProps> = ({
     });
 
     const stockDevices = Array.from(latestDevices.values()).filter(
-      (d) => getEffectiveStatus(d) === 'Stock' && !d.is_deleted &&
-             !excludedAuditItems.assetTypes.includes(d.asset_type || '') &&
-             !excludedAuditItems.models.includes(d.model || '')
+      (d) =>
+        getEffectiveStatus(d) === 'Stock' &&
+        !d.is_deleted &&
+        !excludedAuditItems.assetTypes.includes(d.asset_type || '') &&
+        !excludedAuditItems.models.includes(d.model || '')
     );
 
     const getFilteredDevices = (excludeFilter: string) => {
@@ -133,7 +156,8 @@ const AuditTable: React.FC<AuditTableProps> = ({
           assetStatus: selectedAssetStatus,
           assetGroup: selectedAssetGroup,
           orderType: selectedOrderType,
-          assetCheck: filterCheck,
+          assetCheck: selectedAssetChecks,
+          assetCondition: selectedAssetCondition, // Added for asset condition filter
           fromDate,
         })
           .filter(([key]) => key !== excludeFilter)
@@ -152,16 +176,33 @@ const AuditTable: React.FC<AuditTableProps> = ({
               return startOfDay >= fromStart && endOfDay <= toEnd;
             }
             if (key === 'assetCheck') {
-              return filterCheck === 'all' ||
-                (filterCheck === 'matched' && d.asset_check === 'Matched') ||
-                (filterCheck === 'unmatched' && d.asset_check !== 'Matched');
+              const deviceCheck = d.asset_check || 'Unmatched';
+              return selectedAssetChecks.length === 0 || selectedAssetChecks.includes(deviceCheck);
             }
             const prop = propertyMap[key as keyof typeof propertyMap];
             const value = d[prop as keyof Device];
             return (filterValue as string[]).length === 0 || (filterValue as string[]).includes(value);
           });
-        const searchMatch = searchQuery.trim() === '' ||
-          [d.serial_number, d.model, d.asset_type, d.configuration, d.product, d.asset_status, d.asset_group, d.far_code, d.warehouse, d.order_type, d.sales_order, d.deal_id, d.nucleus_id, d.school_name, d.asset_check || '']
+        const searchMatch =
+          searchQuery.trim() === '' ||
+          [
+            d.serial_number,
+            d.model,
+            d.asset_type,
+            d.configuration,
+            d.product,
+            d.asset_status,
+            d.asset_group,
+            d.far_code,
+            d.warehouse,
+            d.order_type,
+            d.sales_order,
+            d.deal_id,
+            d.nucleus_id,
+            d.school_name,
+            d.asset_check || '',
+            d.asset_condition || '',
+          ]
             .filter(Boolean)
             .some((field) => field.toLowerCase().includes(searchQuery.toLowerCase()));
         return matches && searchMatch;
@@ -177,8 +218,24 @@ const AuditTable: React.FC<AuditTableProps> = ({
       assetStatuses: [...new Set(getFilteredDevices('assetStatus').map((d) => d.asset_status || ''))].filter(Boolean).sort(),
       assetGroups: [...new Set(getFilteredDevices('assetGroup').map((d) => d.asset_group || ''))].filter(Boolean).sort(),
       orderTypes: [...new Set(getFilteredDevices('orderType').map((d) => d.order_type || ''))].filter(Boolean).sort(),
+      assetChecks: ['Matched', 'Unmatched'],
+      assetConditions: [...new Set(getFilteredDevices('assetCondition').map((d) => d.asset_condition || ''))].filter(Boolean).sort(), // Added for asset condition
     };
-  }, [devices, selectedWarehouse, selectedAssetType, selectedModel, selectedConfiguration, selectedProduct, selectedAssetStatus, selectedAssetGroup, selectedOrderType, filterCheck, fromDate, searchQuery]);
+  }, [
+    devices,
+    selectedWarehouse,
+    selectedAssetType,
+    selectedModel,
+    selectedConfiguration,
+    selectedProduct,
+    selectedAssetStatus,
+    selectedAssetGroup,
+    selectedOrderType,
+    selectedAssetChecks,
+    selectedAssetCondition, // Added dependency
+    fromDate,
+    searchQuery,
+  ]);
 
   const filteredDevices = useMemo(() => {
     const latestDevices = new Map<string, Device>();
@@ -191,9 +248,11 @@ const AuditTable: React.FC<AuditTableProps> = ({
     });
 
     return Array.from(latestDevices.values()).filter((d) => {
-      const isStock = getEffectiveStatus(d) === 'Stock' && !d.is_deleted &&
-                      !excludedAuditItems.assetTypes.includes(d.asset_type || '') &&
-                      !excludedAuditItems.models.includes(d.model || '');
+      const isStock =
+        getEffectiveStatus(d) === 'Stock' &&
+        !d.is_deleted &&
+        !excludedAuditItems.assetTypes.includes(d.asset_type || '') &&
+        !excludedAuditItems.models.includes(d.model || '');
       const warehouseMatch = selectedWarehouse.length === 0 || selectedWarehouse.includes(d.warehouse || '');
       const assetTypeMatch = selectedAssetType.length === 0 || selectedAssetType.includes(d.asset_type || '');
       const modelMatch = selectedModel.length === 0 || selectedModel.includes(d.model || '');
@@ -202,31 +261,77 @@ const AuditTable: React.FC<AuditTableProps> = ({
       const assetStatusMatch = selectedAssetStatus.length === 0 || selectedAssetStatus.includes(d.asset_status || '');
       const assetGroupMatch = selectedAssetGroup.length === 0 || selectedAssetGroup.includes(d.asset_group || '');
       const orderTypeMatch = selectedOrderType.length === 0 || selectedOrderType.includes(d.order_type || '');
-      const dateMatch = !fromDate?.from || !fromDate?.to || (() => {
-        const createdAt = new Date(d.created_at);
-        const startOfDay = new Date(createdAt);
-        startOfDay.setHours(0, 0, 0, 0);
-        const endOfDay = new Date(createdAt);
-        endOfDay.setHours(23, 59, 59, 999);
-        const fromStart = new Date(fromDate.from);
-        fromStart.setHours(0, 0, 0, 0);
-        const toEnd = new Date(fromDate.to);
-        toEnd.setHours(23, 59, 59, 999);
-        return startOfDay >= fromStart && endOfDay <= toEnd;
-      })();
-      const searchMatch = searchQuery.trim() === '' ||
-        [d.serial_number, d.model, d.asset_type, d.configuration, d.product, d.asset_status, d.asset_group, d.far_code, d.warehouse, d.order_type, d.sales_order, d.deal_id, d.nucleus_id, d.school_name, d.asset_check || '']
+      const assetConditionMatch = selectedAssetCondition.length === 0 || selectedAssetCondition.includes(d.asset_condition || ''); // Added for asset condition
+      const dateMatch =
+        !fromDate?.from ||
+        !fromDate?.to ||
+        (() => {
+          const createdAt = new Date(d.created_at);
+          const startOfDay = new Date(createdAt);
+          startOfDay.setHours(0, 0, 0, 0);
+          const endOfDay = new Date(createdAt);
+          endOfDay.setHours(23, 59, 59, 999);
+          const fromStart = new Date(fromDate.from);
+          fromStart.setHours(0, 0, 0, 0);
+          const toEnd = new Date(fromDate.to);
+          toEnd.setHours(23, 59, 59, 999);
+          return startOfDay >= fromStart && endOfDay <= toEnd;
+        })();
+      const searchMatch =
+        searchQuery.trim() === '' ||
+        [
+          d.serial_number,
+          d.model,
+          d.asset_type,
+          d.configuration,
+          d.product,
+          d.asset_status,
+          d.asset_group,
+          d.far_code,
+          d.warehouse,
+          d.order_type,
+          d.sales_order,
+          d.deal_id,
+          d.nucleus_id,
+          d.school_name,
+          d.asset_check || '',
+          d.asset_condition || '',
+        ]
           .filter(Boolean)
           .some((field) => field.toLowerCase().includes(searchQuery.toLowerCase()));
-      const checkMatch = filterCheck === 'all' ||
-        (filterCheck === 'matched' && d.asset_check === 'Matched') ||
-        (filterCheck === 'unmatched' && d.asset_check !== 'Matched');
+      const checkMatch = selectedAssetChecks.length === 0 || selectedAssetChecks.includes(d.asset_check || 'Unmatched');
 
-      return isStock && warehouseMatch && assetTypeMatch && modelMatch && configMatch &&
-             productMatch && assetStatusMatch && assetGroupMatch && orderTypeMatch &&
-             dateMatch && searchMatch && checkMatch;
+      return (
+        isStock &&
+        warehouseMatch &&
+        assetTypeMatch &&
+        modelMatch &&
+        configMatch &&
+        productMatch &&
+        assetStatusMatch &&
+        assetGroupMatch &&
+        orderTypeMatch &&
+        assetConditionMatch && // Added for asset condition
+        dateMatch &&
+        searchMatch &&
+        checkMatch
+      );
     });
-  }, [devices, selectedWarehouse, selectedAssetType, selectedModel, selectedConfiguration, selectedProduct, selectedAssetStatus, selectedAssetGroup, selectedOrderType, fromDate, searchQuery, filterCheck]);
+  }, [
+    devices,
+    selectedWarehouse,
+    selectedAssetType,
+    selectedModel,
+    selectedConfiguration,
+    selectedProduct,
+    selectedAssetStatus,
+    selectedAssetGroup,
+    selectedOrderType,
+    selectedAssetCondition, // Added dependency
+    fromDate,
+    searchQuery,
+    selectedAssetChecks,
+  ]);
 
   const paginatedDevices = useMemo(() => {
     const start = (currentPage - 1) * rowsPerPage;
@@ -241,6 +346,36 @@ const AuditTable: React.FC<AuditTableProps> = ({
   const matchedCount = filteredDevices.filter((d) => d.asset_check === 'Matched').length;
   const unmatchedCount = filteredDevices.length - matchedCount;
 
+  const hasActiveFilter = useMemo(() => {
+    return (
+      selectedWarehouse.length > 0 ||
+      selectedAssetType.length > 0 ||
+      selectedModel.length > 0 ||
+      selectedConfiguration.length > 0 ||
+      selectedProduct.length > 0 ||
+      selectedAssetStatus.length > 0 ||
+      selectedAssetGroup.length > 0 ||
+      selectedOrderType.length > 0 ||
+      selectedAssetChecks.length > 0 ||
+      selectedAssetCondition.length > 0 || // Added for asset condition
+      fromDate?.from ||
+      searchQuery.trim() !== ''
+    );
+  }, [
+    selectedWarehouse,
+    selectedAssetType,
+    selectedModel,
+    selectedConfiguration,
+    selectedProduct,
+    selectedAssetStatus,
+    selectedAssetGroup,
+    selectedOrderType,
+    selectedAssetChecks,
+    selectedAssetCondition, // Added dependency
+    fromDate,
+    searchQuery,
+  ]);
+
   const clearFilters = () => {
     setSelectedWarehouse([]);
     setSelectedAssetType([]);
@@ -250,11 +385,12 @@ const AuditTable: React.FC<AuditTableProps> = ({
     setSelectedAssetStatus([]);
     setSelectedAssetGroup([]);
     setSelectedOrderType([]);
+    setSelectedAssetChecks([]);
+    setSelectedAssetCondition([]); // Added for asset condition
     setFromDate(undefined);
     setSearchQuery('');
     setCurrentPage(1);
     setScannerInput('');
-    setFilterCheck('all');
   };
 
   const handleCheck = useCallback(() => {
@@ -267,13 +403,15 @@ const AuditTable: React.FC<AuditTableProps> = ({
     );
 
     if (matchedDevice) {
-      const checkStatus = selectedWarehouse.length === 0 || selectedWarehouse.includes(matchedDevice.warehouse || '')
-        ? 'Matched'
-        : `Found in ${matchedDevice.warehouse}`;
+      const checkStatus =
+        selectedWarehouse.length === 0 || selectedWarehouse.includes(matchedDevice.warehouse || '')
+          ? 'Matched'
+          : `Found in ${matchedDevice.warehouse}`;
       setUpdatingDeviceId(matchedDevice.id);
       onUpdateAssetCheck(matchedDevice.id, checkStatus)
         .then(() => {
           setScanResult(checkStatus);
+          inputRef.current?.focus();
         })
         .catch((err) => {
           setError(`Failed to update asset check: ${err.message}`);
@@ -284,10 +422,23 @@ const AuditTable: React.FC<AuditTableProps> = ({
         });
     } else {
       setScanResult('Not Found');
+      inputRef.current?.focus();
     }
   }, [scannerInput, filteredDevices, selectedWarehouse, onUpdateAssetCheck]);
 
   const debouncedHandleCheck = useCallback(debounce(handleCheck, 300), [handleCheck]);
+
+  const handleBarcodeScan = (scannedText: string) => {
+    setScannerInput(scannedText);
+    debouncedHandleCheck();
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      debouncedHandleCheck();
+    }
+  };
 
   const exportToCSV = () => {
     const headers = [
@@ -299,6 +450,7 @@ const AuditTable: React.FC<AuditTableProps> = ({
       'Asset Status',
       'Asset Group',
       'FAR Code',
+      'Asset Condition',
       'Warehouse',
       'Asset Check',
     ];
@@ -311,14 +463,12 @@ const AuditTable: React.FC<AuditTableProps> = ({
       d.asset_status || '',
       d.asset_group || '',
       d.far_code || '',
+      d.asset_condition || '',
       d.warehouse || '',
       d.asset_check || 'Unmatched',
     ]);
 
-    const csvContent = [
-      headers.join(','),
-      ...csvRows.map((row) => row.map((value) => `"${value.replace(/"/g, '""')}"`).join(',')),
-    ].join('\n');
+    const csvContent = [headers.join(','), ...csvRows.map((row) => row.map((value) => `"${value.replace(/"/g, '""')}"`).join(','))].join('\n');
 
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
@@ -332,9 +482,7 @@ const AuditTable: React.FC<AuditTableProps> = ({
   };
 
   const handleClearAllChecks = () => {
-    const matchedDeviceIds = filteredDevices
-      .filter((d) => d.asset_check === 'Matched')
-      .map((d) => d.id);
+    const matchedDeviceIds = filteredDevices.filter((d) => d.asset_check === 'Matched').map((d) => d.id);
     if (matchedDeviceIds.length === 0) {
       setError('No matched devices to clear.');
       return;
@@ -386,22 +534,69 @@ const AuditTable: React.FC<AuditTableProps> = ({
       <CardContent style={{ paddingTop: '2px' }}>
         <div style={{ marginBottom: '8px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '4px', flexWrap: 'wrap' }}>
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ position: 'relative', width: '100%' }}>
-                <Search style={{ position: 'absolute', left: '8px', top: '50%', transform: 'translateY(-50%)', width: '12px', height: '12px', color: '#6b7280' }} />
-                <Input
-                  type="text"
-                  placeholder="     Enter Serial number"
-                  value={scannerInput}
-                  onChange={(e) => setScannerInput(e.target.value)}
-                  style={{ paddingLeft: '28px', fontSize: '12px', width: '100%', border: '1px solid #d1d5db', borderRadius: '4px', padding: '6px', height: '28px' }}
+            <div style={{ flex: 1, minWidth: 0, position: 'relative' }}>
+              <Search
+                style={{
+                  position: 'absolute',
+                  left: '8px',
+                  top: '50%',
+                  transform: 'translateY(-50%)',
+                  width: '12px',
+                  height: '12px',
+                  color: '#6b7280',
+                }}
+              />
+              <Input
+                ref={inputRef}
+                type="text"
+                placeholder="     Enter Serial number"
+                value={scannerInput}
+                onChange={(e) => setScannerInput(e.target.value)}
+                onKeyDown={handleKeyDown}
+                style={{
+                  paddingLeft: '28px',
+                  paddingRight: '28px',
+                  fontSize: '12px',
+                  width: '100%',
+                  border: '1px solid #d1d5db',
+                  borderRadius: '4px',
+                  padding: '6px',
+                  height: '28px',
+                }}
+              />
+              <button
+                onClick={() => setIsScannerOpen(true)}
+                style={{
+                  position: 'absolute',
+                  right: '8px',
+                  top: '50%',
+                  transform: 'translateY(-50%)',
+                  background: 'none',
+                  border: 'none',
+                  cursor: 'pointer',
+                  padding: 0,
+                }}
+                title="Scan Barcode"
+              >
+                <ScanLine
+                  style={{
+                    width: '12px',
+                    height: '12px',
+                    color: '#6b7280',
+                  }}
                 />
-              </div>
+              </button>
             </div>
             <Button
               variant="outline"
               size="sm"
-              style={{ border: '1px solid #d1d5db', borderRadius: '4px', padding: '4px 6px', fontSize: '12px', height: '28px' }}
+              style={{
+                border: '1px solid #d1d5db',
+                borderRadius: '4px',
+                padding: '4px 6px',
+                fontSize: '12px',
+                height: '28px',
+              }}
               onClick={debouncedHandleCheck}
             >
               Check
@@ -409,7 +604,13 @@ const AuditTable: React.FC<AuditTableProps> = ({
             <Button
               variant="outline"
               size="sm"
-              style={{ border: '1px solid #d1d5db', borderRadius: '4px', padding: '4px 6px', fontSize: '12px', height: '28px' }}
+              style={{
+                border: '1px solid #d1d5db',
+                borderRadius: '4px',
+                padding: '4px 6px',
+                fontSize: '12px',
+                height: '28px',
+              }}
               onClick={() => setShowPopup(true)}
             >
               Status
@@ -417,8 +618,16 @@ const AuditTable: React.FC<AuditTableProps> = ({
             <Button
               variant="outline"
               size="sm"
-              style={{ border: '1px solid #d1d5db', borderRadius: '4px', padding: '4px 6px', fontSize: '12px', height: '28px', background: '#fff', color: '#ef4444' }}
-              onClick={handleClearAllChecks}
+              style={{
+                border: '1px solid #d1d5db',
+                borderRadius: '4px',
+                padding: '4px 6px',
+                fontSize: '12px',
+                height: '28px',
+                background: '#fff',
+                color: '#ef4444',
+              }}
+              onClick={() => setClearConfirmOpen(true)}
               disabled={filteredDevices.length === 0 || isClearing || matchedCount === 0}
             >
               {isClearing ? 'Clearing...' : 'Clear All'}
@@ -494,21 +703,29 @@ const AuditTable: React.FC<AuditTableProps> = ({
               onChange={setSelectedOrderType}
               placeholder="Select Order Types"
             />
+            <MultiSelect
+              id="assetConditionFilter"
+              label="Asset Condition"
+              options={uniqueValues.assetConditions}
+              value={selectedAssetCondition}
+              onChange={setSelectedAssetCondition}
+              placeholder="Select Asset Conditions"
+            />
+            <MultiSelect
+              id="assetCheckFilter"
+              label="Asset Check"
+              options={uniqueValues.assetChecks}
+              value={selectedAssetChecks}
+              onChange={setSelectedAssetChecks}
+              placeholder="Select Asset Checks"
+            />
             <div style={{ flex: '1', minWidth: '120px' }}>
-              <label htmlFor="assetCheckFilter" style={{ fontSize: '12px', color: '#6b7280', display: 'block', marginBottom: '2px', whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' }}>Asset Check</label>
-              <Select value={filterCheck} onValueChange={(value) => setFilterCheck(value as 'all' | 'matched' | 'unmatched')}>
-                <SelectTrigger id="assetCheckFilter" style={{ fontSize: '12px', width: '100%', border: '1px solid #d1d5db', borderRadius: '4px', padding: '6px', whiteSpace: 'nowrap', textOverflow: 'ellipsis', height: '28px' }}>
-                  <SelectValue placeholder="All Asset Checks" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all" style={{ fontSize: '12px' }}>All</SelectItem>
-                  <SelectItem value="matched" style={{ fontSize: '12px' }}>Matched</SelectItem>
-                  <SelectItem value="unmatched" style={{ fontSize: '12px' }}>Unmatched</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div style={{ flex: '1', minWidth: '120px' }}>
-              <label htmlFor="dateRangeFilter" style={{ fontSize: '12px', color: '#6b7280', display: 'block', marginBottom: '2px', whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' }}>Date Range</label>
+              <label
+                htmlFor="dateRangeFilter"
+                style={{ fontSize: '12px', color: '#6b7280', display: 'block', marginBottom: '2px', whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' }}
+              >
+                Date Range
+              </label>
               <DatePickerWithRange
                 date={fromDate}
                 setDate={setFromDate}
@@ -522,23 +739,72 @@ const AuditTable: React.FC<AuditTableProps> = ({
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', textAlign: 'left', position: 'sticky', top: 0, background: '#fff', zIndex: 20 }}>S.No.</TableHead>
-                <TableHead style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', textAlign: 'left', position: 'sticky', top: 0, background: '#fff', zIndex: 20 }}>Asset Type</TableHead>
-                <TableHead style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', textAlign: 'left', position: 'sticky', top: 0, background: '#fff', zIndex: 20 }}>Model</TableHead>
-                <TableHead style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', textAlign: 'left', position: 'sticky', top: 0, background: '#fff', zIndex: 20 }}>Configuration</TableHead>
-                <TableHead style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', textAlign: 'left', position: 'sticky', top: 0, background: '#fff', zIndex: 20 }}>Serial Number</TableHead>
-                <TableHead style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', textAlign: 'left', position: 'sticky', top: 0, background: '#fff', zIndex: 20 }}>Product</TableHead>
-                <TableHead style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', textAlign: 'left', position: 'sticky', top: 0, background: '#fff', zIndex: 20 }}>Asset Status</TableHead>
-                <TableHead style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', textAlign: 'left', position: 'sticky', top: 0, background: '#fff', zIndex: 20 }}>Asset Group</TableHead>
-                <TableHead style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', textAlign: 'left', position: 'sticky', top: 0, background: '#fff', zIndex: 20 }}>FAR Code</TableHead>
-                <TableHead style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', textAlign: 'left', position: 'sticky', top: 0, background: '#fff', zIndex: 20 }}>Warehouse</TableHead>
-                <TableHead style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', textAlign: 'left', position: 'sticky', top: 0, background: '#fff', zIndex: 20 }}>Asset Check</TableHead>
+                <TableHead
+                  style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', textAlign: 'left', position: 'sticky', top: 0, background: '#fff', zIndex: 20 }}
+                >
+                  S.No.
+                </TableHead>
+                <TableHead
+                  style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', textAlign: 'left', position: 'sticky', top: 0, background: '#fff', zIndex: 20 }}
+                >
+                  Asset Type
+                </TableHead>
+                <TableHead
+                  style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', textAlign: 'left', position: 'sticky', top: 0, background: '#fff', zIndex: 20 }}
+                >
+                  Model
+                </TableHead>
+                <TableHead
+                  style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', textAlign: 'left', position: 'sticky', top: 0, background: '#fff', zIndex: 20 }}
+                >
+                  Configuration
+                </TableHead>
+                <TableHead
+                  style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', textAlign: 'left', position: 'sticky', top: 0, background: '#fff', zIndex: 20 }}
+                >
+                  Serial Number
+                </TableHead>
+                <TableHead
+                  style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', textAlign: 'left', position: 'sticky', top: 0, background: '#fff', zIndex: 20 }}
+                >
+                  Product
+                </TableHead>
+                <TableHead
+                  style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', textAlign: 'left', position: 'sticky', top: 0, background: '#fff', zIndex: 20 }}
+                >
+                  Asset Status
+                </TableHead>
+                <TableHead
+                  style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', textAlign: 'left', position: 'sticky', top: 0, background: '#fff', zIndex: 20 }}
+                >
+                  Asset Group
+                </TableHead>
+                <TableHead
+                  style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', textAlign: 'left', position: 'sticky', top: 0, background: '#fff', zIndex: 20 }}
+                >
+                  FAR Code
+                </TableHead>
+                <TableHead
+                  style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', textAlign: 'left', position: 'sticky', top: 0, background: '#fff', zIndex: 20 }}
+                >
+                  Asset Condition
+                </TableHead>
+                <TableHead
+                  style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', textAlign: 'left', position: 'sticky', top: 0, background: '#fff', zIndex: 20 }}
+                >
+                  Warehouse
+                </TableHead>
+                <TableHead
+                  style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', textAlign: 'left', position: 'sticky', top: 0, background: '#fff', zIndex: 20 }}
+                >
+                  Asset Check
+                </TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {paginatedDevices.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={11} style={{ textAlign: 'center', fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db' }}>
+                  <TableCell colSpan={12} style={{ textAlign: 'center', fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db' }}>
                     No devices found with current filters.
                   </TableCell>
                 </TableRow>
@@ -548,7 +814,9 @@ const AuditTable: React.FC<AuditTableProps> = ({
                   const checkColor = checkText === 'Matched' ? '#22c55e' : checkText.startsWith('Found in') ? '#f59e0b' : '#ef4444';
                   return (
                     <TableRow key={d.id}>
-                      <TableCell style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db' }}>{(currentPage - 1) * rowsPerPage + index + 1}</TableCell>
+                      <TableCell style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db' }}>
+                        {(currentPage - 1) * rowsPerPage + index + 1}
+                      </TableCell>
                       <TableCell style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db' }}>{d.asset_type}</TableCell>
                       <TableCell style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db' }}>{d.model}</TableCell>
                       <TableCell style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db' }}>{d.configuration}</TableCell>
@@ -557,6 +825,7 @@ const AuditTable: React.FC<AuditTableProps> = ({
                       <TableCell style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db' }}>{d.asset_status}</TableCell>
                       <TableCell style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db' }}>{d.asset_group}</TableCell>
                       <TableCell style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db' }}>{d.far_code}</TableCell>
+                      <TableCell style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db' }}>{d.asset_condition || ''}</TableCell>
                       <TableCell style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db' }}>{d.warehouse}</TableCell>
                       <TableCell style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
@@ -575,10 +844,7 @@ const AuditTable: React.FC<AuditTableProps> = ({
                             }}
                             disabled={!canEdit || updatingDeviceId === d.id}
                           />
-                          <Label
-                            htmlFor={`check-${d.id}`}
-                            style={{ color: checkColor, fontSize: '12px' }}
-                          >
+                          <Label htmlFor={`check-${d.id}`} style={{ color: checkColor, fontSize: '12px' }}>
                             {updatingDeviceId === d.id ? 'Updating...' : checkText}
                           </Label>
                         </div>
@@ -592,7 +858,10 @@ const AuditTable: React.FC<AuditTableProps> = ({
         </div>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '4px', fontSize: '12px' }}>
           <div>
-            <span>Showing {((currentPage - 1) * rowsPerPage) + 1} to {Math.min(currentPage * rowsPerPage, filteredDevices.length)} of {filteredDevices.length} assets</span>
+            <span>
+              Showing {(currentPage - 1) * rowsPerPage + 1} to {Math.min(currentPage * rowsPerPage, filteredDevices.length)} of {filteredDevices.length}{' '}
+              assets
+            </span>
             <Select
               value={rowsPerPage.toString()}
               onValueChange={(value) => {
@@ -671,7 +940,9 @@ const AuditTable: React.FC<AuditTableProps> = ({
         >
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
             <h3 style={{ fontSize: '14px', fontWeight: 'bold' }}>Asset Check Status</h3>
-            <button onClick={() => setShowPopup(false)} style={{ cursor: 'pointer', background: 'none', border: 'none', fontSize: '14px' }}>×</button>
+            <button onClick={() => setShowPopup(false)} style={{ cursor: 'pointer', background: 'none', border: 'none', fontSize: '14px' }}>
+              ×
+            </button>
           </div>
           <p style={{ fontSize: '12px', color: isAllMatched ? '#22c55e' : '#ef4444', marginBottom: '16px' }}>
             {isAllMatched ? 'All assets are matched.' : `Matched: ${matchedCount}, Unmatched: ${unmatchedCount}`}
@@ -688,12 +959,7 @@ const AuditTable: React.FC<AuditTableProps> = ({
             >
               Generate Report
             </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setShowPopup(false)}
-              style={{ fontSize: '12px' }}
-            >
+            <Button variant="outline" size="sm" onClick={() => setShowPopup(false)} style={{ fontSize: '12px' }}>
               Close
             </Button>
           </div>
@@ -716,18 +982,21 @@ const AuditTable: React.FC<AuditTableProps> = ({
         >
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
             <h3 style={{ fontSize: '14px', fontWeight: 'bold' }}>Scan Result</h3>
-            <button onClick={() => setScanResult(null)} style={{ cursor: 'pointer', background: 'none', border: 'none', fontSize: '14px' }}>×</button>
+            <button onClick={() => setScanResult(null)} style={{ cursor: 'pointer', background: 'none', border: 'none', fontSize: '14px' }}>
+              ×
+            </button>
           </div>
-          <p style={{ fontSize: '12px', color: scanResult === 'Matched' ? '#22c55e' : scanResult === 'Not Found' ? '#ef4444' : '#f59e0b', marginBottom: '16px' }}>
+          <p
+            style={{
+              fontSize: '12px',
+              color: scanResult === 'Matched' ? '#22c55e' : scanResult === 'Not Found' ? '#ef4444' : '#f59e0b',
+              marginBottom: '16px',
+            }}
+          >
             {scanResult}
           </p>
           <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setScanResult(null)}
-              style={{ fontSize: '12px' }}
-            >
+            <Button variant="outline" size="sm" onClick={() => setScanResult(null)} style={{ fontSize: '12px' }}>
               Close
             </Button>
           </div>
@@ -750,21 +1019,62 @@ const AuditTable: React.FC<AuditTableProps> = ({
         >
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
             <h3 style={{ fontSize: '14px', fontWeight: 'bold' }}>Error</h3>
-            <button onClick={() => setError(null)} style={{ cursor: 'pointer', background: 'none', border: 'none', fontSize: '14px' }}>×</button>
+            <button onClick={() => setError(null)} style={{ cursor: 'pointer', background: 'none', border: 'none', fontSize: '14px' }}>
+              ×
+            </button>
           </div>
           <p style={{ fontSize: '12px', color: '#ef4444', marginBottom: '16px' }}>{error}</p>
           <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setError(null)}
-              style={{ fontSize: '12px' }}
-            >
+            <Button variant="outline" size="sm" onClick={() => setError(null)} style={{ fontSize: '12px' }}>
               Close
             </Button>
           </div>
         </div>
       )}
+      {clearConfirmOpen && (
+        <AlertDialog open={clearConfirmOpen} onOpenChange={setClearConfirmOpen}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Clear All Matched Checks?</AlertDialogTitle>
+              <AlertDialogDescription>
+                {hasActiveFilter ? (
+                  <>
+                    <strong>{matchedCount}</strong> device(s) will be unmarked.
+                    <br />
+                    Only the devices that match your current filters will be affected.
+                  </>
+                ) : (
+                  <>
+                    <strong>No filters are active.</strong>
+                    <br />
+                    Please apply at least one filter (warehouse, type, model, date …) before clearing, otherwise <strong>ALL</strong> matched devices in the
+                    system will be unmarked.
+                  </>
+                )}
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogAction
+                onClick={() => {
+                  setClearConfirmOpen(false);
+                  handleClearAllChecks();
+                }}
+                disabled={!hasActiveFilter && matchedCount > 0}
+                className="bg-destructive text-destructive-foreground"
+              >
+                {hasActiveFilter ? 'Clear Filtered' : 'Clear All Anyway'}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      )}
+      <EnhancedBarcodeScanner
+        isOpen={isScannerOpen}
+        onClose={() => setIsScannerOpen(false)}
+        onScan={handleBarcodeScan}
+        existingSerials={filteredDevices.map((d) => d.serial_number || d.id)}
+      />
     </Card>
   );
 };

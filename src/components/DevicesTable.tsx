@@ -30,6 +30,8 @@ interface DevicesTableProps {
   setSelectedOrderType: (value: string[]) => void;
   selectedAssetGroup: string[];
   setSelectedAssetGroup: (value: string[]) => void;
+  selectedAssetCondition: string[];
+  setSelectedAssetCondition: (value: string[]) => void;
   fromDate: DateRange | undefined;
   setFromDate: (range: DateRange | undefined) => void;
   showDeleted: boolean;
@@ -58,6 +60,8 @@ const DevicesTable: React.FC<DevicesTableProps> = ({
   setSelectedOrderType,
   selectedAssetGroup,
   setSelectedAssetGroup,
+  selectedAssetCondition,
+  setSelectedAssetCondition,
   fromDate,
   setFromDate,
   showDeleted,
@@ -118,6 +122,7 @@ const DevicesTable: React.FC<DevicesTableProps> = ({
       selectedStatus,
       selectedOrderType,
       selectedAssetGroup,
+      selectedAssetCondition,
       fromDate,
       showDeleted,
       searchQuery,
@@ -138,6 +143,7 @@ const DevicesTable: React.FC<DevicesTableProps> = ({
       profile_id: d.profile_id || '',
       product: d.product || '',
       asset_status: d.asset_status || '',
+      asset_condition: d.asset_condition || '',
       asset_group: d.asset_group || '',
       far_code: d.far_code || '',
       status: d.status || '',
@@ -156,6 +162,7 @@ const DevicesTable: React.FC<DevicesTableProps> = ({
     selectedStatus,
     selectedOrderType,
     selectedAssetGroup,
+    selectedAssetCondition,
     fromDate,
     showDeleted,
     searchQuery,
@@ -182,6 +189,7 @@ const DevicesTable: React.FC<DevicesTableProps> = ({
       statuses: [...new Set(filteredDevicesForOptions.map(d => d.status || ''))].filter(s => s).sort(),
       orderTypes: [...new Set(filteredDevicesForOptions.map(d => d.order_type || ''))].filter(o => o).sort(),
       assetGroups: [...new Set(filteredDevicesForOptions.map(d => d.asset_group || ''))].filter(g => g).sort(),
+      assetConditions: [...new Set(filteredDevicesForOptions.map(d => d.asset_condition || ''))].filter(c => c).sort(),
     };
   }, [devices, showDeleted, fromDate]);
 
@@ -233,6 +241,11 @@ const DevicesTable: React.FC<DevicesTableProps> = ({
     if (selectedAssetGroup.length > 0 && !selectedAssetGroup.every(g => validAssetGroups.includes(g))) {
       setSelectedAssetGroup([]);
     }
+
+    const validAssetConditions = [...new Set(devices.filter(d => showDeleted ? true : !d.is_deleted).map(d => d.asset_condition || ''))].filter(c => c);
+    if (selectedAssetCondition.length > 0 && !selectedAssetCondition.every(c => validAssetConditions.includes(c))) {
+      setSelectedAssetCondition([]);
+    }
   }, [
     devices,
     showDeleted,
@@ -245,6 +258,7 @@ const DevicesTable: React.FC<DevicesTableProps> = ({
     selectedStatus,
     selectedOrderType,
     selectedAssetGroup,
+    selectedAssetCondition,
     setSelectedWarehouse,
     setSelectedAssetType,
     setSelectedModel,
@@ -254,6 +268,7 @@ const DevicesTable: React.FC<DevicesTableProps> = ({
     setSelectedStatus,
     setSelectedOrderType,
     setSelectedAssetGroup,
+    setSelectedAssetCondition,
   ]);
 
   // Filter devices based on all active filters
@@ -269,6 +284,7 @@ const DevicesTable: React.FC<DevicesTableProps> = ({
       const matchesStatus = selectedStatus.length === 0 || selectedStatus.includes(device.status || '');
       const matchesOrderType = selectedOrderType.length === 0 || selectedOrderType.includes(device.order_type || '');
       const matchesAssetGroup = selectedAssetGroup.length === 0 || selectedAssetGroup.includes(device.asset_group || '');
+      const matchesAssetCondition = selectedAssetCondition.length === 0 || selectedAssetCondition.includes(device.asset_condition || '');
       const matchesDateRange =
         (!fromDate?.from || !device.created_at || new Date(device.created_at) >= new Date(fromDate.from)) &&
         (!fromDate?.to || !device.created_at || new Date(device.created_at) <= new Date(fromDate.to));
@@ -283,6 +299,7 @@ const DevicesTable: React.FC<DevicesTableProps> = ({
             device.model || '',
             device.configuration || '',
             device.asset_status || '',
+            device.asset_condition || '',
             device.product || '',
             device.status || '',
             device.order_type || '',
@@ -305,6 +322,7 @@ const DevicesTable: React.FC<DevicesTableProps> = ({
         matchesStatus &&
         matchesOrderType &&
         matchesAssetGroup &&
+        matchesAssetCondition &&
         matchesDateRange &&
         matchesSearch
       );
@@ -320,6 +338,7 @@ const DevicesTable: React.FC<DevicesTableProps> = ({
     selectedStatus,
     selectedOrderType,
     selectedAssetGroup,
+    selectedAssetCondition,
     fromDate,
     showDeleted,
     searchQuery,
@@ -415,6 +434,7 @@ const DevicesTable: React.FC<DevicesTableProps> = ({
     selectedStatus,
     selectedOrderType,
     selectedAssetGroup,
+    selectedAssetCondition,
     fromDate,
     showDeleted,
     searchQuery,
@@ -475,6 +495,7 @@ const DevicesTable: React.FC<DevicesTableProps> = ({
       'profile_id',
       'product',
       'asset_status',
+      'asset_condition',
       'asset_group',
       'far_code',
       'status',
@@ -516,6 +537,7 @@ const DevicesTable: React.FC<DevicesTableProps> = ({
     setSelectedStatus([]);
     setSelectedOrderType([]);
     setSelectedAssetGroup([]);
+    setSelectedAssetCondition([]);
     setFromDate(undefined);
     setSearchQuery('');
     setCurrentDevicesPage(1);
@@ -539,6 +561,7 @@ const DevicesTable: React.FC<DevicesTableProps> = ({
     profile_id: '120px',
     product: '120px',
     asset_status: '100px',
+    asset_condition: '120px',
     asset_group: '120px',
     far_code: '120px',
     status: '100px',
@@ -574,7 +597,7 @@ const DevicesTable: React.FC<DevicesTableProps> = ({
                   id="search"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="        Search by Serial, Sales Order, Deal ID, School, Nucleus ID, Asset Type, Model, Configuration, Asset Status, Product, Status, Order Type, Asset Group, FAR Code, SD Card Size, Profile ID, Updated By"
+                  placeholder="        Search by Serial, Sales Order, Deal ID, School, Nucleus ID, Asset Type, Model, Configuration, Asset Status, Asset Condition, Product, Status, Order Type, Asset Group, FAR Code, SD Card Size, Profile ID, Updated By"
                   style={{ paddingLeft: '28px', fontSize: '12px', width: '100%', border: '1px solid #d1d5db', borderRadius: '4px', padding: '6px', height: '28px' }}
                 />
               </div>
@@ -628,6 +651,14 @@ const DevicesTable: React.FC<DevicesTableProps> = ({
               value={selectedAssetStatus}
               onChange={setSelectedAssetStatus}
               placeholder="Select Asset Statuses"
+            />
+            <MultiSelect
+              id="assetConditionFilter"
+              label="Asset Condition"
+              options={uniqueValues.assetConditions}
+              value={selectedAssetCondition}
+              onChange={setSelectedAssetCondition}
+              placeholder="Select Asset Conditions"
             />
             <MultiSelect
               id="configurationFilter"
@@ -713,6 +744,7 @@ const DevicesTable: React.FC<DevicesTableProps> = ({
                     <TableHead style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', textAlign: 'left', position: 'sticky', top: 0, background: '#fff', zIndex: 20, width: columnWidths.profile_id }}>Profile ID</TableHead>
                     <TableHead style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', textAlign: 'left', position: 'sticky', top: 0, background: '#fff', zIndex: 20, width: columnWidths.product }}>Product</TableHead>
                     <TableHead style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', textAlign: 'left', position: 'sticky', top: 0, background: '#fff', zIndex: 20, width: columnWidths.asset_status }}>Asset Status</TableHead>
+                    <TableHead style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', textAlign: 'left', position: 'sticky', top: 0, background: '#fff', zIndex: 20, width: columnWidths.asset_condition }}>Asset Condition</TableHead>
                     <TableHead style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', textAlign: 'left', position: 'sticky', top: 0, background: '#fff', zIndex: 20, width: columnWidths.asset_group }}>Asset Group</TableHead>
                     <TableHead style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', textAlign: 'left', position: 'sticky', top: 0, background: '#fff', zIndex: 20, width: columnWidths.far_code }}>FAR Code</TableHead>
                     <TableHead style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', textAlign: 'left', position: 'sticky', top: 0, background: '#fff', zIndex: 20, width: columnWidths.status }}>Status</TableHead>
@@ -724,7 +756,7 @@ const DevicesTable: React.FC<DevicesTableProps> = ({
                 <TableBody>
                   {paginatedDevices.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={21} style={{ textAlign: 'center', fontSize: '12px', padding: '8px' }}>
+                      <TableCell colSpan={22} style={{ textAlign: 'center', fontSize: '12px', padding: '8px' }}>
                         No devices found with current filters. Try adjusting the filters or check data loading.
                       </TableCell>
                     </TableRow>
@@ -748,6 +780,7 @@ const DevicesTable: React.FC<DevicesTableProps> = ({
                         <TableCell style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', width: columnWidths.profile_id }}>{device.profile_id || ''}</TableCell>
                         <TableCell style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', width: columnWidths.product }}>{device.product || ''}</TableCell>
                         <TableCell style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', width: columnWidths.asset_status }}>{device.asset_status || ''}</TableCell>
+                        <TableCell style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', width: columnWidths.asset_condition }}>{device.asset_condition || ''}</TableCell>
                         <TableCell style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', width: columnWidths.asset_group }}>{device.asset_group || ''}</TableCell>
                         <TableCell style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', width: columnWidths.far_code }}>{device.far_code || ''}</TableCell>
                         <TableCell style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', width: columnWidths.status }}>
