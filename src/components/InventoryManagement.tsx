@@ -28,6 +28,7 @@ const InventoryManagement = () => {
   const [selectedConfiguration, setSelectedConfiguration] = useState<string[]>([]);
   const [selectedProduct, setSelectedProduct] = useState<string[]>([]);
   const [selectedStatus, setSelectedStatus] = useState<string[]>([]);
+  const [selectedSdCardSize, setSelectedSdCardSize] = useState<string[]>([]);
   const [selectedOrderType, setSelectedOrderType] = useState<string[]>([]);
   const [selectedAssetGroup, setSelectedAssetGroup] = useState<string[]>([]);
   const [selectedAssetCondition, setSelectedAssetCondition] = useState<string[]>([]);
@@ -743,6 +744,8 @@ const InventoryManagement = () => {
                 setSelectedProduct={setSelectedProduct}
                 selectedStatus={selectedStatus}
                 setSelectedStatus={setSelectedStatus}
+                selectedSdCardSize={selectedSdCardSize}
+                setSelectedSdCardSize={setSelectedSdCardSize}      
                 fromDate={fromDate}
                 setFromDate={setFromDate}
                 toDate={toDate}
@@ -784,6 +787,8 @@ const InventoryManagement = () => {
                 setSelectedAssetGroup={setSelectedAssetGroup}
                 selectedProduct={selectedProduct}
                 setSelectedProduct={setSelectedProduct}
+                selectedSdCardSize={selectedSdCardSize}
+                setSelectedSdCardSize={setSelectedSdCardSize}
                 selectedAssetCondition={selectedAssetCondition}
                 setSelectedAssetCondition={setSelectedAssetCondition}                
                 fromDate={fromDate}
@@ -813,6 +818,8 @@ const InventoryManagement = () => {
                 setSelectedProduct={setSelectedProduct}
                 selectedStatus={selectedStatus}
                 setSelectedStatus={setSelectedStatus}
+                selectedSdCardSize={selectedSdCardSize}
+                setSelectedSdCardSize={setSelectedSdCardSize}
                 selectedOrderType={selectedOrderType}
                 setSelectedOrderType={setSelectedOrderType}
                 selectedAssetGroup={selectedAssetGroup}

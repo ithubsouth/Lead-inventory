@@ -29,6 +29,8 @@ interface OrdersTableProps {
   setSelectedProduct: (value: string[]) => void;
   selectedStatus: string[];
   setSelectedStatus: (value: string[]) => void;
+  selectedSdCardSize: string[];
+  setSelectedSdCardSize: (value: string[]) => void;
   fromDate: DateRange | undefined;
   setFromDate: (range: DateRange | undefined) => void;
   showDeleted: boolean;
@@ -59,6 +61,8 @@ const OrdersTable: React.FC<OrdersTableProps> = ({
   setSelectedProduct,
   selectedStatus,
   setSelectedStatus,
+  selectedSdCardSize,
+  setSelectedSdCardSize,
   fromDate,
   setFromDate,
   showDeleted,
@@ -128,6 +132,7 @@ const OrdersTable: React.FC<OrdersTableProps> = ({
       selectedOrderType,
       selectedProduct,
       selectedStatus,
+      selectedSdCardSize,
       fromDate,
       showDeleted,
       searchQuery,
@@ -160,6 +165,7 @@ const OrdersTable: React.FC<OrdersTableProps> = ({
     selectedOrderType,
     selectedProduct,
     selectedStatus,
+    selectedSdCardSize,
     fromDate,
     showDeleted,
     searchQuery,
@@ -184,6 +190,7 @@ const OrdersTable: React.FC<OrdersTableProps> = ({
       orderTypes: [...new Set(filteredOrdersForOptions.map(o => o.order_type || ''))].filter(o => o).sort(),
       products: [...new Set(filteredOrdersForOptions.map(o => o.product || ''))].filter(p => p).sort(),
       statuses: [...new Set(filteredOrdersForOptions.map(o => o.status || ''))].filter(s => s).sort(),
+      sdCardSizes: [...new Set(filteredOrdersForOptions.map(o => o.sd_card_size || ''))].filter(s => s).sort(),
     };
   }, [orders, showDeleted, fromDate]);
 
@@ -223,6 +230,11 @@ const OrdersTable: React.FC<OrdersTableProps> = ({
     if (selectedStatus.length > 0 && !selectedStatus.every(s => validStatuses.includes(s))) {
       setSelectedStatus([]);
     }
+
+    const validSdCardSizes = [...new Set(orders.filter(o => showDeleted ? true : !o.is_deleted).map(o => o.sd_card_size || ''))].filter(s => s);
+    if (selectedSdCardSize.length > 0 && !selectedSdCardSize.every(s => validSdCardSizes.includes(s))) {
+      setSelectedSdCardSize([]);
+    }
   }, [
     orders,
     showDeleted,
@@ -233,6 +245,7 @@ const OrdersTable: React.FC<OrdersTableProps> = ({
     selectedOrderType,
     selectedProduct,
     selectedStatus,
+    selectedSdCardSize,
     setSelectedWarehouse,
     setSelectedAssetType,
     setSelectedModel,
@@ -240,6 +253,7 @@ const OrdersTable: React.FC<OrdersTableProps> = ({
     setSelectedOrderType,
     setSelectedProduct,
     setSelectedStatus,
+    setSelectedSdCardSize,
   ]);
 
   // Filter orders based on all active filters
@@ -253,6 +267,7 @@ const OrdersTable: React.FC<OrdersTableProps> = ({
       const matchesOrderType = selectedOrderType.length === 0 || selectedOrderType.includes(order.order_type || '');
       const matchesProduct = selectedProduct.length === 0 || selectedProduct.includes(order.product || '');
       const matchesStatus = selectedStatus.length === 0 || selectedStatus.includes(order.status || '');
+      const matchesSdCardSize = selectedSdCardSize.length === 0 || selectedSdCardSize.includes(order.sd_card_size || '');
       const matchesDateRange =
         (!fromDate?.from || !order.order_date || new Date(order.order_date) >= new Date(fromDate.from)) &&
         (!fromDate?.to || !order.order_date || new Date(order.order_date) <= new Date(fromDate.to));
@@ -276,6 +291,7 @@ const OrdersTable: React.FC<OrdersTableProps> = ({
         matchesOrderType &&
         matchesProduct &&
         matchesStatus &&
+        matchesSdCardSize &&
         matchesDateRange &&
         matchesSearch
       );
@@ -289,6 +305,7 @@ const OrdersTable: React.FC<OrdersTableProps> = ({
     selectedOrderType,
     selectedProduct,
     selectedStatus,
+    selectedSdCardSize,
     fromDate,
     showDeleted,
     searchQuery,
@@ -384,6 +401,7 @@ const OrdersTable: React.FC<OrdersTableProps> = ({
     selectedProduct,
     selectedStatus,
     selectedOrderType,
+    selectedSdCardSize,
     fromDate,
     showDeleted,
     searchQuery,
@@ -563,6 +581,7 @@ const OrdersTable: React.FC<OrdersTableProps> = ({
     setSelectedOrderType([]);
     setSelectedProduct([]);
     setSelectedStatus([]);
+    setSelectedSdCardSize([]);
     setFromDate(undefined);
     setSearchQuery('');
     setCurrentOrdersPage(1);
@@ -699,6 +718,14 @@ const OrdersTable: React.FC<OrdersTableProps> = ({
               value={selectedStatus}
               onChange={setSelectedStatus}
               placeholder="Select Statuses"
+            />
+            <MultiSelect
+              id="sdCardSizeFilter"
+              label="SD Card Size"
+              options={uniqueValues.sdCardSizes}
+              value={selectedSdCardSize}
+              onChange={setSelectedSdCardSize}
+              placeholder="Select SD Card Sizes"
             />
             <div style={{ flex: '1', minWidth: '120px' }}>
               <label htmlFor="dateRangeFilter" style={{ fontSize: '12px', color: '#6b7280', display: 'block', marginBottom: '2px', whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' }}>Date Range</label>

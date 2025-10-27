@@ -32,6 +32,8 @@ interface DevicesTableProps {
   setSelectedAssetGroup: (value: string[]) => void;
   selectedAssetCondition: string[];
   setSelectedAssetCondition: (value: string[]) => void;
+  selectedSdCardSize: string[];
+  setSelectedSdCardSize: (value: string[]) => void;
   fromDate: DateRange | undefined;
   setFromDate: (range: DateRange | undefined) => void;
   showDeleted: boolean;
@@ -62,6 +64,8 @@ const DevicesTable: React.FC<DevicesTableProps> = ({
   setSelectedAssetGroup,
   selectedAssetCondition,
   setSelectedAssetCondition,
+  selectedSdCardSize,
+  setSelectedSdCardSize,
   fromDate,
   setFromDate,
   showDeleted,
@@ -123,6 +127,7 @@ const DevicesTable: React.FC<DevicesTableProps> = ({
       selectedOrderType,
       selectedAssetGroup,
       selectedAssetCondition,
+      selectedSdCardSize,
       fromDate,
       showDeleted,
       searchQuery,
@@ -163,6 +168,7 @@ const DevicesTable: React.FC<DevicesTableProps> = ({
     selectedOrderType,
     selectedAssetGroup,
     selectedAssetCondition,
+    selectedSdCardSize,
     fromDate,
     showDeleted,
     searchQuery,
@@ -190,6 +196,7 @@ const DevicesTable: React.FC<DevicesTableProps> = ({
       orderTypes: [...new Set(filteredDevicesForOptions.map(d => d.order_type || ''))].filter(o => o).sort(),
       assetGroups: [...new Set(filteredDevicesForOptions.map(d => d.asset_group || ''))].filter(g => g).sort(),
       assetConditions: [...new Set(filteredDevicesForOptions.map(d => d.asset_condition || ''))].filter(c => c).sort(),
+      sdCardSizes: [...new Set(filteredDevicesForOptions.map(d => d.sd_card_size || ''))].filter(s => s).sort(),
     };
   }, [devices, showDeleted, fromDate]);
 
@@ -246,6 +253,11 @@ const DevicesTable: React.FC<DevicesTableProps> = ({
     if (selectedAssetCondition.length > 0 && !selectedAssetCondition.every(c => validAssetConditions.includes(c))) {
       setSelectedAssetCondition([]);
     }
+
+    const validSdCardSizes = [...new Set(devices.filter(d => showDeleted ? true : !d.is_deleted).map(d => d.sd_card_size || ''))].filter(s => s);
+    if (selectedSdCardSize.length > 0 && !selectedSdCardSize.every(s => validSdCardSizes.includes(s))) {
+      setSelectedSdCardSize([]);
+    }
   }, [
     devices,
     showDeleted,
@@ -259,6 +271,7 @@ const DevicesTable: React.FC<DevicesTableProps> = ({
     selectedOrderType,
     selectedAssetGroup,
     selectedAssetCondition,
+    selectedSdCardSize,
     setSelectedWarehouse,
     setSelectedAssetType,
     setSelectedModel,
@@ -269,6 +282,7 @@ const DevicesTable: React.FC<DevicesTableProps> = ({
     setSelectedOrderType,
     setSelectedAssetGroup,
     setSelectedAssetCondition,
+    setSelectedSdCardSize,
   ]);
 
   // Filter devices based on all active filters
@@ -285,6 +299,7 @@ const DevicesTable: React.FC<DevicesTableProps> = ({
       const matchesOrderType = selectedOrderType.length === 0 || selectedOrderType.includes(device.order_type || '');
       const matchesAssetGroup = selectedAssetGroup.length === 0 || selectedAssetGroup.includes(device.asset_group || '');
       const matchesAssetCondition = selectedAssetCondition.length === 0 || selectedAssetCondition.includes(device.asset_condition || '');
+      const matchesSdCardSize = selectedSdCardSize.length === 0 || selectedSdCardSize.includes(device.sd_card_size || '');
       const matchesDateRange =
         (!fromDate?.from || !device.created_at || new Date(device.created_at) >= new Date(fromDate.from)) &&
         (!fromDate?.to || !device.created_at || new Date(device.created_at) <= new Date(fromDate.to));
@@ -323,6 +338,7 @@ const DevicesTable: React.FC<DevicesTableProps> = ({
         matchesOrderType &&
         matchesAssetGroup &&
         matchesAssetCondition &&
+        matchesSdCardSize &&
         matchesDateRange &&
         matchesSearch
       );
@@ -339,6 +355,7 @@ const DevicesTable: React.FC<DevicesTableProps> = ({
     selectedOrderType,
     selectedAssetGroup,
     selectedAssetCondition,
+    selectedSdCardSize,
     fromDate,
     showDeleted,
     searchQuery,
@@ -435,6 +452,7 @@ const DevicesTable: React.FC<DevicesTableProps> = ({
     selectedOrderType,
     selectedAssetGroup,
     selectedAssetCondition,
+    selectedSdCardSize,
     fromDate,
     showDeleted,
     searchQuery,
@@ -538,6 +556,7 @@ const DevicesTable: React.FC<DevicesTableProps> = ({
     setSelectedOrderType([]);
     setSelectedAssetGroup([]);
     setSelectedAssetCondition([]);
+    setSelectedSdCardSize([]);
     setFromDate(undefined);
     setSearchQuery('');
     setCurrentDevicesPage(1);
@@ -699,6 +718,14 @@ const DevicesTable: React.FC<DevicesTableProps> = ({
               value={selectedAssetGroup}
               onChange={setSelectedAssetGroup}
               placeholder="Select Asset Groups"
+            />
+            <MultiSelect
+              id="sdCardSizeFilter"
+              label="SD Card Size"
+              options={uniqueValues.sdCardSizes}
+              value={selectedSdCardSize}
+              onChange={setSelectedSdCardSize}
+              placeholder="Select SD Card Sizes"
             />
             <div style={{ flex: '1', minWidth: '120px' }}>
               <label htmlFor="dateRangeFilter" style={{ fontSize: '12px', color: '#6b7280', display: 'block', marginBottom: '2px', whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' }}>Date Range</label>
