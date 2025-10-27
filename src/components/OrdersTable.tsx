@@ -120,44 +120,67 @@ const OrdersTable: React.FC<OrdersTableProps> = ({
     };
   }, []);
 
-  useEffect(() => {
-    console.log('OrdersTable props:', {
-      ordersLength: orders.length,
-      deletedOrders: orders.filter(o => o.is_deleted).length,
-      activeOrders: orders.filter(o => !o.is_deleted).length,
-      selectedWarehouse,
-      selectedAssetType,
-      selectedModel,
-      selectedConfiguration,
-      selectedOrderType,
-      selectedProduct,
-      selectedStatus,
-      selectedSdCardSize,
-      fromDate,
-      showDeleted,
-      searchQuery,
-    });
-    console.log('Raw orders (first 5):', orders.slice(0, 5).map(o => ({
-      id: o.id,
-      order_date: o.order_date,
-      sales_order: o.sales_order || '',
-      order_type: o.order_type || '',
-      asset_type: o.asset_type || '',
-      model: o.model || '',
-      configuration: o.configuration || '',
-      quantity: o.quantity || 0,
-      sd_card_size: o.sd_card_size || '',
-      profile_id: o.profile_id || '',
-      product: o.product || '',
-      warehouse: o.warehouse || '',
-      school_name: o.school_name || '',
-      deal_id: o.deal_id || '',
-      nucleus_id: o.nucleus_id || '',
-      status: o.status || '',
-      updated_by: o.updated_by || '',
-    })));
+  // Compute unique values for dropdown options with dependent filtering
+  const uniqueValues = useMemo(() => {
+    const filteredBaseOrders = orders.filter((order) => showDeleted ? true : !order.is_deleted);
+
+    const getFilteredOrders = (excludeFilter: string) => {
+      return filteredBaseOrders.filter((o) => {
+        return Object.entries({
+          warehouse: selectedWarehouse,
+          assetType: selectedAssetType,
+          model: selectedModel,
+          configuration: selectedConfiguration,
+          orderType: selectedOrderType,
+          product: selectedProduct,
+          status: selectedStatus,
+          sdCardSize: selectedSdCardSize,
+          fromDate,
+        })
+          .filter(([key]) => key !== excludeFilter)
+          .every(([key, filterValue]) => {
+            if (key === 'fromDate') {
+              if (!fromDate?.from || !fromDate?.to) return true;
+              if (!o.order_date) return false;
+              const orderDate = new Date(o.order_date);
+              const startOfDay = new Date(orderDate);
+              startOfDay.setHours(0, 0, 0, 0);
+              const endOfDay = new Date(orderDate);
+              endOfDay.setHours(23, 59, 59, 999);
+              const fromStart = new Date(fromDate.from);
+              fromStart.setHours(0, 0, 0, 0);
+              const toEnd = new Date(fromDate.to);
+              toEnd.setHours(23, 59, 59, 999);
+              return startOfDay >= fromStart && endOfDay <= toEnd;
+            }
+            const prop = key === 'warehouse' ? 'warehouse' :
+                        key === 'assetType' ? 'asset_type' :
+                        key === 'model' ? 'model' :
+                        key === 'configuration' ? 'configuration' :
+                        key === 'orderType' ? 'order_type' :
+                        key === 'product' ? 'product' :
+                        key === 'status' ? 'status' :
+                        key === 'sdCardSize' ? 'sd_card_size' : '';
+            const value = o[prop as keyof Order] || '';
+            return (filterValue as string[]).length === 0 || (filterValue as string[]).includes(value as string);
+          });
+      });
+    };
+
+    return {
+      warehouses: [...new Set(getFilteredOrders('warehouse').map(o => o.warehouse || ''))].filter(Boolean).sort(),
+      assetTypes: [...new Set(getFilteredOrders('assetType').map(o => o.asset_type || ''))].filter(Boolean).sort(),
+      models: [...new Set(getFilteredOrders('model').map(o => o.model || ''))].filter(Boolean).sort(),
+      configurations: [...new Set(getFilteredOrders('configuration').map(o => o.configuration || ''))].filter(Boolean).sort(),
+      orderTypes: [...new Set(getFilteredOrders('orderType').map(o => o.order_type || ''))].filter(Boolean).sort(),
+      products: [...new Set(getFilteredOrders('product').map(o => o.product || ''))].filter(Boolean).sort(),
+      statuses: [...new Set(getFilteredOrders('status').map(o => o.status || ''))].filter(Boolean).sort(),
+      sdCardSizes: [...new Set(getFilteredOrders('sdCardSize').map(o => o.sd_card_size || ''))].filter(Boolean).sort(),
+    };
   }, [
     orders,
+    showDeleted,
+    fromDate,
     selectedWarehouse,
     selectedAssetType,
     selectedModel,
@@ -166,78 +189,27 @@ const OrdersTable: React.FC<OrdersTableProps> = ({
     selectedProduct,
     selectedStatus,
     selectedSdCardSize,
-    fromDate,
-    showDeleted,
-    searchQuery,
   ]);
 
-  // Compute unique values for dropdown options based on filtered orders
-  const uniqueValues = useMemo(() => {
-    const filteredOrdersForOptions = orders.filter((order) => {
-      const matchesDeleted = showDeleted ? true : !order.is_deleted;
-      const matchesDateRange =
-        (!fromDate?.from || !order.order_date || new Date(order.order_date) >= new Date(fromDate.from)) &&
-        (!fromDate?.to || !order.order_date || new Date(order.order_date) <= new Date(fromDate.to));
-
-      return matchesDeleted && matchesDateRange;
-    });
-
-    return {
-      warehouses: [...new Set(filteredOrdersForOptions.map(o => o.warehouse || ''))].filter(w => w).sort(),
-      assetTypes: [...new Set(filteredOrdersForOptions.map(o => o.asset_type || ''))].filter(a => a).sort(),
-      models: [...new Set(filteredOrdersForOptions.map(o => o.model || ''))].filter(m => m).sort(),
-      configurations: [...new Set(filteredOrdersForOptions.map(o => o.configuration || ''))].filter(c => c).sort(),
-      orderTypes: [...new Set(filteredOrdersForOptions.map(o => o.order_type || ''))].filter(o => o).sort(),
-      products: [...new Set(filteredOrdersForOptions.map(o => o.product || ''))].filter(p => p).sort(),
-      statuses: [...new Set(filteredOrdersForOptions.map(o => o.status || ''))].filter(s => s).sort(),
-      sdCardSizes: [...new Set(filteredOrdersForOptions.map(o => o.sd_card_size || ''))].filter(s => s).sort(),
-    };
-  }, [orders, showDeleted, fromDate]);
-
-  // Reset dependent filters when any filter changes
+  // Reset invalid filter selections
   useEffect(() => {
-    const validWarehouses = [...new Set(orders.filter(o => showDeleted ? true : !o.is_deleted).map(o => o.warehouse || ''))].filter(w => w);
-    if (selectedWarehouse.length > 0 && !selectedWarehouse.every(w => validWarehouses.includes(w))) {
-      setSelectedWarehouse([]);
-    }
+    const resetIfInvalid = (selected: string[], validOptions: string[], setter: (value: string[]) => void) => {
+      if (selected.length > 0 && !selected.every(s => validOptions.includes(s))) {
+        setter(selected.filter(s => validOptions.includes(s)));
+      }
+    };
 
-    const validAssetTypes = [...new Set(orders.filter(o => showDeleted ? true : !o.is_deleted).map(o => o.asset_type || ''))].filter(a => a);
-    if (selectedAssetType.length > 0 && !selectedAssetType.every(a => validAssetTypes.includes(a))) {
-      setSelectedAssetType([]);
-    }
-
-    const validModels = [...new Set(orders.filter(o => showDeleted ? true : !o.is_deleted).map(o => o.model || ''))].filter(m => m);
-    if (selectedModel.length > 0 && !selectedModel.every(m => validModels.includes(m))) {
-      setSelectedModel([]);
-    }
-
-    const validConfigurations = [...new Set(orders.filter(o => showDeleted ? true : !o.is_deleted).map(o => o.configuration || ''))].filter(c => c);
-    if (selectedConfiguration.length > 0 && !selectedConfiguration.every(c => validConfigurations.includes(c))) {
-      setSelectedConfiguration([]);
-    }
-
-    const validOrderTypes = [...new Set(orders.filter(o => showDeleted ? true : !o.is_deleted).map(o => o.order_type || ''))].filter(o => o);
-    if (selectedOrderType.length > 0 && !selectedOrderType.every(o => validOrderTypes.includes(o))) {
-      setSelectedOrderType([]);
-    }
-
-    const validProducts = [...new Set(orders.filter(o => showDeleted ? true : !o.is_deleted).map(o => o.product || ''))].filter(p => p);
-    if (selectedProduct.length > 0 && !selectedProduct.every(p => validProducts.includes(p))) {
-      setSelectedProduct([]);
-    }
-
-    const validStatuses = [...new Set(orders.filter(o => showDeleted ? true : !o.is_deleted).map(o => o.status || ''))].filter(s => s);
-    if (selectedStatus.length > 0 && !selectedStatus.every(s => validStatuses.includes(s))) {
-      setSelectedStatus([]);
-    }
-
-    const validSdCardSizes = [...new Set(orders.filter(o => showDeleted ? true : !o.is_deleted).map(o => o.sd_card_size || ''))].filter(s => s);
-    if (selectedSdCardSize.length > 0 && !selectedSdCardSize.every(s => validSdCardSizes.includes(s))) {
-      setSelectedSdCardSize([]);
-    }
+    resetIfInvalid(selectedWarehouse, uniqueValues.warehouses, setSelectedWarehouse);
+    resetIfInvalid(selectedAssetType, uniqueValues.assetTypes, setSelectedAssetType);
+    resetIfInvalid(selectedModel, uniqueValues.models, setSelectedModel);
+    resetIfInvalid(selectedConfiguration, uniqueValues.configurations, setSelectedConfiguration);
+    resetIfInvalid(selectedOrderType, uniqueValues.orderTypes, setSelectedOrderType);
+    resetIfInvalid(selectedProduct, uniqueValues.products, setSelectedProduct);
+    resetIfInvalid(selectedStatus, uniqueValues.statuses, setSelectedStatus);
+    resetIfInvalid(selectedSdCardSize, uniqueValues.sdCardSizes, setSelectedSdCardSize);
   }, [
     orders,
-    showDeleted,
+    uniqueValues,
     selectedWarehouse,
     selectedAssetType,
     selectedModel,
@@ -269,18 +241,18 @@ const OrdersTable: React.FC<OrdersTableProps> = ({
       const matchesStatus = selectedStatus.length === 0 || selectedStatus.includes(order.status || '');
       const matchesSdCardSize = selectedSdCardSize.length === 0 || selectedSdCardSize.includes(order.sd_card_size || '');
       const matchesDateRange =
-        (!fromDate?.from || !order.order_date || new Date(order.order_date) >= new Date(fromDate.from)) &&
-        (!fromDate?.to || !order.order_date || new Date(order.order_date) <= new Date(fromDate.to));
-      const matchesSearch = searchQuery
-        ? [
+        (!fromDate?.from || !order.order_date || new Date(order.order_date).setHours(0, 0, 0, 0) >= new Date(fromDate.from).setHours(0, 0, 0, 0)) &&
+        (!fromDate?.to || !order.order_date || new Date(order.order_date).setHours(23, 59, 59, 999) <= new Date(fromDate.to).setHours(23, 59, 59, 999));
+      const matchesSearch = searchQuery.trim() === ''
+        ? true
+        : [
             order.sales_order || '',
             order.deal_id || '',
             order.school_name || '',
             order.nucleus_id || '',
             order.profile_id || '',
             ...(order.serial_numbers || []).map(serial => serial || ''),
-          ].some((field) => field.toLowerCase().includes(searchQuery.toLowerCase()))
-        : true;
+          ].some((field) => field.toLowerCase().includes(searchQuery.toLowerCase()));
 
       return (
         matchesDeleted &&
@@ -327,35 +299,6 @@ const OrdersTable: React.FC<OrdersTableProps> = ({
     });
   }, [filteredOrders]);
 
-  // Debug sorting and check for invalid dates
-  useEffect(() => {
-    const invalidDates = filteredOrders.filter(o => o.order_date && isNaN(new Date(o.order_date).getTime())).map(o => ({
-      id: o.id,
-      order_date: o.order_date,
-      sales_order: o.sales_order || '',
-    }));
-    if (invalidDates.length > 0) {
-      console.warn('Invalid order_date values detected:', invalidDates);
-    }
-
-    console.log('Filtered orders (first 5):', filteredOrders.slice(0, 5).map(o => ({
-      id: o.id,
-      order_date: o.order_date,
-      sales_order: o.sales_order || '',
-    })));
-    console.log('Sorted orders (first 5):', sortedOrders.slice(0, 5).map(o => ({
-      id: o.id,
-      order_date: o.order_date,
-      sales_order: o.sales_order || '',
-    })));
-    console.log('Filtered and sorted orders summary:', {
-      filteredLength: filteredOrders.length,
-      sortedLength: sortedOrders.length,
-      deletedOrders: sortedOrders.filter(o => o.is_deleted).length,
-      activeOrders: sortedOrders.filter(o => !o.is_deleted).length,
-    });
-  }, [filteredOrders, sortedOrders]);
-
   // Group orders by sales_order while preserving sort order
   const ordersBySalesOrder = useMemo(() => {
     return sortedOrders.reduce((acc, order, index) => {
@@ -391,6 +334,27 @@ const OrdersTable: React.FC<OrdersTableProps> = ({
     return duplicates;
   }, [ordersBySalesOrder]);
 
+  // Debug logging
+  useEffect(() => {
+    const invalidDates = filteredOrders.filter(o => o.order_date && isNaN(new Date(o.order_date).getTime())).map(o => ({
+      id: o.id,
+      order_date: o.order_date,
+      sales_order: o.sales_order || '',
+    }));
+    if (invalidDates.length > 0) {
+      console.warn('Invalid order_date values detected:', invalidDates);
+    }
+
+    console.log('OrdersTable Summary:', {
+      totalOrders: orders.length,
+      filteredOrders: filteredOrders.length,
+      sortedOrders: sortedOrders.length,
+      ordersWithCounts: ordersWithCounts.length,
+      deletedOrders: ordersWithCounts.filter(o => o.is_deleted).length,
+      activeOrders: ordersWithCounts.filter(o => !o.is_deleted).length,
+    });
+  }, [orders, filteredOrders, sortedOrders, ordersWithCounts]);
+
   useEffect(() => {
     setCurrentOrdersPage(1);
   }, [
@@ -398,9 +362,9 @@ const OrdersTable: React.FC<OrdersTableProps> = ({
     selectedAssetType,
     selectedModel,
     selectedConfiguration,
+    selectedOrderType,
     selectedProduct,
     selectedStatus,
-    selectedOrderType,
     selectedSdCardSize,
     fromDate,
     showDeleted,
@@ -415,21 +379,6 @@ const OrdersTable: React.FC<OrdersTableProps> = ({
     );
   }, [ordersWithCounts, currentOrdersPage, rowsPerPage]);
 
-  useEffect(() => {
-    console.log('Paginated orders (first 5):', paginatedOrders.slice(0, 5).map(o => ({
-      id: o.id,
-      order_date: o.order_date,
-      sales_order: o.sales_order || '',
-      orderCount: o.orderCount,
-    })));
-    console.log('Pagination info:', {
-      currentOrdersPage,
-      rowsPerPage,
-      sortedOrdersLength: ordersWithCounts.length,
-      totalOrdersPages: Math.ceil(ordersWithCounts.length / rowsPerPage),
-    });
-  }, [paginatedOrders, currentOrdersPage, rowsPerPage, ordersWithCounts]);
-
   const totalOrdersPages = Math.ceil(ordersWithCounts.length / rowsPerPage);
 
   // Pagination logic for dynamic page range
@@ -440,8 +389,8 @@ const OrdersTable: React.FC<OrdersTableProps> = ({
   }
   if (pageRange[0] > 1) pageRange.unshift('...');
   if (pageRange[0] !== 1) pageRange.unshift(1);
-  if (pageRange[pageRange.length - 1] < totalOrdersPages) pageRange.push('...');
-  if (pageRange[pageRange.length - 1] !== totalOrdersPages) pageRange.push(totalOrdersPages);
+  if (pageRange[pageRange.length - 1] < totalOrdersPages && totalOrdersPages > 0) pageRange.push('...');
+  if (pageRange[pageRange.length - 1] !== totalOrdersPages && totalOrdersPages > 0) pageRange.push(totalOrdersPages);
 
   const handleStatusClick = (order: Order) => {
     if (order.status === 'Pending' || order.status === 'Failed') {
@@ -466,9 +415,7 @@ const OrdersTable: React.FC<OrdersTableProps> = ({
         .eq('order_id', orderId);
       if (deviceError) throw deviceError;
 
-      await loadOrders();
-      await loadDevices();
-      await loadOrderSummary();
+      await Promise.all([loadOrders(), loadDevices(), loadOrderSummary()]);
       toast({ title: 'Success', description: 'Order soft deleted successfully' });
     } catch (error) {
       console.error('Error soft deleting order:', error);
@@ -497,9 +444,7 @@ const OrdersTable: React.FC<OrdersTableProps> = ({
         .eq('order_id', orderId);
       if (deviceError) throw deviceError;
 
-      await loadOrders();
-      await loadDevices();
-      await loadOrderSummary();
+      await Promise.all([loadOrders(), loadDevices(), loadOrderSummary()]);
       toast({ title: 'Success', description: 'Order restored successfully' });
     } catch (error) {
       console.error('Error restoring order:', error);
@@ -548,8 +493,8 @@ const OrdersTable: React.FC<OrdersTableProps> = ({
             if (header === 'serial_numbers') {
               return `"${(value || []).join(';')}"`;
             }
-            return typeof value === 'string' && value.includes(',')
-              ? `"${value}"`
+            return typeof value === 'string' && (value.includes(',') || value.includes('"'))
+              ? `"${value.replace(/"/g, '""')}"`
               : value ?? '';
           })
           .join(',')
@@ -568,9 +513,7 @@ const OrdersTable: React.FC<OrdersTableProps> = ({
     setOrders(orders.map(o => (o.id === updatedOrder.id ? updatedOrder : o)));
     setShowEditDialog(false);
     setEditingOrder(null);
-    loadOrders();
-    loadDevices();
-    loadOrderSummary();
+    Promise.all([loadOrders(), loadDevices(), loadOrderSummary()]);
   };
 
   const clearFilters = () => {

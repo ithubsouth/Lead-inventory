@@ -112,52 +112,94 @@ const DevicesTable: React.FC<DevicesTableProps> = ({
     };
   }, []);
 
-  useEffect(() => {
-    console.log('DevicesTable props:', {
-      devicesLength: devices?.length || 0,
-      deletedDevices: devices?.filter(d => d.is_deleted).length || 0,
-      activeDevices: devices?.filter(d => !d.is_deleted).length || 0,
-      selectedWarehouse,
-      selectedAssetType,
-      selectedModel,
-      selectedAssetStatus,
-      selectedConfiguration,
-      selectedProduct,
-      selectedStatus,
-      selectedOrderType,
-      selectedAssetGroup,
-      selectedAssetCondition,
-      selectedSdCardSize,
-      fromDate,
-      showDeleted,
-      searchQuery,
-    });
-    console.log('Raw devices (first 5):', devices?.slice(0, 5).map(d => ({
-      id: d.id,
-      sales_order: d.sales_order || '',
-      order_type: d.order_type || '',
-      warehouse: d.warehouse || '',
-      deal_id: d.deal_id || '',
-      nucleus_id: d.nucleus_id || '',
-      school_name: d.school_name || '',
-      asset_type: d.asset_type || '',
-      model: d.model || '',
-      configuration: d.configuration || '',
-      serial_number: d.serial_number || '',
-      sd_card_size: d.sd_card_size || '',
-      profile_id: d.profile_id || '',
-      product: d.product || '',
-      asset_status: d.asset_status || '',
-      asset_condition: d.asset_condition || '',
-      asset_group: d.asset_group || '',
-      far_code: d.far_code || '',
-      status: d.status || '',
-      created_at: d.created_at || '',
-      updated_at: d.updated_at || '',
-      updated_by: d.updated_by || '',
-    })) || []);
+  const propertyMap = {
+    warehouse: 'warehouse',
+    assetType: 'asset_type',
+    model: 'model',
+    assetStatus: 'asset_status',
+    configuration: 'configuration',
+    product: 'product',
+    status: 'status',
+    orderType: 'order_type',
+    assetGroup: 'asset_group',
+    assetCondition: 'asset_condition',
+    sdCardSize: 'sd_card_size',
+  };
+
+  // Compute unique values for dropdown options with dependent filtering
+  const uniqueValues = useMemo(() => {
+    if (!devices) return {
+      warehouses: [],
+      assetTypes: [],
+      models: [],
+      assetStatuses: [],
+      configurations: [],
+      products: [],
+      statuses: [],
+      orderTypes: [],
+      assetGroups: [],
+      assetConditions: [],
+      sdCardSizes: [],
+    };
+
+    const filteredBaseDevices = devices.filter((device) => showDeleted ? true : !device.is_deleted);
+
+    const getFilteredDevices = (excludeFilter: string) => {
+      return filteredBaseDevices.filter((d) => {
+        return Object.entries({
+          warehouse: selectedWarehouse,
+          assetType: selectedAssetType,
+          model: selectedModel,
+          assetStatus: selectedAssetStatus,
+          configuration: selectedConfiguration,
+          product: selectedProduct,
+          status: selectedStatus,
+          orderType: selectedOrderType,
+          assetGroup: selectedAssetGroup,
+          assetCondition: selectedAssetCondition,
+          sdCardSize: selectedSdCardSize,
+          fromDate,
+        })
+          .filter(([key]) => key !== excludeFilter)
+          .every(([key, filterValue]) => {
+            if (key === 'fromDate') {
+              if (!fromDate?.from || !fromDate?.to) return true;
+              if (!d.created_at) return false;
+              const createdAt = new Date(d.created_at);
+              const startOfDay = new Date(createdAt);
+              startOfDay.setHours(0, 0, 0, 0);
+              const endOfDay = new Date(createdAt);
+              endOfDay.setHours(23, 59, 59, 999);
+              const fromStart = new Date(fromDate.from);
+              fromStart.setHours(0, 0, 0, 0);
+              const toEnd = new Date(fromDate.to);
+              toEnd.setHours(23, 59, 59, 999);
+              return startOfDay >= fromStart && endOfDay <= toEnd;
+            }
+            const prop = propertyMap[key as keyof typeof propertyMap];
+            const value = d[prop as keyof Device] || '';
+            return (filterValue as string[]).length === 0 || (filterValue as string[]).includes(value as string);
+          });
+      });
+    };
+
+    return {
+      warehouses: [...new Set(getFilteredDevices('warehouse').map(d => d.warehouse || ''))].filter(Boolean).sort(),
+      assetTypes: [...new Set(getFilteredDevices('assetType').map(d => d.asset_type || ''))].filter(Boolean).sort(),
+      models: [...new Set(getFilteredDevices('model').map(d => d.model || ''))].filter(Boolean).sort(),
+      assetStatuses: [...new Set(getFilteredDevices('assetStatus').map(d => d.asset_status || ''))].filter(Boolean).sort(),
+      configurations: [...new Set(getFilteredDevices('configuration').map(d => d.configuration || ''))].filter(Boolean).sort(),
+      products: [...new Set(getFilteredDevices('product').map(d => d.product || ''))].filter(Boolean).sort(),
+      statuses: [...new Set(getFilteredDevices('status').map(d => d.status || ''))].filter(Boolean).sort(),
+      orderTypes: [...new Set(getFilteredDevices('orderType').map(d => d.order_type || ''))].filter(Boolean).sort(),
+      assetGroups: [...new Set(getFilteredDevices('assetGroup').map(d => d.asset_group || ''))].filter(Boolean).sort(),
+      assetConditions: [...new Set(getFilteredDevices('assetCondition').map(d => d.asset_condition || ''))].filter(Boolean).sort(),
+      sdCardSizes: [...new Set(getFilteredDevices('sdCardSize').map(d => d.sd_card_size || ''))].filter(Boolean).sort(),
+    };
   }, [
     devices,
+    showDeleted,
+    fromDate,
     selectedWarehouse,
     selectedAssetType,
     selectedModel,
@@ -169,98 +211,32 @@ const DevicesTable: React.FC<DevicesTableProps> = ({
     selectedAssetGroup,
     selectedAssetCondition,
     selectedSdCardSize,
-    fromDate,
-    showDeleted,
-    searchQuery,
   ]);
 
-  // Compute unique values for dropdown options based on filtered devices
-  const uniqueValues = useMemo(() => {
-    const filteredDevicesForOptions = devices?.filter((device) => {
-      const matchesDeleted = showDeleted ? true : !device.is_deleted;
-      const matchesDateRange =
-        (!fromDate?.from || !device.created_at || new Date(device.created_at) >= new Date(fromDate.from)) &&
-        (!fromDate?.to || !device.created_at || new Date(device.created_at) <= new Date(fromDate.to));
-
-      return matchesDeleted && matchesDateRange;
-    }) || [];
-
-    return {
-      warehouses: [...new Set(filteredDevicesForOptions.map(d => d.warehouse || ''))].filter(w => w).sort(),
-      assetTypes: [...new Set(filteredDevicesForOptions.map(d => d.asset_type || ''))].filter(a => a).sort(),
-      models: [...new Set(filteredDevicesForOptions.map(d => d.model || ''))].filter(m => m).sort(),
-      assetStatuses: [...new Set(filteredDevicesForOptions.map(d => d.asset_status || ''))].filter(s => s).sort(),
-      configurations: [...new Set(filteredDevicesForOptions.map(d => d.configuration || ''))].filter(c => c).sort(),
-      products: [...new Set(filteredDevicesForOptions.map(d => d.product || ''))].filter(p => p).sort(),
-      statuses: [...new Set(filteredDevicesForOptions.map(d => d.status || ''))].filter(s => s).sort(),
-      orderTypes: [...new Set(filteredDevicesForOptions.map(d => d.order_type || ''))].filter(o => o).sort(),
-      assetGroups: [...new Set(filteredDevicesForOptions.map(d => d.asset_group || ''))].filter(g => g).sort(),
-      assetConditions: [...new Set(filteredDevicesForOptions.map(d => d.asset_condition || ''))].filter(c => c).sort(),
-      sdCardSizes: [...new Set(filteredDevicesForOptions.map(d => d.sd_card_size || ''))].filter(s => s).sort(),
-    };
-  }, [devices, showDeleted, fromDate]);
-
-  // Reset dependent filters when any filter changes
+  // Reset invalid filter selections
   useEffect(() => {
     if (!devices) return;
 
-    const validWarehouses = [...new Set(devices.filter(d => showDeleted ? true : !d.is_deleted).map(d => d.warehouse || ''))].filter(w => w);
-    if (selectedWarehouse.length > 0 && !selectedWarehouse.every(w => validWarehouses.includes(w))) {
-      setSelectedWarehouse([]);
-    }
+    const resetIfInvalid = (selected: string[], validOptions: string[], setter: (value: string[]) => void) => {
+      if (selected.length > 0 && !selected.every(s => validOptions.includes(s))) {
+        setter(selected.filter(s => validOptions.includes(s)));
+      }
+    };
 
-    const validAssetTypes = [...new Set(devices.filter(d => showDeleted ? true : !d.is_deleted).map(d => d.asset_type || ''))].filter(a => a);
-    if (selectedAssetType.length > 0 && !selectedAssetType.every(a => validAssetTypes.includes(a))) {
-      setSelectedAssetType([]);
-    }
-
-    const validModels = [...new Set(devices.filter(d => showDeleted ? true : !d.is_deleted).map(d => d.model || ''))].filter(m => m);
-    if (selectedModel.length > 0 && !selectedModel.every(m => validModels.includes(m))) {
-      setSelectedModel([]);
-    }
-
-    const validAssetStatuses = [...new Set(devices.filter(d => showDeleted ? true : !d.is_deleted).map(d => d.asset_status || ''))].filter(s => s);
-    if (selectedAssetStatus.length > 0 && !selectedAssetStatus.every(s => validAssetStatuses.includes(s))) {
-      setSelectedAssetStatus([]);
-    }
-
-    const validConfigurations = [...new Set(devices.filter(d => showDeleted ? true : !d.is_deleted).map(d => d.configuration || ''))].filter(c => c);
-    if (selectedConfiguration.length > 0 && !selectedConfiguration.every(c => validConfigurations.includes(c))) {
-      setSelectedConfiguration([]);
-    }
-
-    const validProducts = [...new Set(devices.filter(d => showDeleted ? true : !d.is_deleted).map(d => d.product || ''))].filter(p => p);
-    if (selectedProduct.length > 0 && !selectedProduct.every(p => validProducts.includes(p))) {
-      setSelectedProduct([]);
-    }
-
-    const validStatuses = [...new Set(devices.filter(d => showDeleted ? true : !d.is_deleted).map(d => d.status || ''))].filter(s => s);
-    if (selectedStatus.length > 0 && !selectedStatus.every(s => validStatuses.includes(s))) {
-      setSelectedStatus([]);
-    }
-
-    const validOrderTypes = [...new Set(devices.filter(d => showDeleted ? true : !d.is_deleted).map(d => d.order_type || ''))].filter(o => o);
-    if (selectedOrderType.length > 0 && !selectedOrderType.every(o => validOrderTypes.includes(o))) {
-      setSelectedOrderType([]);
-    }
-
-    const validAssetGroups = [...new Set(devices.filter(d => showDeleted ? true : !d.is_deleted).map(d => d.asset_group || ''))].filter(g => g);
-    if (selectedAssetGroup.length > 0 && !selectedAssetGroup.every(g => validAssetGroups.includes(g))) {
-      setSelectedAssetGroup([]);
-    }
-
-    const validAssetConditions = [...new Set(devices.filter(d => showDeleted ? true : !d.is_deleted).map(d => d.asset_condition || ''))].filter(c => c);
-    if (selectedAssetCondition.length > 0 && !selectedAssetCondition.every(c => validAssetConditions.includes(c))) {
-      setSelectedAssetCondition([]);
-    }
-
-    const validSdCardSizes = [...new Set(devices.filter(d => showDeleted ? true : !d.is_deleted).map(d => d.sd_card_size || ''))].filter(s => s);
-    if (selectedSdCardSize.length > 0 && !selectedSdCardSize.every(s => validSdCardSizes.includes(s))) {
-      setSelectedSdCardSize([]);
-    }
+    resetIfInvalid(selectedWarehouse, uniqueValues.warehouses, setSelectedWarehouse);
+    resetIfInvalid(selectedAssetType, uniqueValues.assetTypes, setSelectedAssetType);
+    resetIfInvalid(selectedModel, uniqueValues.models, setSelectedModel);
+    resetIfInvalid(selectedAssetStatus, uniqueValues.assetStatuses, setSelectedAssetStatus);
+    resetIfInvalid(selectedConfiguration, uniqueValues.configurations, setSelectedConfiguration);
+    resetIfInvalid(selectedProduct, uniqueValues.products, setSelectedProduct);
+    resetIfInvalid(selectedStatus, uniqueValues.statuses, setSelectedStatus);
+    resetIfInvalid(selectedOrderType, uniqueValues.orderTypes, setSelectedOrderType);
+    resetIfInvalid(selectedAssetGroup, uniqueValues.assetGroups, setSelectedAssetGroup);
+    resetIfInvalid(selectedAssetCondition, uniqueValues.assetConditions, setSelectedAssetCondition);
+    resetIfInvalid(selectedSdCardSize, uniqueValues.sdCardSizes, setSelectedSdCardSize);
   }, [
     devices,
-    showDeleted,
+    uniqueValues,
     selectedWarehouse,
     selectedAssetType,
     selectedModel,
@@ -287,7 +263,9 @@ const DevicesTable: React.FC<DevicesTableProps> = ({
 
   // Filter devices based on all active filters
   const filteredDevices = useMemo(() => {
-    return devices?.filter((device) => {
+    if (!devices) return [];
+
+    return devices.filter((device) => {
       const matchesDeleted = showDeleted ? true : !device.is_deleted;
       const matchesWarehouse = selectedWarehouse.length === 0 || selectedWarehouse.includes(device.warehouse || '');
       const matchesAssetType = selectedAssetType.length === 0 || selectedAssetType.includes(device.asset_type || '');
@@ -301,10 +279,11 @@ const DevicesTable: React.FC<DevicesTableProps> = ({
       const matchesAssetCondition = selectedAssetCondition.length === 0 || selectedAssetCondition.includes(device.asset_condition || '');
       const matchesSdCardSize = selectedSdCardSize.length === 0 || selectedSdCardSize.includes(device.sd_card_size || '');
       const matchesDateRange =
-        (!fromDate?.from || !device.created_at || new Date(device.created_at) >= new Date(fromDate.from)) &&
-        (!fromDate?.to || !device.created_at || new Date(device.created_at) <= new Date(fromDate.to));
-      const matchesSearch = searchQuery
-        ? [
+        (!fromDate?.from || !device.created_at || new Date(device.created_at) >= new Date(fromDate.from.setHours(0, 0, 0, 0))) &&
+        (!fromDate?.to || !device.created_at || new Date(device.created_at) <= new Date(fromDate.to.setHours(23, 59, 59, 999)));
+      const matchesSearch = searchQuery.trim() === ''
+        ? true
+        : [
             device.serial_number || '',
             device.sales_order || '',
             device.deal_id || '',
@@ -323,8 +302,7 @@ const DevicesTable: React.FC<DevicesTableProps> = ({
             device.sd_card_size || '',
             device.profile_id || '',
             device.updated_by || '',
-          ].some((field) => field.toLowerCase().includes(searchQuery.toLowerCase()))
-        : true;
+          ].some((field) => field.toLowerCase().includes(searchQuery.toLowerCase()));
 
       return (
         matchesDeleted &&
@@ -342,7 +320,7 @@ const DevicesTable: React.FC<DevicesTableProps> = ({
         matchesDateRange &&
         matchesSearch
       );
-    }) || [];
+    });
   }, [
     devices,
     selectedWarehouse,
@@ -410,35 +388,22 @@ const DevicesTable: React.FC<DevicesTableProps> = ({
     });
   }, [filteredDevices]);
 
+  // Log for debugging
   useEffect(() => {
-    const invalidDates = filteredDevices.filter(d => d.created_at && isNaN(new Date(d.created_at).getTime())).map(d => ({
-      id: d.id,
-      created_at: d.created_at || '',
-      sales_order: d.sales_order || '',
-    }));
-    if (invalidDates.length > 0) {
-      console.warn('Invalid created_at values detected:', invalidDates);
+    if (devices) {
+      console.log('DevicesTable Summary:', {
+        totalDevices: devices.length,
+        filteredDevices: filteredDevices.length,
+        sortedDevices: sortedDevices.length,
+        deletedDevices: sortedDevices.filter(d => d.is_deleted).length,
+        activeDevices: sortedDevices.filter(d => !d.is_deleted).length,
+        stockDevices: sortedDevices.filter(d => d.status === 'Stock').length,
+        assignedDevices: sortedDevices.filter(d => d.status === 'Assigned').length,
+      });
     }
-    console.log('Filtered devices (first 5):', filteredDevices.slice(0, 5).map(d => ({
-      id: d.id,
-      sales_order: d.sales_order || '',
-      created_at: d.created_at || '',
-    })));
-    console.log('Sorted devices (first 5):', sortedDevices.slice(0, 5).map(d => ({
-      id: d.id,
-      sales_order: d.sales_order || '',
-      created_at: d.created_at || '',
-    })));
-    console.log('Filtered and sorted devices summary:', {
-      filteredLength: filteredDevices.length,
-      sortedLength: sortedDevices.length,
-      deletedDevices: sortedDevices.filter(d => d.is_deleted).length,
-      activeDevices: sortedDevices.filter(d => !d.is_deleted).length,
-      stockDevices: sortedDevices.filter(d => d.status === 'Stock').length,
-      assignedDevices: sortedDevices.filter(d => d.status === 'Assigned').length,
-    });
-  }, [filteredDevices, sortedDevices]);
+  }, [devices, filteredDevices, sortedDevices]);
 
+  // Reset page when filters change
   useEffect(() => {
     setCurrentDevicesPage(1);
   }, [
@@ -459,26 +424,13 @@ const DevicesTable: React.FC<DevicesTableProps> = ({
     rowsPerPage,
   ]);
 
+  // Paginate devices
   const paginatedDevices = useMemo(() => {
     return sortedDevices.slice(
       (currentDevicesPage - 1) * rowsPerPage,
       currentDevicesPage * rowsPerPage
     );
   }, [sortedDevices, currentDevicesPage, rowsPerPage]);
-
-  useEffect(() => {
-    console.log('Paginated devices (first 5):', paginatedDevices.slice(0, 5).map(d => ({
-      id: d.id,
-      sales_order: d.sales_order || '',
-      created_at: d.created_at || '',
-    })));
-    console.log('Pagination info:', {
-      currentDevicesPage,
-      rowsPerPage,
-      sortedDevicesLength: sortedDevices.length,
-      totalDevicesPages: Math.ceil(sortedDevices.length / rowsPerPage),
-    });
-  }, [paginatedDevices, currentDevicesPage, rowsPerPage, sortedDevices.length]);
 
   const totalDevicesPages = Math.ceil(sortedDevices.length / rowsPerPage);
 
@@ -491,7 +443,7 @@ const DevicesTable: React.FC<DevicesTableProps> = ({
   if (pageRange[0] > 1) pageRange.unshift('...');
   if (pageRange[0] !== 1) pageRange.unshift(1);
   if (pageRange[pageRange.length - 1] < totalDevicesPages) pageRange.push('...');
-  if (pageRange[pageRange.length - 1] !== totalDevicesPages) pageRange.push(totalDevicesPages);
+  if (pageRange[pageRange.length - 1] !== totalDevicesPages && totalDevicesPages > 0) pageRange.push(totalDevicesPages);
 
   const downloadCSV = (data: Device[], filename: string) => {
     if (data.length === 0) {
@@ -528,9 +480,9 @@ const DevicesTable: React.FC<DevicesTableProps> = ({
       ...data.map((row) =>
         headers
           .map((header) => {
-            const value = row[header];
+            const value = row[header as keyof Device];
             return typeof value === 'string' && value.includes(',')
-              ? `"${value}"`
+              ? `"${value.replace(/"/g, '""')}"`
               : value ?? '';
           })
           .join(',')
