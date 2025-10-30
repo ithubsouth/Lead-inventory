@@ -1,3 +1,7 @@
+// constants.ts
+export const API_ENDPOINT = 'https://apigw.leadschool.in/oms/warehouse/orders/devices';
+export const API_KEY = 'f6kA3UF8?9GV';
+
 export const orderTypes = [
   'Hardware',
   'Additional Hardware',
@@ -87,7 +91,7 @@ export const pendriveSizes = [
   '128 GB',
 ];
 
-export const otherMaterials = [
+export const additionalAssetTypes = [
   'Dongle',
   'USB Wall Adapter',
   'Synology NAS',
@@ -103,8 +107,6 @@ export const otherMaterials = [
   'HDMI to VGA Converter',
   'Tablet Charger - C Type',
   'Tablet Charger - Micro USB',
-  'SD Card Box',
-  'Envelope'
 ];
 
 export const locations = [
@@ -136,16 +138,27 @@ export const assetTypes = [
   'SD Card',
   'Cover',
   'Pendrive',
-  'Other',
 ] as const;
 
-export const profileIds = [
-  'Profile 1',
-  'Profile 2',
-  'Profile 3',
-  'Profile 4',
-  'Profile 5',
-];
+// Model options per additional asset type
+export const assetModels: Record<string, string[]> = {
+  'Synology NAS': ['1 Bay', '2 Bay'],
+  'Netgear NAS': ['1 Bay', '2 Bay'],
+  'Dongle': ['Dongle'],
+  'USB Wall Adapter': ['USB Wall Adapter'],
+  'HDD': ['1 TB', '2 TB', '4 TB', '8 TB', '10 TB'],
+  'Access Point': ['Asus', 'LB Link'],
+  'Hybrid Router': ['CP Plus'],
+  'Sim Router': ['Sim Router'],
+  'NAS Power Adapter': ['NAS Power Adapter'],
+  'Router Power Adapter': ['Router Power Adapter'],
+  'HDMI Cable': ['1m', '2m', '3m', '4m', '5m'],
+  'Mini VGA Gender Changer': ['Mini VGA Gender Changer'],
+  'HDMI to VGA Converter': ['HDMI to VGA Converter'],
+  'Tablet Charger - C Type': ['Tablet Charger - C Type'],
+  'Tablet Charger - Micro USB': ['Tablet Charger - Micro USB'],
+  // Defaults to empty for others
+};
 
 export const deviceStatuses = [
   'Available',
