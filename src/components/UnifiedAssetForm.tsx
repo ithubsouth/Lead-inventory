@@ -564,31 +564,62 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
     }
   };
 
-  const renderAssetFields = (asset: AssetItem) => {
-    const isMandatorySerial = ['Tablet', 'TV'].includes(asset.assetType);
-    const showSerialSection = isMandatorySerial || asset.hasSerials;
-    const isInward = ['Stock', 'Return'].includes(orderType);
+const renderAssetFields = (asset: AssetItem) => {
+  const isMandatorySerial = ['Tablet', 'TV'].includes(asset.assetType);
+  const showSerialSection = isMandatorySerial || asset.hasSerials;
+  const isInward = ['Stock', 'Return'].includes(orderType);
 
-    return (
-      <div key={asset.id} style={{ border: '1px solid #e5e7eb', borderRadius: '8px', padding: '16px', marginBottom: '16px', background: '#f9fafb' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '12px' }}>
-          <h4 style={{ fontSize: '14px', fontWeight: 'bold' }}>{asset.assetType}</h4>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-            {!isMandatorySerial && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                <label style={{ fontSize: '12px' }}>Enable Serial Numbers</label>
-                <input
-                  type="checkbox"
-                  checked={asset.hasSerials}
-                  onChange={(e) => updateAsset(asset.id, 'hasSerials', e.target.checked)}
-                />
-              </div>
-            )}
-            <button onClick={() => removeAsset(asset.id)} style={{ color: '#ef4444' }}>
-              <Trash2 size={16} />
-            </button>
-          </div>
+  // Helper to handle paste
+  const handleSerialPaste = (e: React.ClipboardEvent<HTMLInputElement>, index: number) => {
+    e.preventDefault();
+    const pastedText = e.clipboardData.getData('text');
+    const serials = pastedText
+      .split(/[\n\r\t ,;]+/)
+      .map(s => s.trim())
+      .filter(s => s.length > 0);
+
+    if (serials.length === 0) return;
+
+    const newSerials = [...asset.serialNumbers];
+    let currentIndex = index;
+
+    for (const serial of serials) {
+      if (currentIndex >= asset.quantity) break;
+      newSerials[currentIndex] = serial;
+      currentIndex++;
+    }
+
+    updateAsset(asset.id, 'serialNumbers', newSerials);
+
+    // Trigger validation and fetch details for each filled serial
+    serials.forEach((serial, i) => {
+      if (index + i < asset.quantity) {
+        handleSerialChange(asset, index + i, serial);
+      }
+    });
+  };
+
+  return (
+    <div key={asset.id} style={{ border: '1px solid #e5e7eb', borderRadius: '8px', padding: '16px', marginBottom: '16px', background: '#f9fafb' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '12px' }}>
+        <h4 style={{ fontSize: '14px', fontWeight: 'bold' }}>{asset.assetType}</h4>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+          {!isMandatorySerial && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+              <label style={{ fontSize: '12px' }}>Enable Serial Numbers</label>
+              <input
+                type="checkbox"
+                checked={asset.hasSerials}
+                onChange={(e) => updateAsset(asset.id, 'hasSerials', e.target.checked)}
+              />
+            </div>
+          )}
+          <button onClick={() => removeAsset(asset.id)} style={{ color: '#ef4444' }}>
+            <Trash2 size={16} />
+          </button>
         </div>
+      </div>
+
 
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '12px' }}>
           {asset.assetType === 'Tablet' && (
@@ -908,116 +939,123 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
           )}
         </div>
 
-        {showSerialSection && (
-          <div style={{ marginTop: '16px' }}>
-            <h5 style={{ fontSize: '12px', fontWeight: 'bold', marginBottom: '8px' }}>Serial Numbers</h5>
-            <div style={{ display: 'grid', gap: '8px' }}>
-              {Array.from({ length: asset.quantity }).map((_, index) => (
-                <div key={index} style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                  <input
-                    type="text"
-                    value={asset.serialNumbers[index] || ''}
-                    onChange={(e) => {
-                      const newSerials = [...asset.serialNumbers];
-                      newSerials[index] = e.target.value;
-                      updateAsset(asset.id, 'serialNumbers', newSerials);
-                      handleSerialChange(asset, index, e.target.value);
-                    }}
-                    placeholder={`Serial ${index + 1}`}
-                    style={{
-                      width: '200px',
-                      padding: '8px',
-                      border: `1px solid ${assetErrors[asset.id]?.[index] ? '#ef4444' : '#d1d5db'}`,
-                      borderRadius: '4px',
-                      fontSize: '14px',
-                      resize: 'none',
-                    }}
-                  />
-                  <button
-                    onClick={() => openScanner(asset.id, index, asset.assetType)}
-                    style={{ padding: '8px', border: '1px solid #d1d5db', borderRadius: '4px' }}
-                  >
-                    <Camera size={16} />
-                  </button>
-                  {isInward ? (
-                    <>
-                      <select
-                        value={asset.assetStatuses[index] || 'Fresh'}
+      {showSerialSection && (
+        <div style={{ marginTop: '16px' }}>
+          <h5 style={{ fontSize: '12px', fontWeight: 'bold', marginBottom: '8px' }}>
+            Serial Numbers <span style={{ fontWeight: 'normal', color: '#6b7280' }}>(Paste multiple with space/comma/enter)</span>
+          </h5>
+          <div style={{ display: 'grid', gap: '8px' }}>
+            {Array.from({ length: asset.quantity }).map((_, index) => (
+              <div key={index} style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                <input
+                  type="text"
+                  value={asset.serialNumbers[index] || ''}
+                  onChange={(e) => {
+                    const newSerials = [...asset.serialNumbers];
+                    newSerials[index] = e.target.value;
+                    updateAsset(asset.id, 'serialNumbers', newSerials);
+                    handleSerialChange(asset, index, e.target.value);
+                  }}
+                  onPaste={(e) => handleSerialPaste(e, index)}
+                  placeholder={`Serial ${index + 1}`}
+                  style={{
+                    width: '200px',
+                    padding: '8px',
+                    border: `1px solid ${assetErrors[asset.id]?.[index] ? '#ef4444' : '#d1d5db'}`,
+                    borderRadius: '4px',
+                    fontSize: '14px',
+                  }}
+                />
+                <button
+                  onClick={() => openScanner(asset.id, index, asset.assetType)}
+                  style={{ padding: '8px', border: '1px solid #d1d5db', borderRadius: '4px' }}
+                >
+                  <Camera size={16} />
+                </button>
+                {isInward ? (
+                  <>
+                    <select
+                      value={asset.assetStatuses[index] || 'Fresh'}
+                      onChange={(e) => {
+                        const newStatuses = [...asset.assetStatuses];
+                        newStatuses[index] = e.target.value;
+                        updateAsset(asset.id, 'assetStatuses', newStatuses);
+                      }}
+                      style={{ width: '120px', padding: '8px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '14px' }}
+                    >
+                      <option value="Fresh">Fresh</option>
+                      {assetStatuses.filter(s => s !== 'Fresh').map(s => <option key={s} value={s}>{s}</option>)}
+                    </select>
+                    <select
+                      value={asset.assetGroups[index] || 'NFA'}
+                      onChange={(e) => {
+                        const newGroups = [...asset.assetGroups];
+                        newGroups[index] = e.target.value;
+                        updateAsset(asset.id, 'assetGroups', newGroups);
+                      }}
+                      style={{ width: '80px', padding: '8px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '14px' }}
+                    >
+                      <option value="NFA">NFA</option>
+                      {assetGroups.filter(g => g !== 'NFA').map(g => <option key={g} value={g}>{g}</option>)}
+                    </select>
+                    <input
+                      type="text"
+                      value={asset.farCodes[index] || ''}
+                      disabled
+                      style={{ width: '120px', padding: '8px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '14px', background: '#f3f4f6' }}
+                    />
+                    {asset.assetStatuses[index] === 'Scrap' && (
+                      <input
+                        type="text"
+                        value={asset.asset_conditions[index] || ''}
                         onChange={(e) => {
-                          const newStatuses = [...asset.assetStatuses];
-                          newStatuses[index] = e.target.value;
-                          updateAsset(asset.id, 'assetStatuses', newStatuses);
+                          const newConditions = [...asset.asset_conditions];
+                          newConditions[index] = e.target.value;
+                          updateAsset(asset.id, 'asset_conditions', newConditions);
                         }}
-                        style={{ width: '120px', padding: '8px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '14px', resize: 'none' }}
-                      >
-                        <option value="Fresh">Fresh</option>
-                        {assetStatuses.filter(s => s !== 'Fresh').map(s => <option key={s} value={s}>{s}</option>)}
-                      </select>
-                      <select
-                        value={asset.assetGroups[index] || 'NFA'}
-                        onChange={(e) => {
-                          const newGroups = [...asset.assetGroups];
-                          newGroups[index] = e.target.value;
-                          updateAsset(asset.id, 'assetGroups', newGroups);
-                        }}
-                        style={{ width: '80px', padding: '8px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '14px', resize: 'none' }}
-                      >
-                        <option value="NFA">NFA</option>
-                        {assetGroups.filter(g => g !== 'NFA').map(g => <option key={g} value={g}>{g}</option>)}
-                      </select>
-                      <input
-                        type="text"
-                        value={asset.farCodes[index] || ''}
-                        disabled
-                        style={{ width: '120px', padding: '8px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '14px', background: '#f3f4f6', resize: 'none' }}
+                        placeholder="Condition"
+                        style={{ width: '200px', padding: '8px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '14px' }}
                       />
-                      {asset.assetStatuses[index] === 'Scrap' && (
-                        <input
-                          type="text"
-                          value={asset.asset_conditions[index] || ''}
-                          onChange={(e) => {
-                            const newConditions = [...asset.asset_conditions];
-                            newConditions[index] = e.target.value;
-                            updateAsset(asset.id, 'asset_conditions', newConditions);
-                          }}
-                          placeholder="Asset Condition"
-                          style={{ width: '200px', padding: '8px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '14px', resize: 'none' }}
-                        />
-                      )}
-                    </>
-                  ) : (
-                    <>
-                      <input
-                        type="text"
-                        value={asset.assetStatuses[index] || 'Fresh'}
-                        disabled
-                        style={{ width: '120px', padding: '8px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '14px', background: '#f3f4f6', resize: 'none' }}
-                      />
-                      <input
-                        type="text"
-                        value={asset.assetGroups[index] || 'NFA'}
-                        disabled
-                        style={{ width: '80px', padding: '8px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '14px', background: '#f3f4f6', resize: 'none' }}
-                      />
-                      <input
-                        type="text"
-                        value={asset.farCodes[index] || ''}
-                        disabled
-                        style={{ width: '120px', padding: '8px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '14px', background: '#f3f4f6', resize: 'none' }}
-                      />
-                    </>
-                  )}
-                  {assetErrors[asset.id]?.[index] && (
-                    <span style={{ color: '#ef4444', fontSize: '12px' }}>{assetErrors[asset.id][index]}</span>
-                  )}
-                </div>
-              ))}
-            </div>
+                    )}
+                  </>
+                ) : (
+                  <>
+                    <input
+                      type="text"
+                      value={asset.assetStatuses[index] || 'Fresh'}
+                      disabled
+                      style={{ width: '120px', padding: '8px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '14px', background: '#f3f4f6' }}
+                    />
+                    <input
+                      type="text"
+                      value={asset.assetGroups[index] || 'NFA'}
+                      disabled
+                      style={{ width: '80px', padding: '8px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '14px', background: '#f3f4f6' }}
+                    />
+                    <input
+                      type="text"
+                      value={asset.farCodes[index] || ''}
+                      disabled
+                      style={{ width: '120px', padding: '8px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '14px', background: '#f3f4f6' }}
+                    />
+                  </>
+                )}
+                {assetErrors[asset.id]?.[index] && (
+                  <span style={{ color: '#ef4444', fontSize: '12px', whiteSpace: 'nowrap' }}>
+                    {assetErrors[asset.id][index]}
+                  </span>
+                )}
+              </div>
+            ))}
           </div>
-        )}
-      </div>
-    );
-  };
+          <div style={{ marginTop: '8px', fontSize: '12px', color: '#6b7280' }}>
+            Tip: Paste multiple serials at once (e.g., HGR5LJWE HGR5LJXG ...)
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
 
   const mainAssetTypes = ['Tablet', 'TV', 'SD Card', 'Cover', 'Pendrive'];
 
