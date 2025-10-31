@@ -1,7 +1,3 @@
-// constants.ts
-export const API_ENDPOINT = 'https://apigw.leadschool.in/oms/warehouse/orders/devices';
-export const API_KEY = 'f6kA3UF8?9GV';
-
 export const orderTypes = [
   'Hardware',
   'Additional Hardware',
