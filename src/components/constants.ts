@@ -92,7 +92,7 @@ export const additionalAssetTypes = [
   'USB Wall Adapter',
   'Synology NAS',
   'Netgear NAS',
-  '1 TB HDD',
+  'HDD',
   'Access Point',
   'Hybrid Router',
   'Sim Router',
