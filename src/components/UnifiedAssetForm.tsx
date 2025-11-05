@@ -97,12 +97,13 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
   const [progress, setProgress] = useState<string | null>(null);
   const [showAdditional, setShowAdditional] = useState(false);
   const [editMode, setEditMode] = useState(false);
+  const [agreementType, setAgreementType] = useState<string>('');
   const [salesOrderSuggestions, setSalesOrderSuggestions] = useState<SalesOrderSuggestion[]>([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [searchTimeout, setSearchTimeout] = useState<NodeJS.Timeout | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
-  const [agreementType, setAgreementType] = useState<string>('');
 
+  // Silent feedback only (no alert)
   const toast = ({ title, description, variant }: { title: string; description: string; variant?: 'destructive' }) => {
     console.log(`[${variant === 'destructive' ? 'ERROR' : 'INFO'}] ${title}: ${description}`);
   };
@@ -115,34 +116,14 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
     fetchUser();
   }, []);
 
-  // Helper: Build comma-separated nucleus IDs
-  const buildNucleusId = (details: any): string => {
-    const ids = [
-      details.nucleusId,
-      details.propelNucleusId,
-      details.pinnacleNucleusId,
-      details.appNucleusId,
-    ].filter(Boolean);
-    return ids.length ? ids.join(',') : '';
-  };
-
-  // Debounced SOA fetch on dealId (starts at 3 chars)
+  // Fetch SOA details based on dealId
   useEffect(() => {
-    if (searchTimeout) clearTimeout(searchTimeout);
-
-    const trimmed = dealId.trim();
-    if (trimmed.length < 3) {
-      setSchoolName('');
-      setNucleusId('');
-      setAgreementType('');
-      return;
-    }
-
-    const timeout = setTimeout(async () => {
+    const fetchSOA = async () => {
+      if (!dealId.trim()) return;
       setLoading(true);
       try {
         const response = await fetch(
-          `${SOA_API_CONFIG.url}?dealId=${trimmed}&format=json`,
+          `${SOA_API_CONFIG.url}?dealId=${dealId}&format=json`,
           {
             method: 'GET',
             headers: {
@@ -151,35 +132,43 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
             },
           }
         );
-
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
-
-        const data = await response.json();
-
-        if (data.isValidSoa) {
-          const d = data.agreementDetails;
-          setSchoolName(d.schoolName || '');
-          setNucleusId(buildNucleusId(d)); // CSV string
-          setAgreementType(d.agreementType || '');
-        } else {
-          toast({ title: 'Invalid SOA', description: 'Deal ID not valid.', variant: 'destructive' });
-          setSchoolName('');
-          setNucleusId('');
-          setAgreementType('');
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
         }
-      } catch (error: any) {
+        const data = await response.json();
+        if (data.isValidSoa) {
+          setSchoolName(data.agreementDetails.schoolName || '');
+          // Combine all nucleus IDs into comma-separated string
+          const nucleusIds = [
+            data.agreementDetails.nucleusId,
+            data.agreementDetails.propelNucleusId,
+            data.agreementDetails.pinnacleNucleusId,
+            data.agreementDetails.appNucleusId,
+          ].filter(Boolean).join(',');
+          setNucleusId(nucleusIds);
+          // Store agreementType for saving in orders
+          setAgreementType(data.agreementDetails.agreementType || '');
+          console.log('Fetched SOA details:', {
+            sapCustomerId: data.agreementDetails.sapCustomerId,
+            agreementType: data.agreementDetails.agreementType,
+            schoolName: data.agreementDetails.schoolName,
+            productTier: data.agreementDetails.productTier,
+            nucleusIds,
+          });
+        } else {
+          toast({ title: 'Invalid SOA', description: 'The provided Deal ID is not valid.', variant: 'destructive' });
+        }
+      } catch (error) {
         console.error('SOA fetch error:', error);
         toast({ title: 'Error', description: 'Failed to fetch SOA details.', variant: 'destructive' });
       } finally {
         setLoading(false);
       }
-    }, 300);
-
-    setSearchTimeout(timeout);
-    return () => clearTimeout(timeout);
+    };
+    fetchSOA();
   }, [dealId]);
 
-  // Sales Order Search
+  // Debounced search
   useEffect(() => {
     if (searchTimeout) clearTimeout(searchTimeout);
     if (searchQuery.trim().length < 3) {
@@ -229,6 +218,7 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
   }, [searchQuery]);
 
   const generateId = () => Math.random().toString(36).substr(2, 9);
+
   const generateSalesOrder = () => {
     const digits = Math.floor(1000 + Math.random() * 9000);
     const letters = Math.random().toString(36).substr(2, 2).toUpperCase();
@@ -354,6 +344,7 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
 
   const removeAsset = (id: string) => setAssets(assets.filter(asset => asset.id !== id));
 
+  // Load order for edit
   const loadOrderForEdit = async (selectedSalesOrder: string) => {
     try {
       setLoading(true);
@@ -377,11 +368,11 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
         return;
       }
       const firstOrder = ordersData[0];
+      setAgreementType(firstOrder.agreement_type || '');
       setOrderType(firstOrder.order_type);
       setSchoolName(firstOrder.school_name || '');
       setDealId(firstOrder.deal_id || '');
       setNucleusId(firstOrder.nucleus_id || '');
-      setAgreementType(firstOrder.agreement_type || '');
       setSalesOrder(selectedSalesOrder);
       setSearchQuery(selectedSalesOrder);
       const groupedAssets = new Map<string, AssetItem>();
@@ -436,6 +427,7 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
       setAssets(Array.from(groupedAssets.values()));
       setEditMode(true);
       setShowSuggestions(false);
+      // No success toast
     } catch (error) {
       console.error('Load order error:', error);
       toast({ title: 'Error', description: 'Failed to load order for editing', variant: 'destructive' });
@@ -695,8 +687,8 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
           salesOrderId = generateSalesOrder();
         }
       }
-
       for (const asset of assets) {
+        // Check for existing order with same sales_order, asset_type, model, warehouse
         const { data: existing, error: checkError } = await supabase
           .from('orders')
           .select('id')
@@ -706,17 +698,18 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
           .eq('warehouse', asset.location)
           .eq('is_deleted', false)
           .single();
-        if (checkError && checkError.code !== 'PGRST116') throw checkError;
+        if (checkError && checkError.code !== 'PGRST116') {
+          throw checkError; // PGRST116 is no rows found
+        }
         if (existing) {
           toast({
             title: 'Error',
-            description: `Sales order ${salesOrderId} already exists for ${asset.assetType} (${asset.model}) at location ${asset.location}.`,
+            description: `Sales order ${salesOrderId} already exists for ${asset.assetType} (${asset.model}) at location ${asset.location}. Please edit the existing order or delete it first.`,
             variant: 'destructive'
           });
           setLoading(false);
           return;
         }
-
         const assetSerials = asset.hasSerials ? asset.serialNumbers.filter(sn => sn && sn.trim()) : [];
         const { data: orderData, error: orderError } = await supabase
           .from('orders')
@@ -730,21 +723,20 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
             sales_order: salesOrderId,
             deal_id: dealId || null,
             school_name: schoolName,
-            nucleus_id: nucleusId, // CSV string
-            agreement_type: agreementType,
+            nucleus_id: nucleusId || null,
             serial_numbers: assetSerials,
             order_date: new Date().toISOString(),
             configuration: asset.configuration || null,
             product: asset.product || 'Lead',
             sd_card_size: asset.assetType === 'SD Card' ? asset.model : asset.sdCardSize || null,
             profile_id: asset.profileId || null,
+            agreement_type: agreementType || null,
             created_by: userEmail,
             updated_by: userEmail,
           })
           .select()
           .single();
         if (orderError) throw new Error(`Order insertion failed: ${orderError.message}`);
-
         for (let i = 0; i < asset.quantity; i++) {
           const serialNumber = asset.hasSerials ? (asset.serialNumbers[i] || '') : '';
           const assetStatus = asset.assetStatuses[i] || 'Fresh';
@@ -759,7 +751,7 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
             sales_order: salesOrderId,
             deal_id: dealId || null,
             school_name: schoolName,
-            nucleus_id: nucleusId,
+            nucleus_id: nucleusId || null,
             status: materialType === 'Inward' ? 'Available' : 'Assigned',
             material_type: materialType,
             order_id: orderData.id,
@@ -777,7 +769,6 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
         }
         await logHistory('orders', orderData.id, 'order_type', orderType, userEmail, salesOrderId);
       }
-
       toast({ title: 'Success', description: 'Orders created successfully' });
       setAssets([]);
       setSalesOrder('');
@@ -806,7 +797,20 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
       const userEmail = userData.user.email;
       const materialType = ['Stock', 'Return'].includes(orderType) ? 'Inward' : 'Outward';
       let salesOrderId = salesOrder;
-
+      if (!salesOrderId) {
+        if (dealId) {
+          const randomNum = Math.floor(10 + Math.random() * 90);
+          const randomLetters = Math.random().toString(36).substr(2, 2).toUpperCase();
+          salesOrderId = `${dealId}${randomLetters}${randomNum}`;
+        } else if (schoolName) {
+          const schoolCode = schoolName.substring(0, 3).toUpperCase();
+          const randomNum = Math.floor(100 + Math.random() * 900);
+          const randomLetters = Math.random().toString(36).substr(2, 2).toUpperCase();
+          salesOrderId = `${schoolCode}${randomNum}${randomLetters}`;
+        } else {
+          salesOrderId = generateSalesOrder();
+        }
+      }
       for (const asset of assets) {
         const assetSerials = asset.hasSerials ? asset.serialNumbers.filter(sn => sn && sn.trim()) : [];
         if (asset.orderId) {
@@ -815,14 +819,11 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
             .update({
               quantity: asset.quantity,
               serial_numbers: assetSerials,
-              nucleus_id: nucleusId,
-              agreement_type: agreementType,
               updated_by: userEmail,
               updated_at: new Date().toISOString(),
             })
             .eq('id', asset.orderId);
           if (updateError) throw new Error(`Order update failed: ${updateError.message}`);
-
           await supabase.from('devices').delete().eq('order_id', asset.orderId);
           for (let i = 0; i < asset.quantity; i++) {
             const serialNumber = asset.hasSerials ? (asset.serialNumbers[i] || '') : '';
@@ -838,7 +839,7 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
               sales_order: salesOrderId,
               deal_id: dealId || null,
               school_name: schoolName,
-              nucleus_id: nucleusId,
+              nucleus_id: nucleusId || null,
               status: materialType === 'Inward' ? 'Available' : 'Assigned',
               material_type: materialType,
               order_id: asset.orderId,
@@ -868,21 +869,20 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
               sales_order: salesOrderId,
               deal_id: dealId || null,
               school_name: schoolName,
-              nucleus_id: nucleusId,
-              agreement_type: agreementType,
+              nucleus_id: nucleusId || null,
               serial_numbers: assetSerials,
               order_date: new Date().toISOString(),
               configuration: asset.configuration || null,
               product: asset.product || 'Lead',
               sd_card_size: asset.assetType === 'SD Card' ? asset.model : asset.sdCardSize || null,
               profile_id: asset.profileId || null,
+              agreement_type: agreementType || null,
               created_by: userEmail,
               updated_by: userEmail,
             })
             .select()
             .single();
           if (orderError) throw new Error(`Order insertion failed: ${orderError.message}`);
-
           for (let i = 0; i < asset.quantity; i++) {
             const serialNumber = asset.hasSerials ? (asset.serialNumbers[i] || '') : '';
             const assetStatus = asset.assetStatuses[i] || 'Fresh';
@@ -897,7 +897,7 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
               sales_order: salesOrderId,
               deal_id: dealId || null,
               school_name: schoolName,
-              nucleus_id: nucleusId,
+              nucleus_id: nucleusId || null,
               status: materialType === 'Inward' ? 'Available' : 'Assigned',
               material_type: materialType,
               order_id: orderData.id,
@@ -916,8 +916,8 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
           await logHistory('orders', orderData.id, 'order_type', orderType, userEmail, salesOrderId);
         }
       }
-
-      toast({ title: 'Success', description: `Order ${editMode ? 'updated' : 'created'} successfully` });
+      const action = editMode ? 'updated' : 'created';
+      toast({ title: 'Success', description: `Order ${action} successfully` });
       setAssets([]);
       setSalesOrder('');
       setDealId('');
@@ -975,6 +975,479 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
     );
   };
 
+  const renderAssetFields = (asset: AssetItem) => {
+    const isMandatorySerial = ['Tablet', 'TV'].includes(asset.assetType);
+    const showSerialSection = isMandatorySerial || asset.hasSerials;
+    const isInward = ['Stock', 'Return'].includes(orderType);
+    const handleSerialPaste = (e: React.ClipboardEvent<HTMLInputElement>, index: number) => {
+      e.preventDefault();
+      const pastedText = e.clipboardData.getData('text');
+      const serials = pastedText
+        .split(/[\n\r\t ,;]+/)
+        .map(s => s.trim())
+        .filter(s => s.length > 0);
+      if (serials.length === 0) return;
+      const newSerials = [...asset.serialNumbers];
+      let currentIndex = index;
+      for (const serial of serials) {
+        if (currentIndex >= asset.quantity) break;
+        newSerials[currentIndex] = serial;
+        currentIndex++;
+      }
+      updateAsset(asset.id, 'serialNumbers', newSerials);
+      serials.forEach((serial, i) => {
+        if (index + i < asset.quantity) {
+          handleSerialChange(asset, index + i, serial);
+        }
+      });
+    };
+    return (
+      <div key={asset.id} style={{ border: '1px solid #e5e7eb', borderRadius: '8px', padding: '16px', marginBottom: '16px', background: '#f9fafb' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '12px' }}>
+          <h4 style={{ fontSize: '14px', fontWeight: 'bold' }}>{asset.assetType}</h4>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+            {!isMandatorySerial && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                <label style={{ fontSize: '12px' }}>Enable Serial Numbers</label>
+                <input
+                  type="checkbox"
+                  checked={asset.hasSerials}
+                  onChange={(e) => updateAsset(asset.id, 'hasSerials', e.target.checked)}
+                />
+              </div>
+            )}
+            <button onClick={() => removeAsset(asset.id)} style={{ color: '#ef4444' }}>
+              <Trash2 size={16} />
+            </button>
+          </div>
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '12px' }}>
+          {asset.assetType === 'Tablet' && (
+            <>
+              <div>
+                <label style={{ fontSize: '12px', display: 'block', marginBottom: '4px' }}>Model *</label>
+                <select
+                  value={asset.model}
+                  onChange={(e) => updateAsset(asset.id, 'model', e.target.value)}
+                  style={{ width: '100%', padding: '8px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '14px' }}
+                >
+                  <option value="">Select Model</option>
+                  {tabletModels.map(m => <option key={m} value={m}>{m}</option>)}
+                </select>
+              </div>
+              <div>
+                <label style={{ fontSize: '12px', display: 'block', marginBottom: '4px' }}>Configuration</label>
+                <select
+                  value={asset.configuration || ''}
+                  onChange={(e) => updateAsset(asset.id, 'configuration', e.target.value)}
+                  style={{ width: '100%', padding: '8px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '14px' }}
+                >
+                  <option value="">Select Configuration</option>
+                  {configurations.map(c => <option key={c} value={c}>{c}</option>)}
+                </select>
+              </div>
+              <div>
+                <label style={{ fontSize: '12px', display: 'block', marginBottom: '4px' }}>Product</label>
+                <select
+                  value={asset.product || ''}
+                  onChange={(e) => updateAsset(asset.id, 'product', e.target.value)}
+                  style={{ width: '100%', padding: '8px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '14px' }}
+                >
+                  <option value="">Select Product</option>
+                  {products.map(p => <option key={p} value={p}>{p}</option>)}
+                </select>
+              </div>
+              <div>
+                <label style={{ fontSize: '12px', display: 'block', marginBottom: '4px' }}>SD Card Size</label>
+                <select
+                  value={asset.sdCardSize || ''}
+                  onChange={(e) => updateAsset(asset.id, 'sdCardSize', e.target.value)}
+                  style={{ width: '100%', padding: '8px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '14px' }}
+                >
+                  <option value="">Select Size</option>
+                  {sdCardSizes.map(s => <option key={s} value={s}>{s}</option>)}
+                </select>
+              </div>
+              <div>
+                <label style={{ fontSize: '12px', display: 'block', marginBottom: '4px' }}>Profile ID</label>
+                <input
+                  type="text"
+                  value={asset.profileId || ''}
+                  onChange={(e) => updateAsset(asset.id, 'profileId', e.target.value)}
+                  style={{ width: '100%', padding: '8px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '14px' }}
+                />
+              </div>
+            </>
+          )}
+          {asset.assetType === 'TV' && (
+            <>
+              <div>
+                <label style={{ fontSize: '12px', display: 'block', marginBottom: '4px' }}>Model *</label>
+                <select
+                  value={asset.model}
+                  onChange={(e) => updateAsset(asset.id, 'model', e.target.value)}
+                  style={{ width: '100%', padding: '8px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '14px' }}
+                >
+                  <option value="">Select Model</option>
+                  {tvModels.map(m => <option key={m} value={m}>{m}</option>)}
+                </select>
+              </div>
+              <div>
+                <label style={{ fontSize: '12px', display: 'block', marginBottom: '4px' }}>Configuration</label>
+                <select
+                  value={asset.configuration || ''}
+                  onChange={(e) => updateAsset(asset.id, 'configuration', e.target.value)}
+                  style={{ width: '100%', padding: '8px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '14px' }}
+                >
+                  <option value="">Select Configuration</option>
+                  {tvConfigurations.map(c => <option key={c} value={c}>{c}</option>)}
+                </select>
+              </div>
+              <div>
+                <label style={{ fontSize: '12px', display: 'block', marginBottom: '4px' }}>Product</label>
+                <select
+                  value={asset.product || ''}
+                  onChange={(e) => updateAsset(asset.id, 'product', e.target.value)}
+                  style={{ width: '100%', padding: '8px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '14px' }}
+                >
+                  <option value="">Select Product</option>
+                  {products.map(p => <option key={p} value={p}>{p}</option>)}
+                </select>
+              </div>
+            </>
+          )}
+          {asset.assetType === 'SD Card' && (
+            <>
+              <div>
+                <label style={{ fontSize: '12px', display: 'block', marginBottom: '4px' }}>Model *</label>
+                <select
+                  value={asset.model}
+                  onChange={(e) => updateAsset(asset.id, 'model', e.target.value)}
+                  style={{ width: '100%', padding: '8px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '14px' }}
+                >
+                  <option value="">Select Model</option>
+                  {sdCardSizes.map(s => <option key={s} value={s}>{s}</option>)}
+                </select>
+              </div>
+              <div>
+                <label style={{ fontSize: '12px', display: 'block', marginBottom: '4px' }}>Profile ID</label>
+                <input
+                  type="text"
+                  value={asset.profileId || ''}
+                  onChange={(e) => updateAsset(asset.id, 'profileId', e.target.value)}
+                  style={{ width: '100%', padding: '8px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '14px' }}
+                />
+              </div>
+              <div>
+                <label style={{ fontSize: '12px', display: 'block', marginBottom: '4px' }}>Product</label>
+                <select
+                  value={asset.product || ''}
+                  onChange={(e) => updateAsset(asset.id, 'product', e.target.value)}
+                  style={{ width: '100%', padding: '8px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '14px' }}
+                >
+                  <option value="">Select Product</option>
+                  {products.map(p => <option key={p} value={p}>{p}</option>)}
+                </select>
+              </div>
+            </>
+          )}
+          {asset.assetType === 'Cover' && (
+            <>
+              <div>
+                <label style={{ fontSize: '12px', display: 'block', marginBottom: '4px' }}>Model *</label>
+                <select
+                  value={asset.model}
+                  onChange={(e) => updateAsset(asset.id, 'model', e.target.value)}
+                  style={{ width: '100%', padding: '8px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '14px' }}
+                >
+                  <option value="">Select Model</option>
+                  {coverModels.map(m => <option key={m} value={m}>{m}</option>)}
+                </select>
+              </div>
+              <div>
+                <label style={{ fontSize: '12px', display: 'block', marginBottom: '4px' }}>Product</label>
+                <select
+                  value={asset.product || ''}
+                  onChange={(e) => updateAsset(asset.id, 'product', e.target.value)}
+                  style={{ width: '100%', padding: '8px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '14px' }}
+                >
+                  <option value="">Select Product</option>
+                  {products.map(p => <option key={p} value={p}>{p}</option>)}
+                </select>
+              </div>
+            </>
+          )}
+          {asset.assetType === 'Pendrive' && (
+            <>
+              <div>
+                <label style={{ fontSize: '12px', display: 'block', marginBottom: '4px' }}>Model *</label>
+                <select
+                  value={asset.model}
+                  onChange={(e) => updateAsset(asset.id, 'model', e.target.value)}
+                  style={{ width: '100%', padding: '8px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '14px' }}
+                >
+                  <option value="">Select Model</option>
+                  {pendriveSizes.map(s => <option key={s} value={s}>{s}</option>)}
+                </select>
+              </div>
+              <div>
+                <label style={{ fontSize: '12px', display: 'block', marginBottom: '4px' }}>Product</label>
+                <select
+                  value={asset.product || ''}
+                  onChange={(e) => updateAsset(asset.id, 'product', e.target.value)}
+                  style={{ width: '100%', padding: '8px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '14px' }}
+                >
+                  <option value="">Select Product</option>
+                  {products.map(p => <option key={p} value={p}>{p}</option>)}
+                </select>
+              </div>
+            </>
+          )}
+          {additionalAssetTypes.includes(asset.assetType) && (
+            <>
+              <div>
+                <label style={{ fontSize: '12px', display: 'block', marginBottom: '4px' }}>Model *</label>
+                <select
+                  value={asset.model}
+                  onChange={(e) => updateAsset(asset.id, 'model', e.target.value)}
+                  style={{ width: '100%', padding: '8px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '14px' }}
+                >
+                  <option value="">Select Model</option>
+                  {hasModels(asset.assetType) ? assetModels[asset.assetType].map(m => <option key={m} value={m}>{m}</option>) : null}
+                </select>
+              </div>
+              <div>
+                <label style={{ fontSize: '12px', display: 'block', marginBottom: '4px' }}>Product</label>
+                <select
+                  value={asset.product || ''}
+                  onChange={(e) => updateAsset(asset.id, 'product', e.target.value)}
+                  style={{ width: '100%', padding: '8px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '14px' }}
+                >
+                  <option value="">Select Product</option>
+                  {products.map(p => <option key={p} value={p}>{p}</option>)}
+                </select>
+              </div>
+            </>
+          )}
+          <div>
+            <label style={{ fontSize: '12px', display: 'block', marginBottom: '4px' }}>Location *</label>
+            <select
+              value={asset.location}
+              onChange={(e) => updateAsset(asset.id, 'location', e.target.value)}
+              style={{ width: '100%', padding: '8px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '14px' }}
+            >
+              <option value="">Select Location</option>
+              {locations.map(l => <option key={l} value={l}>{l}</option>)}
+            </select>
+          </div>
+          <div>
+            <label style={{ fontSize: '12px', display: 'block', marginBottom: '4px' }}>Quantity *</label>
+            <div style={{ display: 'flex', gap: '4px' }}>
+              <button onClick={() => updateAsset(asset.id, 'quantity', Math.max(1, asset.quantity - 1))} style={{ padding: '8px', border: '1px solid #d1d5db', borderRadius: '4px' }}>
+                <Minus size={16} />
+              </button>
+              <input
+                type="number"
+                value={asset.quantity}
+                onChange={(e) => updateAsset(asset.id, 'quantity', parseInt(e.target.value) || 1)}
+                style={{ width: '60px', padding: '8px', border: '1px solid #d1d5db', borderRadius: '4px', textAlign: 'center', fontSize: '14px' }}
+              />
+              <button onClick={() => updateAsset(asset.id, 'quantity', asset.quantity + 1)} style={{ padding: '8px', border: '1px solid #d1d5db', borderRadius: '4px' }}>
+                <Plus size={16} />
+              </button>
+            </div>
+          </div>
+          {!showSerialSection && (
+            <>
+              <div>
+                <label style={{ fontSize: '12px', display: 'block', marginBottom: '4px' }}>Asset Status</label>
+                {isInward ? (
+                  <select
+                    value={asset.assetStatuses[0] || 'Fresh'}
+                    onChange={(e) => {
+                      const newStatuses = Array(asset.quantity).fill(e.target.value);
+                      updateAsset(asset.id, 'assetStatuses', newStatuses);
+                    }}
+                    style={{ width: '100%', padding: '8px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '14px' }}
+                  >
+                    <option value="Fresh">Fresh</option>
+                    {assetStatuses.filter(s => s !== 'Fresh').map(s => <option key={s} value={s}>{s}</option>)}
+                  </select>
+                ) : (
+                  <input
+                    type="text"
+                    value={asset.assetStatuses[0] || 'Fresh'}
+                    disabled
+                    style={{ width: '100%', padding: '8px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '14px', background: '#f3f4f6' }}
+                  />
+                )}
+              </div>
+              <div>
+                <label style={{ fontSize: '12px', display: 'block', marginBottom: '4px' }}>Asset Group</label>
+                {isInward ? (
+                  <select
+                    value={asset.assetGroups[0] || 'NFA'}
+                    onChange={(e) => {
+                      const newGroups = Array(asset.quantity).fill(e.target.value);
+                      updateAsset(asset.id, 'assetGroups', newGroups);
+                    }}
+                    style={{ width: '100%', padding: '8px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '14px' }}
+                  >
+                    <option value="NFA">NFA</option>
+                    {assetGroups.filter(g => g !== 'NFA').map(g => <option key={g} value={g}>{g}</option>)}
+                  </select>
+                ) : (
+                  <input
+                    type="text"
+                    value={asset.assetGroups[0] || 'NFA'}
+                    disabled
+                    style={{ width: '100%', padding: '8px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '14px', background: '#f3f4f6' }}
+                  />
+                )}
+              </div>
+              <div>
+                <label style={{ fontSize: '12px', display: 'block', marginBottom: '4px' }}>FAR Code</label>
+                <input
+                  type="text"
+                  value={asset.farCodes[0] || ''}
+                  disabled
+                  style={{ width: '100%', padding: '8px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '14px', background: '#f3f4f6' }}
+                />
+              </div>
+              {isInward && (asset.assetStatuses[0] || 'Fresh') === 'Scrap' && (
+                <div>
+                  <label style={{ fontSize: '12px', display: 'block', marginBottom: '4px' }}>Asset Condition</label>
+                  <input
+                    type="text"
+                    value={asset.asset_conditions[0] || ''}
+                    onChange={(e) => {
+                      const newConditions = Array(asset.quantity).fill(e.target.value);
+                      updateAsset(asset.id, 'asset_conditions', newConditions);
+                    }}
+                    style={{ width: '100%', padding: '8px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '14px' }}
+                  />
+                </div>
+              )}
+            </>
+          )}
+        </div>
+        {showSerialSection && (
+          <div style={{ marginTop: '16px' }}>
+            <h5 style={{ fontSize: '12px', fontWeight: 'bold', marginBottom: '8px' }}>
+              Serial Numbers <span style={{ fontWeight: 'normal', color: '#6b7280' }}></span>
+            </h5>
+            <div style={{ display: 'grid', gap: '8px' }}>
+              {Array.from({ length: asset.quantity }).map((_, index) => (
+                <div key={index} style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                  <input
+                    type="text"
+                    value={asset.serialNumbers[index] || ''}
+                    onChange={(e) => {
+                      const newSerials = [...asset.serialNumbers];
+                      newSerials[index] = e.target.value;
+                      updateAsset(asset.id, 'serialNumbers', newSerials);
+                      handleSerialChange(asset, index, e.target.value);
+                    }}
+                    onPaste={(e) => handleSerialPaste(e, index)}
+                    placeholder={`Serial ${index + 1}`}
+                    style={{
+                      width: '200px',
+                      padding: '8px',
+                      border: `1px solid ${assetErrors[asset.id]?.[index] ? '#ef4444' : '#d1d5db'}`,
+                      borderRadius: '4px',
+                      fontSize: '14px',
+                    }}
+                  />
+                  <button
+                    onClick={() => openScanner(asset.id, index, asset.assetType)}
+                    style={{ padding: '8px', border: '1px solid #d1d5db', borderRadius: '4px' }}
+                  >
+                    <Camera size={16} />
+                  </button>
+                  {isInward ? (
+                    <>
+                      <select
+                        value={asset.assetStatuses[index] || 'Fresh'}
+                        onChange={(e) => {
+                          const newStatuses = [...asset.assetStatuses];
+                          newStatuses[index] = e.target.value;
+                          updateAsset(asset.id, 'assetStatuses', newStatuses);
+                        }}
+                        style={{ width: '120px', padding: '8px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '14px' }}
+                      >
+                        <option value="Fresh">Fresh</option>
+                        {assetStatuses.filter(s => s !== 'Fresh').map(s => <option key={s} value={s}>{s}</option>)}
+                      </select>
+                      <select
+                        value={asset.assetGroups[index] || 'NFA'}
+                        onChange={(e) => {
+                          const newGroups = [...asset.assetGroups];
+                          newGroups[index] = e.target.value;
+                          updateAsset(asset.id, 'assetGroups', newGroups);
+                        }}
+                        style={{ width: '80px', padding: '8px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '14px' }}
+                      >
+                        <option value="NFA">NFA</option>
+                        {assetGroups.filter(g => g !== 'NFA').map(g => <option key={g} value={g}>{g}</option>)}
+                      </select>
+                      <input
+                        type="text"
+                        value={asset.farCodes[index] || ''}
+                        disabled
+                        style={{ width: '120px', padding: '8px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '14px', background: '#f3f4f6' }}
+                      />
+                      {asset.assetStatuses[index] === 'Scrap' && (
+                        <input
+                          type="text"
+                          value={asset.asset_conditions[index] || ''}
+                          onChange={(e) => {
+                            const newConditions = [...asset.asset_conditions];
+                            newConditions[index] = e.target.value;
+                            updateAsset(asset.id, 'asset_conditions', newConditions);
+                          }}
+                          placeholder="Condition"
+                          style={{ width: '200px', padding: '8px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '14px' }}
+                        />
+                      )}
+                    </>
+                  ) : (
+                    <>
+                      <input
+                        type="text"
+                        value={asset.assetStatuses[index] || 'Fresh'}
+                        disabled
+                        style={{ width: '120px', padding: '8px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '14px', background: '#f3f4f6' }}
+                      />
+                      <input
+                        type="text"
+                        value={asset.assetGroups[index] || 'NFA'}
+                        disabled
+                        style={{ width: '80px', padding: '8px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '14px', background: '#f3f4f6' }}
+                      />
+                      <input
+                        type="text"
+                        value={asset.farCodes[index] || ''}
+                        disabled
+                        style={{ width: '120px', padding: '8px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '14px', background: '#f3f4f6' }}
+                      />
+                    </>
+                  )}
+                  {assetErrors[asset.id]?.[index] && (
+                    <span style={{ color: '#ef4444', fontSize: '12px', whiteSpace: 'nowrap' }}>
+                      {assetErrors[asset.id][index]}
+                    </span>
+                  )}
+                </div>
+              ))}
+            </div>
+            <div style={{ marginTop: '8px', fontSize: '12px', color: '#6b7280' }}>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  };
+
   const mainAssetTypes = ['Tablet', 'TV', 'SD Card', 'Cover', 'Pendrive'];
 
   return (
@@ -989,8 +1462,7 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
           'Create Order'
         )}
       </h2>
-
-      {/* Sales Order Search */}
+      {/* Sales Order Search - Moved to top, below the h2 (positioned below tabs in parent context) */}
       <div style={{ border: '1px solid #e5e7eb', borderRadius: '8px', padding: '16px', marginBottom: '16px', background: '#fff' }}>
         <form onSubmit={handleSalesOrderSearch} style={{ position: 'relative' }}>
           <div style={{ display: 'flex', gap: '8px' }}>
@@ -1002,6 +1474,7 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
                 setEditMode(false);
                 setAssets([]);
               }}
+              onKeyDown={(e) => e.key === 'Enter' && handleSalesOrderSearch(e)}
               placeholder="Search by Sales order"
               style={{ flex: 1, padding: '8px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '14px' }}
             />
@@ -1015,7 +1488,6 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
           {renderSuggestions()}
         </form>
       </div>
-
       {/* Order Details */}
       <div style={{ border: '1px solid #e5e7eb', borderRadius: '8px', padding: '16px', marginBottom: '16px', background: '#fff' }}>
         <h3 style={{ fontSize: '16px', fontWeight: 'bold', marginBottom: '12px' }}>Order Details</h3>
@@ -1068,13 +1540,12 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
               type="text"
               value={nucleusId}
               onChange={(e) => setNucleusId(e.target.value)}
-              placeholder="e.g. 2550,8452,13806"
+              disabled={editMode}
               style={{ width: '100%', padding: '8px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '14px' }}
             />
           </div>
         </div>
       </div>
-
       {/* Add Assets */}
       <div style={{ border: '1px solid #e5e7eb', borderRadius: '8px', padding: '16px', marginBottom: '16px', background: '#fff' }}>
         <h3 style={{ fontSize: '16px', fontWeight: 'bold', marginBottom: '12px' }}>Add Assets</h3>
@@ -1139,7 +1610,6 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
           </div>
         )}
       </div>
-
       {/* Assets List */}
       <div>{assets.map(asset => renderAssetFields(asset))}</div>
       {/* Bulk Operations */}
