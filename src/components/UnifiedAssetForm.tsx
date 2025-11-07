@@ -19,7 +19,6 @@ import {
   assetModels,
   profileIds,
 } from './constants';
-import { SOA_API_CONFIG } from './apiConfig';
 
 interface AssetItem {
   id: string;
@@ -97,7 +96,6 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
   const [progress, setProgress] = useState<string | null>(null);
   const [showAdditional, setShowAdditional] = useState(false);
   const [editMode, setEditMode] = useState(false);
-  const [agreementType, setAgreementType] = useState<string>('');
   const [salesOrderSuggestions, setSalesOrderSuggestions] = useState<SalesOrderSuggestion[]>([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [searchTimeout, setSearchTimeout] = useState<NodeJS.Timeout | null>(null);
@@ -115,58 +113,6 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
     };
     fetchUser();
   }, []);
-
-  // Fetch SOA details based on dealId
-  useEffect(() => {
-    const fetchSOA = async () => {
-      if (!dealId.trim()) return;
-      setLoading(true);
-      try {
-        const response = await fetch(
-          `${SOA_API_CONFIG.url}?dealId=${dealId}&format=json`,
-          {
-            method: 'GET',
-            headers: {
-              'x-api-key': SOA_API_CONFIG.apiKey,
-              'Content-Type': 'application/json',
-            },
-          }
-        );
-        if (!response.ok) {
-          throw new Error(`HTTP error! status: ${response.status}`);
-        }
-        const data = await response.json();
-        if (data.isValidSoa) {
-          setSchoolName(data.agreementDetails.schoolName || '');
-          // Combine all nucleus IDs into comma-separated string
-          const nucleusIds = [
-            data.agreementDetails.nucleusId,
-            data.agreementDetails.propelNucleusId,
-            data.agreementDetails.pinnacleNucleusId,
-            data.agreementDetails.appNucleusId,
-          ].filter(Boolean).join(',');
-          setNucleusId(nucleusIds);
-          // Store agreementType for saving in orders
-          setAgreementType(data.agreementDetails.agreementType || '');
-          console.log('Fetched SOA details:', {
-            sapCustomerId: data.agreementDetails.sapCustomerId,
-            agreementType: data.agreementDetails.agreementType,
-            schoolName: data.agreementDetails.schoolName,
-            productTier: data.agreementDetails.productTier,
-            nucleusIds,
-          });
-        } else {
-          toast({ title: 'Invalid SOA', description: 'The provided Deal ID is not valid.', variant: 'destructive' });
-        }
-      } catch (error) {
-        console.error('SOA fetch error:', error);
-        toast({ title: 'Error', description: 'Failed to fetch SOA details.', variant: 'destructive' });
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchSOA();
-  }, [dealId]);
 
   // Debounced search
   useEffect(() => {
@@ -227,7 +173,7 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
   };
 
   const defaultHasSerials = (assetType: string) => {
-    return ['Tablet', 'TV', 'Pendrive', 'Sim Router', 'Hybrid Router'].includes(assetType);
+    return ['Tablet', 'TV', 'Synology NAS', 'Netgear NAS', 'HDD', 'Access Point', 'Sim Router', 'Hybrid Router'].includes(assetType);
   };
 
   const hasModels = (assetType: string): boolean => {
@@ -368,7 +314,6 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
         return;
       }
       const firstOrder = ordersData[0];
-      setAgreementType(firstOrder.agreement_type || '');
       setOrderType(firstOrder.order_type);
       setSchoolName(firstOrder.school_name || '');
       setDealId(firstOrder.deal_id || '');
@@ -467,7 +412,6 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
     setSchoolName('');
     setDealId('');
     setNucleusId('');
-    setAgreementType('');
   };
 
   const fetchAssetDetails = async (asset: AssetItem, index: number, serialNumber: string) => {
@@ -730,7 +674,6 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
             product: asset.product || 'Lead',
             sd_card_size: asset.assetType === 'SD Card' ? asset.model : asset.sdCardSize || null,
             profile_id: asset.profileId || null,
-            agreement_type: agreementType || null,
             created_by: userEmail,
             updated_by: userEmail,
           })
@@ -776,7 +719,6 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
       setNucleusId('');
       setSchoolName('');
       setOrderType('');
-      setAgreementType('');
       setEditMode(false);
       await loadOrders();
       await loadDevices();
@@ -876,7 +818,6 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
               product: asset.product || 'Lead',
               sd_card_size: asset.assetType === 'SD Card' ? asset.model : asset.sdCardSize || null,
               profile_id: asset.profileId || null,
-              agreement_type: agreementType || null,
               created_by: userEmail,
               updated_by: userEmail,
             })
@@ -924,7 +865,6 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
       setNucleusId('');
       setSchoolName('');
       setOrderType('');
-      setAgreementType('');
       setEditMode(false);
       await loadOrders();
       await loadDevices();
