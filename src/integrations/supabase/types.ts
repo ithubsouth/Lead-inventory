@@ -55,44 +55,6 @@ export type Database = {
           },
         ]
       }
-      audit_history: {
-        Row: {
-          asset_check: string
-          audited_at: string
-          audited_by: string
-          created_at: string | null
-          device_id: string
-          id: number
-          serial_number: string
-        }
-        Insert: {
-          asset_check: string
-          audited_at: string
-          audited_by: string
-          created_at?: string | null
-          device_id: string
-          id?: number
-          serial_number: string
-        }
-        Update: {
-          asset_check?: string
-          audited_at?: string
-          audited_by?: string
-          created_at?: string | null
-          device_id?: string
-          id?: number
-          serial_number?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "fk_device"
-            columns: ["device_id"]
-            isOneToOne: false
-            referencedRelation: "devices"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       devices: {
         Row: {
           asset_check: string | null

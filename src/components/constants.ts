@@ -117,6 +117,18 @@ export const locations = [
   'Jaipur',
 ];
 
+export const agreementTypes = [
+  'PX',
+  'PY',
+  'PZ',
+  'PAA',
+  'PB',
+  'PC',
+  'PD',
+  'PE',
+  'PF',
+];
+
 export const assetStatuses = [
   'Fresh',
   'Refurb',
