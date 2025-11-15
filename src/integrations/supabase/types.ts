@@ -14,6 +14,47 @@ export type Database = {
   }
   public: {
     Tables: {
+      audit_check_history: {
+        Row: {
+          audited_at: string
+          audited_by: string
+          created_at: string | null
+          device_id: string
+          id: string
+          new_asset_check: string
+          old_asset_check: string | null
+          serial_number: string
+        }
+        Insert: {
+          audited_at?: string
+          audited_by: string
+          created_at?: string | null
+          device_id: string
+          id?: string
+          new_asset_check: string
+          old_asset_check?: string | null
+          serial_number: string
+        }
+        Update: {
+          audited_at?: string
+          audited_by?: string
+          created_at?: string | null
+          device_id?: string
+          id?: string
+          new_asset_check?: string
+          old_asset_check?: string | null
+          serial_number?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "audit_check_history_device_id_fkey"
+            columns: ["device_id"]
+            isOneToOne: false
+            referencedRelation: "devices"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       audit_history: {
         Row: {
           asset_check: string
