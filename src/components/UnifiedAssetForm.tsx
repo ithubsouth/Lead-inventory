@@ -18,7 +18,6 @@ import {
   additionalAssetTypes,
   assetModels,
   profileIds,
-  agreementTypes,
 } from './constants';
 
 interface AssetItem {
@@ -51,7 +50,6 @@ interface SalesOrderSuggestion {
   model: string;
   quantity: number;
   orderId: string;
-  agreementType?: string;
 }
 
 interface UnifiedAssetFormProps {
@@ -65,8 +63,6 @@ interface UnifiedAssetFormProps {
   setNucleusId: (value: string) => void;
   schoolName: string;
   setSchoolName: (value: string) => void;
-  agreementType: string;
-  setAgreementType: (value: string) => void;
   loading: boolean;
   setLoading: (value: boolean) => void;
   loadOrders: () => Promise<void>;
@@ -86,8 +82,6 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
   setNucleusId,
   schoolName,
   setSchoolName,
-  agreementType,
-  setAgreementType,
   loading,
   setLoading,
   loadOrders,
@@ -107,7 +101,7 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
   const [searchTimeout, setSearchTimeout] = useState<NodeJS.Timeout | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
 
-  // Silent feedback
+  // Silent feedback only (no alert)
   const toast = ({ title, description, variant }: { title: string; description: string; variant?: 'destructive' }) => {
     console.log(`[${variant === 'destructive' ? 'ERROR' : 'INFO'}] ${title}: ${description}`);
   };
@@ -132,7 +126,7 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
       try {
         const { data, error } = await supabase
           .from('orders')
-          .select('sales_order, school_name, deal_id, nucleus_id, order_type, warehouse, asset_type, model, quantity, id, agreement_type')
+          .select('sales_order, school_name, deal_id, nucleus_id, order_type, warehouse, asset_type, model, quantity, id')
           .eq('is_deleted', false)
           .ilike('sales_order', `%${searchQuery}%`)
           .order('sales_order', { ascending: true })
@@ -149,7 +143,6 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
           model: order.model,
           quantity: order.quantity,
           orderId: order.id,
-          agreementType: order.agreement_type,
         })) || [];
         const grouped: SalesOrderSuggestion[] = [];
         const seen = new Set<string>();
@@ -171,6 +164,7 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
   }, [searchQuery]);
 
   const generateId = () => Math.random().toString(36).substr(2, 9);
+
   const generateSalesOrder = () => {
     const digits = Math.floor(1000 + Math.random() * 9000);
     const letters = Math.random().toString(36).substr(2, 2).toUpperCase();
@@ -324,7 +318,6 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
       setSchoolName(firstOrder.school_name || '');
       setDealId(firstOrder.deal_id || '');
       setNucleusId(firstOrder.nucleus_id || '');
-      setAgreementType(firstOrder.agreement_type || '');
       setSalesOrder(selectedSalesOrder);
       setSearchQuery(selectedSalesOrder);
       const groupedAssets = new Map<string, AssetItem>();
@@ -379,6 +372,7 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
       setAssets(Array.from(groupedAssets.values()));
       setEditMode(true);
       setShowSuggestions(false);
+      // No success toast
     } catch (error) {
       console.error('Load order error:', error);
       toast({ title: 'Error', description: 'Failed to load order for editing', variant: 'destructive' });
@@ -407,19 +401,18 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
     loadOrderForEdit(suggestion.salesOrder);
   };
 
-const handleCancelSearch = () => {
-  setSearchQuery('');
-  setSalesOrder('');
-  setOrderType('');
-  setSchoolName('');
-  setDealId('');
-  setNucleusId('');
-  setAgreementType('');   // now included
-  setEditMode(false);
-  setAssets([]);
-  setShowSuggestions(false);
-  setSalesOrderSuggestions([]);
-};
+  const handleCancelSearch = () => {
+    setSearchQuery('');
+    setSalesOrder('');
+    setOrderType('');
+    setEditMode(false);
+    setAssets([]);
+    setShowSuggestions(false);
+    setSalesOrderSuggestions([]);
+    setSchoolName('');
+    setDealId('');
+    setNucleusId('');
+  };
 
   const fetchAssetDetails = async (asset: AssetItem, index: number, serialNumber: string) => {
     if (!serialNumber || !asset.hasSerials) return;
@@ -554,14 +547,6 @@ const handleCancelSearch = () => {
       toast({ title: 'Error', description: 'Please select an order type', variant: 'destructive' });
       return false;
     }
-    if (!dealId.trim()) {
-      toast({ title: 'Error', description: 'Deal ID is required', variant: 'destructive' });
-      return false;
-    }
-    if (!agreementType) {
-      toast({ title: 'Error', description: 'Please select an Agreement Type', variant: 'destructive' });
-      return false;
-    }
     if (!schoolName.trim()) {
       toast({ title: 'Error', description: 'School Name is required', variant: 'destructive' });
       return false;
@@ -633,11 +618,7 @@ const handleCancelSearch = () => {
       const materialType = ['Stock', 'Return'].includes(orderType) ? 'Inward' : 'Outward';
       let salesOrderId = salesOrder;
       if (!salesOrderId) {
-        if (dealId && agreementType) {
-          const randomNum = Math.floor(10 + Math.random() * 90);
-          const randomLetters = Math.random().toString(36).substr(2, 2).toUpperCase();
-          salesOrderId = `${dealId}-${agreementType}${randomNum}${randomLetters}`;
-        } else if (dealId) {
+        if (dealId) {
           const randomNum = Math.floor(10 + Math.random() * 90);
           const randomLetters = Math.random().toString(36).substr(2, 2).toUpperCase();
           salesOrderId = `${dealId}${randomLetters}${randomNum}`;
@@ -651,6 +632,7 @@ const handleCancelSearch = () => {
         }
       }
       for (const asset of assets) {
+        // Check for existing order with same sales_order, asset_type, model, warehouse
         const { data: existing, error: checkError } = await supabase
           .from('orders')
           .select('id')
@@ -660,11 +642,13 @@ const handleCancelSearch = () => {
           .eq('warehouse', asset.location)
           .eq('is_deleted', false)
           .single();
-        if (checkError && checkError.code !== 'PGRST116') throw checkError;
+        if (checkError && checkError.code !== 'PGRST116') {
+          throw checkError; // PGRST116 is no rows found
+        }
         if (existing) {
           toast({
             title: 'Error',
-            description: `Sales order ${salesOrderId} already exists for ${asset.assetType} (${asset.model}) at location ${asset.location}.`,
+            description: `Sales order ${salesOrderId} already exists for ${asset.assetType} (${asset.model}) at location ${asset.location}. Please edit the existing order or delete it first.`,
             variant: 'destructive'
           });
           setLoading(false);
@@ -684,7 +668,6 @@ const handleCancelSearch = () => {
             deal_id: dealId || null,
             school_name: schoolName,
             nucleus_id: nucleusId || null,
-            agreement_type: agreementType,
             serial_numbers: assetSerials,
             order_date: new Date().toISOString(),
             configuration: asset.configuration || null,
@@ -712,7 +695,6 @@ const handleCancelSearch = () => {
             deal_id: dealId || null,
             school_name: schoolName,
             nucleus_id: nucleusId || null,
-            agreement_type: agreementType,
             status: materialType === 'Inward' ? 'Available' : 'Assigned',
             material_type: materialType,
             order_id: orderData.id,
@@ -737,7 +719,6 @@ const handleCancelSearch = () => {
       setNucleusId('');
       setSchoolName('');
       setOrderType('');
-      setAgreementType('');
       setEditMode(false);
       await loadOrders();
       await loadDevices();
@@ -759,11 +740,7 @@ const handleCancelSearch = () => {
       const materialType = ['Stock', 'Return'].includes(orderType) ? 'Inward' : 'Outward';
       let salesOrderId = salesOrder;
       if (!salesOrderId) {
-        if (dealId && agreementType) {
-          const randomNum = Math.floor(10 + Math.random() * 90);
-          const randomLetters = Math.random().toString(36).substr(2, 2).toUpperCase();
-          salesOrderId = `${dealId}-${agreementType}${randomNum}${randomLetters}`;
-        } else if (dealId) {
+        if (dealId) {
           const randomNum = Math.floor(10 + Math.random() * 90);
           const randomLetters = Math.random().toString(36).substr(2, 2).toUpperCase();
           salesOrderId = `${dealId}${randomLetters}${randomNum}`;
@@ -782,10 +759,8 @@ const handleCancelSearch = () => {
           const { error: updateError } = await supabase
             .from('orders')
             .update({
-              order_type: orderType,
               quantity: asset.quantity,
               serial_numbers: assetSerials,
-              agreement_type: agreementType,
               updated_by: userEmail,
               updated_at: new Date().toISOString(),
             })
@@ -807,7 +782,6 @@ const handleCancelSearch = () => {
               deal_id: dealId || null,
               school_name: schoolName,
               nucleus_id: nucleusId || null,
-              agreement_type: agreementType,
               status: materialType === 'Inward' ? 'Available' : 'Assigned',
               material_type: materialType,
               order_id: asset.orderId,
@@ -823,17 +797,74 @@ const handleCancelSearch = () => {
               updated_by: userEmail,
             });
           }
-          await logHistory('orders', asset.orderId, 'order_type', orderType, userEmail, salesOrderId);
+          await logHistory('orders', asset.orderId, 'quantity', asset.quantity.toString(), userEmail, salesOrderId);
+        } else {
+          const { data: orderData, error: orderError } = await supabase
+            .from('orders')
+            .insert({
+              order_type: orderType,
+              material_type: materialType,
+              asset_type: asset.assetType,
+              model: asset.model,
+              quantity: asset.quantity,
+              warehouse: asset.location,
+              sales_order: salesOrderId,
+              deal_id: dealId || null,
+              school_name: schoolName,
+              nucleus_id: nucleusId || null,
+              serial_numbers: assetSerials,
+              order_date: new Date().toISOString(),
+              configuration: asset.configuration || null,
+              product: asset.product || 'Lead',
+              sd_card_size: asset.assetType === 'SD Card' ? asset.model : asset.sdCardSize || null,
+              profile_id: asset.profileId || null,
+              created_by: userEmail,
+              updated_by: userEmail,
+            })
+            .select()
+            .single();
+          if (orderError) throw new Error(`Order insertion failed: ${orderError.message}`);
+          for (let i = 0; i < asset.quantity; i++) {
+            const serialNumber = asset.hasSerials ? (asset.serialNumbers[i] || '') : '';
+            const assetStatus = asset.assetStatuses[i] || 'Fresh';
+            const assetGroup = asset.assetGroups[i] || 'NFA';
+            const assetCondition = asset.asset_conditions[i] || null;
+            const farCode = asset.farCodes[i] || null;
+            await supabase.from('devices').insert({
+              asset_type: asset.assetType,
+              model: asset.model,
+              serial_number: serialNumber,
+              warehouse: asset.location,
+              sales_order: salesOrderId,
+              deal_id: dealId || null,
+              school_name: schoolName,
+              nucleus_id: nucleusId || null,
+              status: materialType === 'Inward' ? 'Available' : 'Assigned',
+              material_type: materialType,
+              order_id: orderData.id,
+              configuration: asset.configuration || null,
+              product: asset.product || 'Lead',
+              sd_card_size: asset.assetType === 'SD Card' ? asset.model : asset.sdCardSize || null,
+              profile_id: asset.profileId || null,
+              asset_status: assetStatus,
+              asset_group: assetGroup,
+              asset_condition: assetCondition,
+              far_code: farCode,
+              created_by: userEmail,
+              updated_by: userEmail,
+            });
+          }
+          await logHistory('orders', orderData.id, 'order_type', orderType, userEmail, salesOrderId);
         }
       }
-      toast({ title: 'Success', description: 'Order updated successfully' });
+      const action = editMode ? 'updated' : 'created';
+      toast({ title: 'Success', description: `Order ${action} successfully` });
       setAssets([]);
       setSalesOrder('');
       setDealId('');
       setNucleusId('');
       setSchoolName('');
       setOrderType('');
-      setAgreementType('');
       setEditMode(false);
       await loadOrders();
       await loadDevices();
@@ -848,16 +879,36 @@ const handleCancelSearch = () => {
   const renderSuggestions = () => {
     if (!showSuggestions || salesOrderSuggestions.length === 0) return null;
     return (
-      <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, background: '#fff', border: '1px solid #d1d5db', borderRadius: '4px', maxHeight: '200px', overflowY: 'auto', zIndex: 10 }}>
+      <div style={{
+        position: 'absolute',
+        top: '100%',
+        left: 0,
+        right: 0,
+        background: 'white',
+        border: '1px solid #d1d5db',
+        borderRadius: '4px',
+        maxHeight: '200px',
+        overflowY: 'auto',
+        zIndex: 10,
+        boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)',
+      }}>
         {salesOrderSuggestions.map((sugg, idx) => (
           <div
             key={idx}
             onClick={() => handleSuggestionSelect(sugg)}
-            style={{ padding: '8px', borderBottom: '1px solid #e5e7eb', cursor: 'pointer', fontSize: '14px' }}
-            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f3f4f6'}
-            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#fff'}
+            style={{
+              padding: '12px',
+              borderBottom: '1px solid #e5e7eb',
+              cursor: 'pointer',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '4px',
+            }}
           >
-            <strong>{sugg.salesOrder}</strong> - {sugg.schoolName || 'No School'}
+            <div style={{ fontWeight: 'bold', fontSize: '14px' }}>{sugg.salesOrder}</div>
+            <div style={{ fontSize: '12px', color: '#6b7280' }}>
+              School: {sugg.schoolName} | Location: {sugg.location}
+            </div>
           </div>
         ))}
       </div>
@@ -1377,93 +1428,64 @@ const handleCancelSearch = () => {
           {renderSuggestions()}
         </form>
       </div>
-{/* Order Details */}
-<div style={{ border: '1px solid #e5e7eb', borderRadius: '8px', padding: '16px', marginBottom: '16px', background: '#fff' }}>
-  <h3 style={{ fontSize: '16px', fontWeight: 'bold', marginBottom: '12px' }}>Order Details</h3>
-  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '12px' }}>
-
-    {/* 1. Order Type */}
-    <div>
-      <label style={{ fontSize: '12px', display: 'block', marginBottom: '4px' }}>
-        Order Type <span style={{ color: 'red' }}>*</span>
-      </label>
-      <select
-        value={orderType}
-        onChange={(e) => setOrderType(e.target.value)}
-        style={{ width: '100%', padding: '8px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '14px' }}
-      >
-        <option value="">Select Order Type</option>
-        {orderTypes.map(t => <option key={t} value={t}>{t}</option>)}
-      </select>
-    </div>
-
-    {/* 2. Sales Order */}
-    <div>
-      <label style={{ fontSize: '12px', display: 'block', marginBottom: '4px' }}>Sales Order</label>
-      <input
-        type="text"
-        value={salesOrder}
-        onChange={(e) => setSalesOrder(e.target.value)}
-        disabled={editMode}
-        style={{ width: '100%', padding: '8px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '14px' }}
-      />
-    </div>
-
-    {/* 3. School Name */}
-    <div>
-      <label style={{ fontSize: '12px', display: 'block', marginBottom: '4px' }}>
-        School Name <span style={{ color: 'red' }}>*</span>
-      </label>
-      <input
-        type="text"
-        value={schoolName}
-        onChange={(e) => setSchoolName(e.target.value)}
-        style={{ width: '100%', padding: '8px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '14px' }}
-      />
-    </div>
-
-    {/* 4. Deal ID */}
-    <div>
-      <label style={{ fontSize: '12px', display: 'block', marginBottom: '4px' }}>
-        Deal ID <span style={{ color: 'red' }}>*</span>
-      </label>
-      <input
-        type="text"
-        value={dealId}
-        onChange={(e) => setDealId(e.target.value)}
-        placeholder="Required"
-        style={{ width: '100%', padding: '8px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '14px' }}
-      />
-    </div>
-
-    {/* 5. Nucleus ID */}
-    <div>
-      <label style={{ fontSize: '12px', display: 'block', marginBottom: '4px' }}>Nucleus ID</label>
-      <input
-        type="text"
-        value={nucleusId}
-        onChange={(e) => setNucleusId(e.target.value)}
-        style={{ width: '100%', padding: '8px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '14px' }}
-      />
-    </div>
-
-    {/* 6. Agreement Type */}
-    <div>
-      <label style={{ fontSize: '12px', display: 'block', marginBottom: '4px' }}>
-        Agreement Type <span style={{ color: 'red' }}>*</span>
-      </label>
-      <select
-        value={agreementType}
-        onChange={(e) => setAgreementType(e.target.value)}
-        style={{ width: '100%', padding: '8px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '14px' }}
-      >
-        <option value="">Select Agreement Type</option>
-        {agreementTypes.map(t => <option key={t} value={t}>{t}</option>)}
-      </select>
-    </div>
-
-  </div>
-</div>
+      {/* Order Details */}
+      <div style={{ border: '1px solid #e5e7eb', borderRadius: '8px', padding: '16px', marginBottom: '16px', background: '#fff' }}>
+        <h3 style={{ fontSize: '16px', fontWeight: 'bold', marginBottom: '12px' }}>Order Details</h3>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '12px' }}>
+          <div>
+            <label style={{ fontSize: '12px', display: 'block', marginBottom: '4px' }}>Order Type *</label>
+            <select
+              value={orderType}
+              onChange={(e) => setOrderType(e.target.value)}
+              disabled={editMode}
+              style={{ width: '100%', padding: '8px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '14px' }}
+            >
+              <option value="">Select Order Type</option>
+              {orderTypes.map(t => <option key={t} value={t}>{t}</option>)}
+            </select>
+          </div>
+          <div>
+            <label style={{ fontSize: '12px', display: 'block', marginBottom: '4px' }}>Sales Order</label>
+            <input
+              type="text"
+              value={salesOrder}
+              onChange={(e) => setSalesOrder(e.target.value)}
+              disabled={editMode}
+              style={{ width: '100%', padding: '8px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '14px' }}
+            />
+          </div>
+          <div>
+            <label style={{ fontSize: '12px', display: 'block', marginBottom: '4px' }}>School Name *</label>
+            <input
+              type="text"
+              value={schoolName}
+              onChange={(e) => setSchoolName(e.target.value)}
+              disabled={editMode}
+              style={{ width: '100%', padding: '8px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '14px' }}
+            />
+          </div>
+          <div>
+            <label style={{ fontSize: '12px', display: 'block', marginBottom: '4px' }}>Deal ID</label>
+            <input
+              type="text"
+              value={dealId}
+              onChange={(e) => setDealId(e.target.value)}
+              disabled={editMode}
+              style={{ width: '100%', padding: '8px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '14px' }}
+            />
+          </div>
+          <div>
+            <label style={{ fontSize: '12px', display: 'block', marginBottom: '4px' }}>Nucleus ID</label>
+            <input
+              type="text"
+              value={nucleusId}
+              onChange={(e) => setNucleusId(e.target.value)}
+              disabled={editMode}
+              style={{ width: '100%', padding: '8px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '14px' }}
+            />
+          </div>
+        </div>
+      </div>
       {/* Add Assets */}
       <div style={{ border: '1px solid #e5e7eb', borderRadius: '8px', padding: '16px', marginBottom: '16px', background: '#fff' }}>
         <h3 style={{ fontSize: '16px', fontWeight: 'bold', marginBottom: '12px' }}>Add Assets</h3>
