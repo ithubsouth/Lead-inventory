@@ -32,8 +32,7 @@ const InventoryManagement = () => {
   const [selectedOrderType, setSelectedOrderType] = useState<string[]>([]);
   const [selectedAssetGroup, setSelectedAssetGroup] = useState<string[]>([]);
   const [selectedAssetCondition, setSelectedAssetCondition] = useState<string[]>([]);
-  const [fromDate, setFromDate] = useState<string>('');
-  const [toDate, setToDate] = useState<string>('');
+  const [fromDate, setFromDate] = useState<DateRange | undefined>();
   const [showDeleted, setShowDeleted] = useState<boolean>(false);
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [orderType, setOrderType] = useState('');
@@ -655,15 +654,6 @@ const InventoryManagement = () => {
     }
   };
 
-  const devicesFromDate: DateRange | undefined = fromDate || toDate ? {
-    from: fromDate ? new Date(fromDate) : undefined,
-    to: toDate ? new Date(toDate) : undefined
-  } : undefined;
-
-  const setDevicesFromDate = (range: DateRange | undefined) => {
-    setFromDate(range?.from ? range.from.toISOString().split('T')[0] : '');
-    setToDate(range?.to ? range.to.toISOString().split('T')[0] : '');
-  };
 
   return (
     <div className='min-h-screen max-h-screen overflow-hidden bg-gradient-to-br from-background to-secondary/20 flex flex-col'>
@@ -748,8 +738,6 @@ const InventoryManagement = () => {
                 setSelectedSdCardSize={setSelectedSdCardSize}      
                 fromDate={fromDate}
                 setFromDate={setFromDate}
-                toDate={toDate}
-                setToDate={setToDate}
                 showDeleted={showDeleted}
                 setShowDeleted={setShowDeleted}
                 searchQuery={searchQuery}
@@ -764,21 +752,10 @@ const InventoryManagement = () => {
             <TabsContent value='order' className='flex-1 overflow-y-auto'>
               <OrderSummaryTable
                 devices={devices}
-                orderSummary={orderSummary}
                 selectedWarehouse={selectedWarehouse}
-                setSelectedWarehouse={(value) => {
-                  setSelectedWarehouse(value);
-                  setSelectedAssetType('All');
-                  setSelectedModel('All');
-                  setSelectedProduct('All');
-                  setSelectedAssetStatus('All');
-                  setSelectedAssetGroup('All');
-                }}
+                setSelectedWarehouse={setSelectedWarehouse}
                 selectedAssetType={selectedAssetType}
-                setSelectedAssetType={(value) => {
-                  setSelectedAssetType(value);
-                  setSelectedModel('All');
-                }}
+                setSelectedAssetType={setSelectedAssetType}
                 selectedModel={selectedModel}
                 setSelectedModel={setSelectedModel}
                 selectedAssetStatus={selectedAssetStatus}
@@ -787,14 +764,10 @@ const InventoryManagement = () => {
                 setSelectedAssetGroup={setSelectedAssetGroup}
                 selectedProduct={selectedProduct}
                 setSelectedProduct={setSelectedProduct}
-                selectedSdCardSize={selectedSdCardSize}
-                setSelectedSdCardSize={setSelectedSdCardSize}
                 selectedAssetCondition={selectedAssetCondition}
                 setSelectedAssetCondition={setSelectedAssetCondition}                
                 fromDate={fromDate}
                 setFromDate={setFromDate}
-                toDate={toDate}
-                setToDate={setToDate}
                 showDeleted={showDeleted}
                 setShowDeleted={setShowDeleted}
                 searchQuery={searchQuery}
@@ -826,8 +799,8 @@ const InventoryManagement = () => {
                 setSelectedAssetGroup={setSelectedAssetGroup}
                 selectedAssetCondition={selectedAssetCondition}
                 setSelectedAssetCondition={setSelectedAssetCondition}
-                fromDate={devicesFromDate}
-                setFromDate={setDevicesFromDate}
+                fromDate={fromDate}
+                setFromDate={setFromDate}
                 showDeleted={showDeleted}
                 setShowDeleted={setShowDeleted}
                 searchQuery={searchQuery}

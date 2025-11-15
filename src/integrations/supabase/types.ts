@@ -7,97 +7,153 @@ export type Json =
   | Json[]
 
 export type Database = {
-  // Allows to automatically instanciate createClient with right options
+  // Allows to automatically instantiate createClient with right options
   // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
   __InternalSupabase: {
     PostgrestVersion: "12.2.12 (cd3cf9e)"
   }
   public: {
     Tables: {
-      devices: {
+      audit_history: {
         Row: {
-          id: string
-          asset_type: string
-          model: string
+          asset_check: string
+          audited_at: string
+          audited_by: string
+          created_at: string | null
+          device_id: string
+          id: number
           serial_number: string
-          warehouse: string
-          status: string
-          order_id: string | null
-          sales_order: string | null
-          school_name: string | null
-          nucleus_id: string | null
-          profile_id: string | null
-          sd_card_size: string | null
-          deal_id: string | null
-          created_at: string
-          updated_at: string
-          deleted_at: string | null
-          is_deleted: boolean
-          created_by: string | null
-          asset_status: string | null
-          configuration: string | null
-          product: string | null
-          order_type: string | null
-          material_type: string | null
-          updated_by: string | null
-          asset_group: string | null
-          asset_check: string | null
         }
         Insert: {
-          id?: string
-          asset_type: string
-          model: string
+          asset_check: string
+          audited_at: string
+          audited_by: string
+          created_at?: string | null
+          device_id: string
+          id?: number
           serial_number: string
-          warehouse: string
-          status: string
-          order_id?: string | null
-          sales_order?: string | null
-          school_name?: string | null
-          nucleus_id?: string | null
-          profile_id?: string | null
-          sd_card_size?: string | null
-          deal_id?: string | null
-          created_at?: string
-          updated_at?: string
-          deleted_at?: string | null
-          is_deleted?: boolean
-          created_by?: string | null
-          asset_status?: string | null
-          configuration?: string | null
-          product?: string | null
-          order_type?: string | null
-          material_type?: string | null
-          updated_by?: string | null
-          asset_group?: string | null
-          asset_check?: string | null
         }
         Update: {
-          id?: string
-          asset_type?: string
-          model?: string
+          asset_check?: string
+          audited_at?: string
+          audited_by?: string
+          created_at?: string | null
+          device_id?: string
+          id?: number
           serial_number?: string
-          warehouse?: string
-          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "fk_device"
+            columns: ["device_id"]
+            isOneToOne: false
+            referencedRelation: "devices"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      devices: {
+        Row: {
+          asset_check: string | null
+          asset_condition: string | null
+          asset_group: string | null
+          asset_status: string | null
+          asset_type: string
+          audited_at: string | null
+          audited_by: string | null
+          configuration: string | null
+          created_at: string
+          created_by: string | null
+          deal_id: string | null
+          deleted_at: string | null
+          far_code: number | null
+          id: string
+          is_deleted: boolean
+          material: string | null
+          material_type: string | null
+          model: string
+          nucleus_id: string | null
+          order_id: string | null
+          order_type: string | null
+          product: string | null
+          profile_id: string | null
+          sales_order: string | null
+          school_name: string | null
+          sd_card_size: string | null
+          serial_number: string
+          size: string | null
+          status: string
+          updated_at: string
+          updated_by: string | null
+          warehouse: string
+        }
+        Insert: {
+          asset_check?: string | null
+          asset_condition?: string | null
+          asset_group?: string | null
+          asset_status?: string | null
+          asset_type: string
+          audited_at?: string | null
+          audited_by?: string | null
+          configuration?: string | null
+          created_at?: string
+          created_by?: string | null
+          deal_id?: string | null
+          deleted_at?: string | null
+          far_code?: number | null
+          id?: string
+          is_deleted?: boolean
+          material?: string | null
+          material_type?: string | null
+          model: string
+          nucleus_id?: string | null
           order_id?: string | null
+          order_type?: string | null
+          product?: string | null
+          profile_id?: string | null
           sales_order?: string | null
           school_name?: string | null
-          nucleus_id?: string | null
-          profile_id?: string | null
           sd_card_size?: string | null
-          deal_id?: string | null
-          created_at?: string
+          serial_number: string
+          size?: string | null
+          status?: string
           updated_at?: string
-          deleted_at?: string | null
-          is_deleted?: boolean
-          created_by?: string | null
-          asset_status?: string | null
-          configuration?: string | null
-          product?: string | null
-          order_type?: string | null
-          material_type?: string | null
           updated_by?: string | null
-          asset_group?: string | null
+          warehouse: string
+        }
+        Update: {
           asset_check?: string | null
+          asset_condition?: string | null
+          asset_group?: string | null
+          asset_status?: string | null
+          asset_type?: string
+          audited_at?: string | null
+          audited_by?: string | null
+          configuration?: string | null
+          created_at?: string
+          created_by?: string | null
+          deal_id?: string | null
+          deleted_at?: string | null
+          far_code?: number | null
+          id?: string
+          is_deleted?: boolean
+          material?: string | null
+          material_type?: string | null
+          model?: string
+          nucleus_id?: string | null
+          order_id?: string | null
+          order_type?: string | null
+          product?: string | null
+          profile_id?: string | null
+          sales_order?: string | null
+          school_name?: string | null
+          sd_card_size?: string | null
+          serial_number?: string
+          size?: string | null
+          status?: string
+          updated_at?: string
+          updated_by?: string | null
+          warehouse?: string
         }
         Relationships: [
           {
@@ -109,162 +165,198 @@ export type Database = {
           },
         ]
       }
-      orders: {
-        Row: {
-          id: string
-          material_type: string
-          asset_type: string
-          model: string
-          quantity: number
-          warehouse: string
-          serial_numbers: string[]
-          order_date: string
-          sales_order: string
-          school_name: string | null
-          deal_id: string | null
-          nucleus_id: string | null
-          created_at: string
-          updated_at: string
-          deleted_at: string | null
-          is_deleted: boolean
-          asset_status: string | null
-          configuration: string | null
-          product: string | null
-          order_type: string | null
-          updated_by: string | null
-          created_by: string | null
-          asset_group: string | null
-          sd_card_size: string | null
-          profile_id: string | null
-        }
-        Insert: {
-          id?: string
-          material_type: string
-          asset_type: string
-          model: string
-          quantity: number
-          warehouse: string
-          serial_numbers: string[]
-          order_date: string
-          sales_order: string
-          school_name?: string | null
-          deal_id?: string | null
-          nucleus_id?: string | null
-          created_at?: string
-          updated_at?: string
-          deleted_at?: string | null
-          is_deleted?: boolean
-          asset_status?: string | null
-          configuration?: string | null
-          product?: string | null
-          order_type?: string | null
-          updated_by?: string | null
-          created_by?: string | null
-          asset_group?: string | null
-          sd_card_size?: string | null
-          profile_id?: string | null
-        }
-        Update: {
-          id?: string
-          material_type?: string
-          asset_type?: string
-          model?: string
-          quantity?: number
-          warehouse?: string
-          serial_numbers?: string[]
-          order_date?: string
-          sales_order?: string
-          school_name?: string | null
-          deal_id?: string | null
-          nucleus_id?: string | null
-          created_at?: string
-          updated_at?: string
-          deleted_at?: string | null
-          is_deleted?: boolean
-          asset_status?: string | null
-          configuration?: string | null
-          product?: string | null
-          order_type?: string | null
-          updated_by?: string | null
-          created_by?: string | null
-          asset_group?: string | null
-          sd_card_size?: string | null
-          profile_id?: string | null
-        }
-        Relationships: []
-      }
       history: {
         Row: {
-          id: string
-          table_name: string
-          record_id: string
-          old_data: Json | null
-          new_data: Json | null
           changed_by: string | null
           created_at: string
           field_name: string | null
+          id: string
+          new_data: Json | null
+          old_data: Json | null
+          operation: string | null
+          record_id: string
           sales_order: string | null
+          table_name: string
           updated_at: string
           updated_by: string
-          operation: string | null
         }
         Insert: {
-          id?: string
-          table_name: string
-          record_id: string
-          old_data?: Json | null
-          new_data?: Json | null
           changed_by?: string | null
           created_at?: string
           field_name?: string | null
-          sales_order?: string | null
-          updated_at?: string
-          updated_by: string
+          id?: string
+          new_data?: Json | null
+          old_data?: Json | null
           operation?: string | null
-        }
-        Update: {
-          id?: string
-          table_name?: string
-          record_id?: string
-          old_data?: Json | null
-          new_data?: Json | null
-          changed_by?: string | null
-          created_at?: string
-          field_name?: string | null
+          record_id: string
           sales_order?: string | null
+          table_name: string
           updated_at?: string
           updated_by?: string
+        }
+        Update: {
+          changed_by?: string | null
+          created_at?: string
+          field_name?: string | null
+          id?: string
+          new_data?: Json | null
+          old_data?: Json | null
           operation?: string | null
+          record_id?: string
+          sales_order?: string | null
+          table_name?: string
+          updated_at?: string
+          updated_by?: string
+        }
+        Relationships: []
+      }
+      old: {
+        Row: {
+          changed_by: string | null
+          created_at: string
+          id: string
+          new_data: Json | null
+          old_data: Json | null
+          operation: string
+          record_id: string
+          table_name: string
+        }
+        Insert: {
+          changed_by?: string | null
+          created_at?: string
+          id?: string
+          new_data?: Json | null
+          old_data?: Json | null
+          operation: string
+          record_id: string
+          table_name: string
+        }
+        Update: {
+          changed_by?: string | null
+          created_at?: string
+          id?: string
+          new_data?: Json | null
+          old_data?: Json | null
+          operation?: string
+          record_id?: string
+          table_name?: string
+        }
+        Relationships: []
+      }
+      orders: {
+        Row: {
+          agreement_type: string | null
+          asset_group: string | null
+          asset_status: string | null
+          asset_type: string
+          configuration: string | null
+          created_at: string
+          created_by: string | null
+          deal_id: string | null
+          deleted_at: string | null
+          id: string
+          is_deleted: boolean
+          material_type: string
+          model: string
+          nucleus_id: string | null
+          order_date: string
+          order_type: string | null
+          product: string | null
+          profile_id: string | null
+          quantity: number
+          sales_order: string
+          school_name: string | null
+          sd_card_size: string | null
+          serial_numbers: string[]
+          updated_at: string
+          updated_by: string | null
+          warehouse: string
+        }
+        Insert: {
+          agreement_type?: string | null
+          asset_group?: string | null
+          asset_status?: string | null
+          asset_type: string
+          configuration?: string | null
+          created_at?: string
+          created_by?: string | null
+          deal_id?: string | null
+          deleted_at?: string | null
+          id?: string
+          is_deleted?: boolean
+          material_type: string
+          model: string
+          nucleus_id?: string | null
+          order_date?: string
+          order_type?: string | null
+          product?: string | null
+          profile_id?: string | null
+          quantity?: number
+          sales_order: string
+          school_name?: string | null
+          sd_card_size?: string | null
+          serial_numbers?: string[]
+          updated_at?: string
+          updated_by?: string | null
+          warehouse: string
+        }
+        Update: {
+          agreement_type?: string | null
+          asset_group?: string | null
+          asset_status?: string | null
+          asset_type?: string
+          configuration?: string | null
+          created_at?: string
+          created_by?: string | null
+          deal_id?: string | null
+          deleted_at?: string | null
+          id?: string
+          is_deleted?: boolean
+          material_type?: string
+          model?: string
+          nucleus_id?: string | null
+          order_date?: string
+          order_type?: string | null
+          product?: string | null
+          profile_id?: string | null
+          quantity?: number
+          sales_order?: string
+          school_name?: string | null
+          sd_card_size?: string | null
+          serial_numbers?: string[]
+          updated_at?: string
+          updated_by?: string | null
+          warehouse?: string
         }
         Relationships: []
       }
       users: {
         Row: {
-          id: string
-          email: string
-          full_name: string | null
-          department: string | null
-          role: string | null
           account_type: string | null
           created_at: string | null
+          department: string | null
+          email: string
+          full_name: string | null
+          id: string
+          role: string | null
         }
         Insert: {
-          id?: string
+          account_type?: string | null
+          created_at?: string | null
+          department?: string | null
           email: string
           full_name?: string | null
-          department?: string | null
+          id: string
           role?: string | null
-          account_type?: string | null
-          created_at?: string | null
         }
         Update: {
-          id?: string
-          email?: string
-          full_name?: string | null
-          department?: string | null
-          role?: string | null
           account_type?: string | null
           created_at?: string | null
+          department?: string | null
+          email?: string
+          full_name?: string | null
+          id?: string
+          role?: string | null
         }
         Relationships: []
       }
@@ -273,7 +365,16 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      get_user_by_email: {
+        Args: { email_param: string }
+        Returns: {
+          id: string
+        }[]
+      }
+      update_asset_check_only: {
+        Args: { ids: string[]; new_check: string }
+        Returns: string[]
+      }
     }
     Enums: {
       [_ in never]: never
