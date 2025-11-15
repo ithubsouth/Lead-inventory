@@ -117,18 +117,6 @@ export const locations = [
   'Jaipur',
 ];
 
-export const agreementTypes = [
-  'PX',
-  'PY',
-  'PZ',
-  'PAA',
-  'PB',
-  'PC',
-  'PD',
-  'PE',
-  'PF',
-];
-
 export const assetStatuses = [
   'Fresh',
   'Refurb',
@@ -179,13 +167,3 @@ export const excludedAuditItems = {
   assetTypes: ['Cover', 'SD Card', 'Pendrive'] as const,
   models: ['SD Card Box', 'Envelope', 'HDMI Cable', 'USB Wall Adapter', 'Dongle'] as const,
 };
-
-export const otherMaterials = additionalAssetTypes;
-
-export const assetConditions = [
-  'Excellent',
-  'Good',
-  'Fair',
-  'Poor',
-  'Damaged',
-];

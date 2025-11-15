@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Search, Download } from 'lucide-react';
-import { Device } from './types';
+import { OrderSummary, Device } from './types';
 import { formatDate } from './utils';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Input } from '@/components/ui/input';
@@ -23,6 +23,29 @@ interface OrderSummary {
   stockAssetStatusCounts?: Record<string, number>;
 }
 
+interface OrderSummaryTableProps {
+  devices: Device[];
+  selectedWarehouse: string[];
+  setSelectedWarehouse: (value: string[]) => void;
+  selectedAssetType: string[];
+  setSelectedAssetType: (value: string[]) => void;
+  selectedModel: string[];
+  setSelectedModel: (value: string[]) => void;
+  selectedAssetStatus: string[];
+  setSelectedAssetStatus: (value: string[]) => void;
+  selectedAssetGroup: string[];
+  setSelectedAssetGroup: (value: string[]) => void;
+  selectedProduct: string[];
+  setSelectedProduct: (value: string[]) => void;
+  selectedAssetCondition: string[];
+  setSelectedAssetCondition: (value: string[]) => void;
+  fromDate: DateRange | undefined;
+  setFromDate: (range: DateRange | undefined) => void;
+  showDeleted: boolean;
+  setShowDeleted: (value: boolean) => void;
+  searchQuery: string;
+  setSearchQuery: (value: string) => void;
+}
 
 const OrderSummaryTable: React.FC<OrderSummaryTableProps> = ({
   devices,
