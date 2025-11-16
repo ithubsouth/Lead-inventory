@@ -456,7 +456,7 @@ const handleCancelSearch = () => {
           const newFarCodes = [...a.farCodes];
           newStatuses[index] = device.asset_status || 'Fresh';
           newGroups[index] = device.asset_group || 'NFA';
-          newFarCodes[index] = device.far_code || '';
+          newFarCodes[index] = device.far_code ? String(device.far_code) : '';
           return { ...a, assetStatuses: newStatuses, assetGroups: newGroups, farCodes: newFarCodes };
         }
         return a;
@@ -703,7 +703,7 @@ const handleCancelSearch = () => {
           const assetGroup = asset.assetGroups[i] || 'NFA';
           const assetCondition = asset.asset_conditions[i] || null;
           const farCode = asset.farCodes[i] || null;
-          await supabase.from('devices').insert({
+          await supabase.from('devices').insert([{
             asset_type: asset.assetType,
             model: asset.model,
             serial_number: serialNumber,
@@ -798,7 +798,7 @@ const handleCancelSearch = () => {
             const assetGroup = asset.assetGroups[i] || 'NFA';
             const assetCondition = asset.asset_conditions[i] || null;
             const farCode = asset.farCodes[i] || null;
-            await supabase.from('devices').insert({
+            await supabase.from('devices').insert([{
               asset_type: asset.assetType,
               model: asset.model,
               serial_number: serialNumber,
@@ -2111,7 +2111,7 @@ const handleCancelSearch = () => {
                           .from('devices')
                           .update({
                             asset_group,
-                            far_code,
+                            far_code: far_code ? Number(far_code) : null,
                             updated_at: new Date().toISOString(),
                             updated_by: userEmail,
                           })

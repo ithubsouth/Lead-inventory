@@ -778,8 +778,6 @@ const InventoryManagement = () => {
                 setSelectedAssetGroup={setSelectedAssetGroup}
                 selectedProduct={selectedProduct}
                 setSelectedProduct={setSelectedProduct}
-                selectedSdCardSize={selectedSdCardSize}
-                setSelectedSdCardSize={setSelectedSdCardSize}
                 selectedAssetCondition={selectedAssetCondition}
                 setSelectedAssetCondition={setSelectedAssetCondition}                
                 fromDate={fromDate}
