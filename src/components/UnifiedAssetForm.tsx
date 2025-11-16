@@ -35,7 +35,7 @@ interface AssetItem {
   assetStatuses: string[];
   assetGroups: string[];
   asset_conditions: string[];
-  farCodes: string[];
+  farCodes: (number | null)[];
   hasSerials: boolean;
   orderId?: string;
 }

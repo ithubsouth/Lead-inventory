@@ -206,7 +206,7 @@ const EditOrderForm: React.FC<EditOrderFormProps> = ({ order, onSave, onCancel }
   const updateFarCode = (index: number, value: string) => {
     setDevices(prev => {
       const newDevices = [...prev];
-      newDevices[index] = { ...newDevices[index], far_code: value };
+      newDevices[index] = { ...newDevices[index], far_code: value ? Number(value) : null };
       return newDevices;
     });
   };

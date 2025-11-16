@@ -193,7 +193,7 @@ const AuditTable: React.FC<AuditTableProps> = ({
             d.product,
             d.asset_status,
             d.asset_group,
-            d.far_code,
+            d.far_code ? String(d.far_code) : '',
             d.warehouse,
             d.order_type,
             d.sales_order,
@@ -287,7 +287,7 @@ const AuditTable: React.FC<AuditTableProps> = ({
           d.product,
           d.asset_status,
           d.asset_group,
-          d.far_code,
+          d.far_code ? String(d.far_code) : '',
           d.warehouse,
           d.order_type,
           d.sales_order,
@@ -468,7 +468,7 @@ const AuditTable: React.FC<AuditTableProps> = ({
       d.asset_check || 'Unmatched',
     ]);
 
-    const csvContent = [headers.join(','), ...csvRows.map((row) => row.map((value) => `"${value.replace(/"/g, '""')}"`).join(','))].join('\n');
+    const csvContent = [headers.join(','), ...csvRows.map((row) => row.map((value) => `"${String(value).replace(/"/g, '""')}"`).join(','))].join('\n');
 
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
