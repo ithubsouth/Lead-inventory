@@ -658,16 +658,6 @@ const InventoryManagement = () => {
     }
   };
 
-  const devicesFromDate: DateRange | undefined = fromDate || toDate ? {
-    from: fromDate ? new Date(fromDate) : undefined,
-    to: toDate ? new Date(toDate) : undefined
-  } : undefined;
-
-  const setDevicesFromDate = (range: DateRange | undefined) => {
-    setFromDate(range?.from ? range.from.toISOString().split('T')[0] : '');
-    setToDate(range?.to ? range.to.toISOString().split('T')[0] : '');
-  };
-
   return (
     <div className='min-h-screen max-h-screen overflow-hidden bg-gradient-to-br from-background to-secondary/20 flex flex-col'>
       <div className='w-full bg-card/80 backdrop-blur-sm border-b border-border/50 fixed top-0 left-0 right-0 z-50 shadow-sm'>

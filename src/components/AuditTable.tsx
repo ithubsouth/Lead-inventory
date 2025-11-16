@@ -462,7 +462,7 @@ const AuditTable: React.FC<AuditTableProps> = ({
       d.product || '',
       d.asset_status || '',
       d.asset_group || '',
-      d.far_code || '',
+      d.far_code ? String(d.far_code) : '',
       d.asset_condition || '',
       d.warehouse || '',
       d.asset_check || 'Unmatched',
@@ -730,7 +730,6 @@ const AuditTable: React.FC<AuditTableProps> = ({
                 date={fromDate}
                 setDate={setFromDate}
                 className="h-7 w-full"
-                style={{ fontSize: '12px', border: '1px solid #d1d5db', borderRadius: '4px', padding: '6px', height: '28px' }}
               />
             </div>
           </div>
