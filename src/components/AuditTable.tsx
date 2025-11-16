@@ -141,8 +141,8 @@ const AuditTable: React.FC<AuditTableProps> = ({
       (d) =>
         getEffectiveStatus(d) === 'Stock' &&
         !d.is_deleted &&
-        !excludedAuditItems.assetTypes.includes(d.asset_type || '') &&
-        !excludedAuditItems.models.includes(d.model || '')
+        !(excludedAuditItems.assetTypes as readonly string[]).includes(d.asset_type || '') &&
+        !(excludedAuditItems.models as readonly string[]).includes(d.model || '')
     );
 
     const getFilteredDevices = (excludeFilter: string) => {
@@ -251,8 +251,8 @@ const AuditTable: React.FC<AuditTableProps> = ({
       const isStock =
         getEffectiveStatus(d) === 'Stock' &&
         !d.is_deleted &&
-        !excludedAuditItems.assetTypes.includes(d.asset_type || '') &&
-        !excludedAuditItems.models.includes(d.model || '');
+        !(excludedAuditItems.assetTypes as readonly string[]).includes(d.asset_type || '') &&
+        !(excludedAuditItems.models as readonly string[]).includes(d.model || '');
       const warehouseMatch = selectedWarehouse.length === 0 || selectedWarehouse.includes(d.warehouse || '');
       const assetTypeMatch = selectedAssetType.length === 0 || selectedAssetType.includes(d.asset_type || '');
       const modelMatch = selectedModel.length === 0 || selectedModel.includes(d.model || '');

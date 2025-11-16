@@ -32,8 +32,8 @@ const InventoryManagement = () => {
   const [selectedOrderType, setSelectedOrderType] = useState<string[]>([]);
   const [selectedAssetGroup, setSelectedAssetGroup] = useState<string[]>([]);
   const [selectedAssetCondition, setSelectedAssetCondition] = useState<string[]>([]);
-  const [fromDate, setFromDate] = useState<DateRange | undefined>(undefined);
-  const [toDate, setToDate] = useState<DateRange | undefined>(undefined);
+  const [ordersFromDate, setOrdersFromDate] = useState<DateRange | undefined>(undefined);
+  const [orderSummaryFromDate, setOrderSummaryFromDate] = useState<DateRange | undefined>(undefined);
   const [devicesFromDate, setDevicesFromDate] = useState<DateRange | undefined>(undefined);
   const [auditFromDate, setAuditFromDate] = useState<DateRange | undefined>(undefined);
   const [showDeleted, setShowDeleted] = useState<boolean>(false);
