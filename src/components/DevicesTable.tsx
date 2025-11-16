@@ -298,7 +298,7 @@ const DevicesTable: React.FC<DevicesTableProps> = ({
             device.status || '',
             device.order_type || '',
             device.asset_group || '',
-            device.far_code || '',
+            device.far_code ? String(device.far_code) : '',
             device.sd_card_size || '',
             device.profile_id || '',
             device.updated_by || '',
