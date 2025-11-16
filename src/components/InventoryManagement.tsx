@@ -756,7 +756,6 @@ const InventoryManagement = () => {
             <TabsContent value='order' className='flex-1 overflow-y-auto'>
               <OrderSummaryTable
                 devices={devices}
-                orderSummary={orderSummary}
                 selectedWarehouse={selectedWarehouse}
                 setSelectedWarehouse={(value) => {
                   setSelectedWarehouse(value);

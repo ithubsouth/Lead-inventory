@@ -182,7 +182,7 @@ const OrderSummaryTable: React.FC<OrderSummaryTableProps> = ({
       filteredDevices = filteredDevices.filter(d => new Date(d.created_at || d.updated_at || '1970-01-01') <= new Date(fromDate.to));
     }
 
-    const summaryMap = new Map<string, OrderSummary>();
+    const summaryMap = new Map<string, OrderSummaryLocal>();
 
     filteredDevices.forEach((d) => {
       if (!d.warehouse || !d.asset_type || !d.model) return;
@@ -255,8 +255,8 @@ const OrderSummaryTable: React.FC<OrderSummaryTableProps> = ({
     if (!showDeleted) {
       computedSummaries = computedSummaries.filter(s =>
         summaryType === 'stock'
-          ? s.inward! > 0 || s.outward! > 0
-          : s.stock! > 0 || Object.values(s.inwardAssetStatusCounts || {}).some(count => count > 0) || Object.values(s.outwardAssetStatusCounts || {}).some(count => count > 0) || Object.values(s.stockAssetStatusCounts || {}).some(count => count > 0)
+          ? (s.inward ?? 0) > 0 || (s.outward ?? 0) > 0
+          : (s.stock ?? 0) > 0 || Object.values(s.inwardAssetStatusCounts || {}).some(count => count > 0) || Object.values(s.outwardAssetStatusCounts || {}).some(count => count > 0) || Object.values(s.stockAssetStatusCounts || {}).some(count => count > 0)
       );
     }
 
@@ -343,7 +343,7 @@ const OrderSummaryTable: React.FC<OrderSummaryTableProps> = ({
   if (pageRange[pageRange.length - 1] < totalPages) pageRange.push('...');
   if (pageRange[pageRange.length - 1] !== totalPages) pageRange.push(totalPages);
 
-  const downloadCSV = (data: OrderSummary[], filename: string) => {
+  const downloadCSV = (data: OrderSummaryLocal[], filename: string) => {
     if (data.length === 0) {
       toast({ title: 'No Data', description: 'No data available to download', variant: 'destructive' });
       return;

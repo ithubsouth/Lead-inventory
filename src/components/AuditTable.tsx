@@ -251,8 +251,8 @@ const AuditTable: React.FC<AuditTableProps> = ({
       const isStock =
         getEffectiveStatus(d) === 'Stock' &&
         !d.is_deleted &&
-        !excludedAuditItems.assetTypes.includes(d.asset_type || '') &&
-        !excludedAuditItems.models.includes(d.model || '');
+        !excludedAuditItems.assetTypes.includes(d.asset_type as any) &&
+        !excludedAuditItems.models.includes(d.model as any);
       const warehouseMatch = selectedWarehouse.length === 0 || selectedWarehouse.includes(d.warehouse || '');
       const assetTypeMatch = selectedAssetType.length === 0 || selectedAssetType.includes(d.asset_type || '');
       const modelMatch = selectedModel.length === 0 || selectedModel.includes(d.model || '');
