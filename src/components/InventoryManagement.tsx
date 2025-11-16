@@ -32,8 +32,8 @@ const InventoryManagement = () => {
   const [selectedOrderType, setSelectedOrderType] = useState<string[]>([]);
   const [selectedAssetGroup, setSelectedAssetGroup] = useState<string[]>([]);
   const [selectedAssetCondition, setSelectedAssetCondition] = useState<string[]>([]);
-  const [fromDate, setFromDate] = useState<string>('');
-  const [toDate, setToDate] = useState<string>('');
+  const [fromDate, setFromDate] = useState<DateRange | undefined>();
+  const [toDate, setToDate] = useState<DateRange | undefined>();
   const [showDeleted, setShowDeleted] = useState<boolean>(false);
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [orderType, setOrderType] = useState('');
@@ -465,8 +465,8 @@ const InventoryManagement = () => {
 
       const updates = { 
         asset_check: validStatus,
-        updated_at: new Date().toISOString(),
-        updated_by: userEmail,
+        audited_at: new Date().toISOString(),
+        audited_by: userEmail,
       };
 
       const { data, error } = await supabase
@@ -770,17 +770,17 @@ const InventoryManagement = () => {
                 orderSummary={orderSummary}
                 selectedWarehouse={selectedWarehouse}
                 setSelectedWarehouse={(value) => {
-                  setSelectedWarehouse(value);
-                  setSelectedAssetType('All');
-                  setSelectedModel('All');
-                  setSelectedProduct('All');
-                  setSelectedAssetStatus('All');
-                  setSelectedAssetGroup('All');
+                  setSelectedWarehouse(Array.isArray(value) ? value : [value]);
+                  setSelectedAssetType([]);
+                  setSelectedModel([]);
+                  setSelectedProduct([]);
+                  setSelectedAssetStatus([]);
+                  setSelectedAssetGroup([]);
                 }}
                 selectedAssetType={selectedAssetType}
                 setSelectedAssetType={(value) => {
-                  setSelectedAssetType(value);
-                  setSelectedModel('All');
+                  setSelectedAssetType(Array.isArray(value) ? value : [value]);
+                  setSelectedModel([]);
                 }}
                 selectedModel={selectedModel}
                 setSelectedModel={setSelectedModel}
