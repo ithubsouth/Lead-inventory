@@ -63,6 +63,8 @@ interface UnifiedAssetFormProps {
   setNucleusId: (value: string) => void;
   schoolName: string;
   setSchoolName: (value: string) => void;
+  agreementType: string;
+  setAgreementType: (value: string) => void;
   loading: boolean;
   setLoading: (value: boolean) => void;
   loadOrders: () => Promise<void>;
@@ -82,6 +84,8 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
   setNucleusId,
   schoolName,
   setSchoolName,
+  agreementType,
+  setAgreementType,
   loading,
   setLoading,
   loadOrders,

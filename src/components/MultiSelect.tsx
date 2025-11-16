@@ -78,7 +78,6 @@ const MultiSelect: React.FC<MultiSelectProps> = ({ options, value, onChange, pla
             <Checkbox
               id={`${id}-select-all`}
               checked={value.length === options.length}
-              indeterminate={value.length > 0 && value.length < options.length}
               onCheckedChange={handleSelectAll}
             />
             <Label htmlFor={`${id}-select-all`} style={{ fontSize: '12px', marginLeft: '8px', cursor: 'pointer' }}>
