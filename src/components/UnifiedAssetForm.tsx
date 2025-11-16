@@ -726,7 +726,8 @@ const handleCancelSearch = () => {
             far_code: farCode,
             created_by: userEmail,
             updated_by: userEmail,
-          });
+            is_deleted: false,
+          }]);
         }
         await logHistory('orders', orderData.id, 'order_type', orderType, userEmail, salesOrderId);
       }
@@ -821,7 +822,8 @@ const handleCancelSearch = () => {
               far_code: farCode,
               created_by: userEmail,
               updated_by: userEmail,
-            });
+              is_deleted: false,
+            }]);
           }
           await logHistory('orders', asset.orderId, 'order_type', orderType, userEmail, salesOrderId);
         }
