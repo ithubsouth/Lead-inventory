@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Search, Download } from 'lucide-react';
-import { OrderSummary, Device } from './types';
+import { Device } from './types';
 import { formatDate } from './utils';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Input } from '@/components/ui/input';
@@ -11,7 +11,7 @@ import { DatePickerWithRange } from './DatePickerWithRange';
 import { DateRange } from 'react-day-picker';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
-interface OrderSummary {
+interface OrderSummaryLocal {
   warehouse: string;
   asset_type: 'Tablet' | 'TV' | 'SD Card' | 'Pendrive';
   model: string;
@@ -204,7 +204,7 @@ const OrderSummaryTable: React.FC<OrderSummaryTableProps> = ({
       }
       const s = summaryMap.get(key)!;
       const status = d.asset_status || 'Unknown';
-      const isInward = d.transaction_type === 'Inward' || (!d.transaction_type && d.status !== 'Assigned');
+      const isInward = d.material_type === 'Inward' || (!d.material_type && d.status !== 'Assigned');
 
       if (isInward) {
         s.inward! += 1;
@@ -419,8 +419,8 @@ const OrderSummaryTable: React.FC<OrderSummaryTableProps> = ({
     fontSize: '12px',
     padding: '8px',
     borderBottom: '1px solid #d1d5db',
-    textAlign: 'left',
-    position: 'sticky',
+    textAlign: 'left' as const,
+    position: 'sticky' as const,
     top: typeof top === 'number' ? `${top}px` : top,
     background: '#fff',
     zIndex: 20,
@@ -428,7 +428,7 @@ const OrderSummaryTable: React.FC<OrderSummaryTableProps> = ({
 
   const subHeaderStyle = (top: string | number) => ({
     ...headerStyle(top),
-    textAlign: 'center',
+    textAlign: 'center' as const,
   });
 
   const groupHeaderHeight = '28px';
@@ -571,7 +571,6 @@ const OrderSummaryTable: React.FC<OrderSummaryTableProps> = ({
                 date={fromDate}
                 setDate={setFromDate}
                 className="h-7 w-full"
-                style={{ fontSize: '12px', border: '1px solid #d1d5db', borderRadius: '4px', padding: '6px', height: '28px' }}
               />
             </div>
           </div>

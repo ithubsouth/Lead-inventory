@@ -173,3 +173,5 @@ export const excludedAuditItems = {
 };
 
 export const otherMaterials = additionalAssetTypes;
+
+export const profileIds = ['701', '702', '703', '704', '705', '706', '707', '708', '709', '710'];

@@ -428,7 +428,10 @@ const EditOrderForm: React.FC<EditOrderFormProps> = ({ order, onSave, onCancel }
 
       orderFields.forEach(field => {
         if (formData[field as keyof Order] !== originalOrder[field as keyof Order]) {
-          orderChanges[field as keyof Order] = formData[field as keyof Order];
+          const value = formData[field as keyof Order];
+          if (value !== undefined) {
+            (orderChanges as any)[field] = value;
+          }
         }
       });
 
@@ -493,7 +496,7 @@ const EditOrderForm: React.FC<EditOrderFormProps> = ({ order, onSave, onCancel }
           if (device.asset_status !== originalDevice.asset_status) changes.asset_status = device.asset_status;
           if (device.asset_group !== originalDevice.asset_group) changes.asset_group = device.asset_group;
           if (device.asset_condition !== originalDevice.asset_condition) changes.asset_condition = device.asset_condition;
-          if (device.far_code !== originalDevice.far_code) changes.far_code = device.far_code;
+          if (device.far_code !== originalDevice.far_code) changes.far_code = device.far_code ? String(device.far_code) : null;
           if (formData.sd_card_size !== originalDevice.sd_card_size) changes.sd_card_size = formData.sd_card_size;
           if (formData.profile_id !== originalDevice.profile_id) changes.profile_id = formData.profile_id;
           if (formData.model !== originalDevice.model) changes.model = formData.model;
@@ -548,7 +551,7 @@ const EditOrderForm: React.FC<EditOrderFormProps> = ({ order, onSave, onCancel }
             asset_status: device.asset_status || 'Fresh',
             asset_group: device.asset_group || 'NFA',
             asset_condition: device.asset_condition || null,
-            far_code: device.far_code || null,
+            far_code: device.far_code ? String(device.far_code) : null,
             created_at: new Date().toISOString(),
             updated_at: new Date().toISOString(),
             created_by: userEmail,
@@ -558,7 +561,7 @@ const EditOrderForm: React.FC<EditOrderFormProps> = ({ order, onSave, onCancel }
 
           const { data: newDevice, error } = await supabase
             .from('devices')
-            .insert(deviceData)
+            .insert([deviceData])
             .select()
             .single();
 

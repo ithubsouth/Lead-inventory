@@ -32,8 +32,8 @@ const InventoryManagement = () => {
   const [selectedOrderType, setSelectedOrderType] = useState<string[]>([]);
   const [selectedAssetGroup, setSelectedAssetGroup] = useState<string[]>([]);
   const [selectedAssetCondition, setSelectedAssetCondition] = useState<string[]>([]);
-  const [fromDate, setFromDate] = useState<string>('');
-  const [toDate, setToDate] = useState<string>('');
+  const [fromDate, setFromDate] = useState<DateRange | undefined>();
+  const [toDate, setToDate] = useState<DateRange | undefined>();
   const [showDeleted, setShowDeleted] = useState<boolean>(false);
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [orderType, setOrderType] = useState('');
@@ -458,15 +458,15 @@ const InventoryManagement = () => {
       setDevices((prevDevices) =>
         prevDevices.map((device) =>
           device.id === deviceId
-            ? { ...device, asset_check: validStatus, updated_at: new Date().toISOString(), updated_by: userEmail }
+            ? { ...device, asset_check: validStatus, audited_at: new Date().toISOString(), audited_by: userEmail }
             : device
         )
       );
 
       const updates = { 
         asset_check: validStatus,
-        updated_at: new Date().toISOString(),
-        updated_by: userEmail,
+        audited_at: new Date().toISOString(),
+        audited_by: userEmail,
       };
 
       const { data, error } = await supabase
@@ -529,8 +529,8 @@ const InventoryManagement = () => {
     }
     const updates = {
       asset_check: 'Unmatched',
-      updated_at: new Date().toISOString(),
-      updated_by: userEmail,
+      audited_at: new Date().toISOString(),
+      audited_by: userEmail,
     };
 
     for (let retry = 1; retry <= maxRetries; retry++) {
@@ -610,7 +610,7 @@ const InventoryManagement = () => {
           setDevices(prevDevices => {
             const updatedDevices = prevDevices.map(device =>
               allUpdatedIds.includes(device.id)
-                ? { ...device, asset_check: 'Unmatched', updated_at: new Date().toISOString(), updated_by: userEmail }
+                ? { ...device, asset_check: 'Unmatched', audited_at: new Date().toISOString(), audited_by: userEmail }
                 : device
             );
             console.log('Updated devices state after batch unmatch:', updatedDevices);
@@ -656,15 +656,6 @@ const InventoryManagement = () => {
     }
   };
 
-  const devicesFromDate: DateRange | undefined = fromDate || toDate ? {
-    from: fromDate ? new Date(fromDate) : undefined,
-    to: toDate ? new Date(toDate) : undefined
-  } : undefined;
-
-  const setDevicesFromDate = (range: DateRange | undefined) => {
-    setFromDate(range?.from ? range.from.toISOString().split('T')[0] : '');
-    setToDate(range?.to ? range.to.toISOString().split('T')[0] : '');
-  };
 
   return (
     <div className='min-h-screen max-h-screen overflow-hidden bg-gradient-to-br from-background to-secondary/20 flex flex-col'>
@@ -751,8 +742,6 @@ const InventoryManagement = () => {
                 setSelectedSdCardSize={setSelectedSdCardSize}      
                 fromDate={fromDate}
                 setFromDate={setFromDate}
-                toDate={toDate}
-                setToDate={setToDate}
                 showDeleted={showDeleted}
                 setShowDeleted={setShowDeleted}
                 searchQuery={searchQuery}
@@ -771,16 +760,16 @@ const InventoryManagement = () => {
                 selectedWarehouse={selectedWarehouse}
                 setSelectedWarehouse={(value) => {
                   setSelectedWarehouse(value);
-                  setSelectedAssetType('All');
-                  setSelectedModel('All');
-                  setSelectedProduct('All');
-                  setSelectedAssetStatus('All');
-                  setSelectedAssetGroup('All');
+                  setSelectedAssetType([]);
+                  setSelectedModel([]);
+                  setSelectedProduct([]);
+                  setSelectedAssetStatus([]);
+                  setSelectedAssetGroup([]);
                 }}
                 selectedAssetType={selectedAssetType}
                 setSelectedAssetType={(value) => {
                   setSelectedAssetType(value);
-                  setSelectedModel('All');
+                  setSelectedModel([]);
                 }}
                 selectedModel={selectedModel}
                 setSelectedModel={setSelectedModel}
@@ -796,8 +785,6 @@ const InventoryManagement = () => {
                 setSelectedAssetCondition={setSelectedAssetCondition}                
                 fromDate={fromDate}
                 setFromDate={setFromDate}
-                toDate={toDate}
-                setToDate={setToDate}
                 showDeleted={showDeleted}
                 setShowDeleted={setShowDeleted}
                 searchQuery={searchQuery}
@@ -829,8 +816,8 @@ const InventoryManagement = () => {
                 setSelectedAssetGroup={setSelectedAssetGroup}
                 selectedAssetCondition={selectedAssetCondition}
                 setSelectedAssetCondition={setSelectedAssetCondition}
-                fromDate={devicesFromDate}
-                setFromDate={setDevicesFromDate}
+                fromDate={fromDate}
+                setFromDate={setFromDate}
                 showDeleted={showDeleted}
                 setShowDeleted={setShowDeleted}
                 searchQuery={searchQuery}
@@ -858,8 +845,8 @@ const InventoryManagement = () => {
                 setSelectedAssetGroup={setSelectedAssetGroup}
                 selectedAssetCondition={selectedAssetCondition}
                 setSelectedAssetCondition={setSelectedAssetCondition}
-                fromDate={fromDate ? { from: new Date(fromDate), to: undefined } : undefined}
-                setFromDate={(range) => setFromDate(range?.from?.toISOString().split('T')[0] || '')}
+                fromDate={fromDate}
+                setFromDate={setFromDate}
                 searchQuery={searchQuery}
                 setSearchQuery={setSearchQuery}
                 onUpdateAssetCheck={handleUpdateAssetCheck}

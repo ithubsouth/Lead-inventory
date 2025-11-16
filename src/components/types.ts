@@ -107,6 +107,9 @@ export interface Device {
   asset_group?: string | null;
   asset_condition?: string | null;
   far_code?: string | null; // Added to match DevicesTable usage
+  asset_check?: string | null;
+  audited_by?: string | null;
+  audited_at?: string | null;
   status: 'Stock' | 'Assigned' | 'Available';
   created_at: string;
   created_by?: string;
