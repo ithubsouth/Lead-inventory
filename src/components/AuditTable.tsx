@@ -181,7 +181,7 @@ const AuditTable: React.FC<AuditTableProps> = ({
             }
             const prop = propertyMap[key as keyof typeof propertyMap];
             const value = d[prop as keyof Device];
-            return (filterValue as string[]).length === 0 || (filterValue as string[]).includes(String(value || ''));
+            return (filterValue as string[]).length === 0 || (filterValue as string[]).includes(value);
           });
         const searchMatch =
           searchQuery.trim() === '' ||
@@ -204,7 +204,7 @@ const AuditTable: React.FC<AuditTableProps> = ({
             d.asset_condition || '',
           ]
             .filter(Boolean)
-            .some((field) => String(field || '').toLowerCase().includes(searchQuery.toLowerCase()));
+            .some((field) => field.toLowerCase().includes(searchQuery.toLowerCase()));
         return matches && searchMatch;
       });
     };
@@ -298,7 +298,7 @@ const AuditTable: React.FC<AuditTableProps> = ({
           d.asset_condition || '',
         ]
           .filter(Boolean)
-          .some((field) => String(field || '').toLowerCase().includes(searchQuery.toLowerCase()));
+          .some((field) => field.toLowerCase().includes(searchQuery.toLowerCase()));
       const checkMatch = selectedAssetChecks.length === 0 || selectedAssetChecks.includes(d.asset_check || 'Unmatched');
 
       return (

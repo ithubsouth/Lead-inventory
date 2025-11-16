@@ -32,10 +32,8 @@ const InventoryManagement = () => {
   const [selectedOrderType, setSelectedOrderType] = useState<string[]>([]);
   const [selectedAssetGroup, setSelectedAssetGroup] = useState<string[]>([]);
   const [selectedAssetCondition, setSelectedAssetCondition] = useState<string[]>([]);
-  const [fromDate, setFromDate] = useState<DateRange | undefined>(undefined);
-  const [toDate, setToDate] = useState<DateRange | undefined>(undefined);
-  const [devicesFromDate, setDevicesFromDate] = useState<DateRange | undefined>(undefined);
-  const [auditFromDate, setAuditFromDate] = useState<DateRange | undefined>(undefined);
+  const [fromDate, setFromDate] = useState<string>('');
+  const [toDate, setToDate] = useState<string>('');
   const [showDeleted, setShowDeleted] = useState<boolean>(false);
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [orderType, setOrderType] = useState('');
@@ -43,7 +41,6 @@ const InventoryManagement = () => {
   const [dealId, setDealId] = useState('');
   const [nucleusId, setNucleusId] = useState('');
   const [schoolName, setSchoolName] = useState('');
-  const [agreementType, setAgreementType] = useState('');
   const [tablets, setTablets] = useState<TabletItem[]>([]);
   const [tvs, setTvs] = useState<TVItem[]>([]);
   const { toast } = useToast();
@@ -718,8 +715,6 @@ const InventoryManagement = () => {
                 setNucleusId={setNucleusId}
                 schoolName={schoolName}
                 setSchoolName={setSchoolName}
-                agreementType={agreementType}
-                setAgreementType={setAgreementType}
                 loading={loading}
                 setLoading={setLoading}
                 loadOrders={loadOrders}
@@ -772,24 +767,24 @@ const InventoryManagement = () => {
                 orderSummary={orderSummary}
                 selectedWarehouse={selectedWarehouse}
                 setSelectedWarehouse={(value) => {
-                  setSelectedWarehouse(typeof value === 'string' ? [value] : value);
-                  setSelectedAssetType([]);
-                  setSelectedModel([]);
-                  setSelectedProduct([]);
-                  setSelectedAssetStatus([]);
-                  setSelectedAssetGroup([]);
+                  setSelectedWarehouse(value);
+                  setSelectedAssetType('All');
+                  setSelectedModel('All');
+                  setSelectedProduct('All');
+                  setSelectedAssetStatus('All');
+                  setSelectedAssetGroup('All');
                 }}
                 selectedAssetType={selectedAssetType}
                 setSelectedAssetType={(value) => {
-                  setSelectedAssetType(typeof value === 'string' ? [value] : value);
-                  setSelectedModel([]);
+                  setSelectedAssetType(value);
+                  setSelectedModel('All');
                 }}
                 selectedModel={selectedModel}
-                setSelectedModel={(value) => setSelectedModel(typeof value === 'string' ? [value] : value)}
+                setSelectedModel={setSelectedModel}
                 selectedAssetStatus={selectedAssetStatus}
-                setSelectedAssetStatus={(value) => setSelectedAssetStatus(typeof value === 'string' ? [value] : value)}
+                setSelectedAssetStatus={setSelectedAssetStatus}
                 selectedAssetGroup={selectedAssetGroup}
-                setSelectedAssetGroup={(value) => setSelectedAssetGroup(typeof value === 'string' ? [value] : value)}
+                setSelectedAssetGroup={setSelectedAssetGroup}
                 selectedProduct={selectedProduct}
                 setSelectedProduct={setSelectedProduct}
                 selectedSdCardSize={selectedSdCardSize}
