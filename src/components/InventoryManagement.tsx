@@ -32,8 +32,10 @@ const InventoryManagement = () => {
   const [selectedOrderType, setSelectedOrderType] = useState<string[]>([]);
   const [selectedAssetGroup, setSelectedAssetGroup] = useState<string[]>([]);
   const [selectedAssetCondition, setSelectedAssetCondition] = useState<string[]>([]);
-  const [fromDate, setFromDate] = useState<string>('');
-  const [toDate, setToDate] = useState<string>('');
+  const [fromDate, setFromDate] = useState<DateRange | undefined>(undefined);
+  const [toDate, setToDate] = useState<DateRange | undefined>(undefined);
+  const [devicesFromDate, setDevicesFromDate] = useState<DateRange | undefined>(undefined);
+  const [auditFromDate, setAuditFromDate] = useState<DateRange | undefined>(undefined);
   const [showDeleted, setShowDeleted] = useState<boolean>(false);
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [orderType, setOrderType] = useState('');
@@ -770,24 +772,24 @@ const InventoryManagement = () => {
                 orderSummary={orderSummary}
                 selectedWarehouse={selectedWarehouse}
                 setSelectedWarehouse={(value) => {
-                  setSelectedWarehouse(value);
-                  setSelectedAssetType('All');
-                  setSelectedModel('All');
-                  setSelectedProduct('All');
-                  setSelectedAssetStatus('All');
-                  setSelectedAssetGroup('All');
+                  setSelectedWarehouse(typeof value === 'string' ? [value] : value);
+                  setSelectedAssetType([]);
+                  setSelectedModel([]);
+                  setSelectedProduct([]);
+                  setSelectedAssetStatus([]);
+                  setSelectedAssetGroup([]);
                 }}
                 selectedAssetType={selectedAssetType}
                 setSelectedAssetType={(value) => {
-                  setSelectedAssetType(value);
-                  setSelectedModel('All');
+                  setSelectedAssetType(typeof value === 'string' ? [value] : value);
+                  setSelectedModel([]);
                 }}
                 selectedModel={selectedModel}
-                setSelectedModel={setSelectedModel}
+                setSelectedModel={(value) => setSelectedModel(typeof value === 'string' ? [value] : value)}
                 selectedAssetStatus={selectedAssetStatus}
-                setSelectedAssetStatus={setSelectedAssetStatus}
+                setSelectedAssetStatus={(value) => setSelectedAssetStatus(typeof value === 'string' ? [value] : value)}
                 selectedAssetGroup={selectedAssetGroup}
-                setSelectedAssetGroup={setSelectedAssetGroup}
+                setSelectedAssetGroup={(value) => setSelectedAssetGroup(typeof value === 'string' ? [value] : value)}
                 selectedProduct={selectedProduct}
                 setSelectedProduct={setSelectedProduct}
                 selectedSdCardSize={selectedSdCardSize}
