@@ -456,7 +456,7 @@ const handleCancelSearch = () => {
           const newFarCodes = [...a.farCodes];
           newStatuses[index] = device.asset_status || 'Fresh';
           newGroups[index] = device.asset_group || 'NFA';
-          newFarCodes[index] = device.far_code ? String(device.far_code) : '';
+          newFarCodes[index] = device.far_code || null;
           return { ...a, assetStatuses: newStatuses, assetGroups: newGroups, farCodes: newFarCodes };
         }
         return a;
@@ -723,7 +723,7 @@ const handleCancelSearch = () => {
             asset_status: assetStatus,
             asset_group: assetGroup,
             asset_condition: assetCondition,
-            far_code: farCode,
+            far_code: farCode ? Number(farCode) : null,
             created_by: userEmail,
             updated_by: userEmail,
             is_deleted: false,
@@ -819,7 +819,7 @@ const handleCancelSearch = () => {
               asset_status: assetStatus,
               asset_group: assetGroup,
               asset_condition: assetCondition,
-              far_code: farCode,
+              far_code: farCode ? Number(farCode) : null,
               created_by: userEmail,
               updated_by: userEmail,
               is_deleted: false,

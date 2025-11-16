@@ -246,12 +246,10 @@ const EditOrderForm: React.FC<EditOrderFormProps> = ({ order, onSave, onCancel }
         status: isInward ? 'Available' : 'Assigned',
         material_type: isInward ? 'Inward' : 'Outward',
         configuration: formData.configuration || null,
-        product: formData.product || null,
+        product: formData.product || 'Lead',
         sd_card_size: formData.sd_card_size || null,
         profile_id: formData.profile_id || null,
-            configuration: formData.configuration || null,
-            product: formData.product || 'Lead',
-            asset_status: 'Fresh',
+        asset_status: 'Fresh',
         asset_group: 'NFA',
         asset_condition: '',
         far_code: '',
@@ -499,10 +497,7 @@ const EditOrderForm: React.FC<EditOrderFormProps> = ({ order, onSave, onCancel }
           if (device.asset_group !== originalDevice.asset_group) changes.asset_group = device.asset_group;
           if (device.asset_condition !== originalDevice.asset_condition) changes.asset_condition = device.asset_condition;
           if (device.far_code !== originalDevice.far_code) {
-            const farCodeValue = device.far_code ? Number(device.far_code) : null;
-            if (!isNaN(farCodeValue as any)) {
-              changes.far_code = farCodeValue;
-            }
+            changes.far_code = device.far_code;
           }
           if (formData.sd_card_size !== originalDevice.sd_card_size) changes.sd_card_size = formData.sd_card_size;
           if (formData.profile_id !== originalDevice.profile_id) changes.profile_id = formData.profile_id;
@@ -558,7 +553,7 @@ const EditOrderForm: React.FC<EditOrderFormProps> = ({ order, onSave, onCancel }
             asset_status: device.asset_status || 'Fresh',
             asset_group: device.asset_group || 'NFA',
             asset_condition: device.asset_condition || null,
-            far_code: device.far_code ? Number(device.far_code) : null,
+            far_code: device.far_code || null,
             created_at: new Date().toISOString(),
             updated_at: new Date().toISOString(),
             created_by: userEmail,
@@ -586,7 +581,7 @@ const EditOrderForm: React.FC<EditOrderFormProps> = ({ order, onSave, onCancel }
             await logHistory('devices', newDevice.id, 'asset_condition', '', deviceData.asset_condition, userEmail, formData.sales_order, 'INSERT');
           }
           if (deviceData.far_code) {
-            await logHistory('devices', newDevice.id, 'far_code', '', deviceData.far_code, userEmail, formData.sales_order, 'INSERT');
+            await logHistory('devices', newDevice.id, 'far_code', '', String(deviceData.far_code), userEmail, formData.sales_order, 'INSERT');
           }
           if (deviceData.sd_card_size) {
             await logHistory('devices', newDevice.id, 'sd_card_size', '', deviceData.sd_card_size, userEmail, formData.sales_order, 'INSERT');
