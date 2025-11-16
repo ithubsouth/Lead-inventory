@@ -202,7 +202,7 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
       assetStatuses: ['Fresh'],
       assetGroups: ['NFA'],
       asset_conditions: [''],
-      farCodes: [''],
+      farCodes: [null],
       hasSerials,
     };
     setAssets([...assets, newAsset]);
@@ -373,7 +373,7 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
           asset.assetStatuses.push('Fresh');
           asset.assetGroups.push('NFA');
           asset.asset_conditions.push('');
-          asset.farCodes.push('');
+          asset.farCodes.push(null);
         }
       });
       setAssets(Array.from(groupedAssets.values()));
@@ -439,7 +439,7 @@ const handleCancelSearch = () => {
             const newFarCodes = [...a.farCodes];
             newStatuses[index] = 'Fresh';
             newGroups[index] = 'NFA';
-            newFarCodes[index] = '';
+            newFarCodes[index] = null;
             return { ...a, assetStatuses: newStatuses, assetGroups: newGroups, farCodes: newFarCodes };
           }
           return a;
@@ -538,7 +538,7 @@ const handleCancelSearch = () => {
             const newFarCodes = [...a.farCodes];
             newStatuses[index] = 'Fresh';
             newGroups[index] = 'NFA';
-            newFarCodes[index] = '';
+            newFarCodes[index] = null;
             return { ...a, assetStatuses: newStatuses, assetGroups: newGroups, farCodes: newFarCodes };
           }
           return a;
