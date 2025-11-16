@@ -41,7 +41,6 @@ const InventoryManagement = () => {
   const [dealId, setDealId] = useState('');
   const [nucleusId, setNucleusId] = useState('');
   const [schoolName, setSchoolName] = useState('');
-  const [agreementType, setAgreementType] = useState('');
   const [tablets, setTablets] = useState<TabletItem[]>([]);
   const [tvs, setTvs] = useState<TVItem[]>([]);
   const { toast } = useToast();
@@ -716,8 +715,6 @@ const InventoryManagement = () => {
                 setNucleusId={setNucleusId}
                 schoolName={schoolName}
                 setSchoolName={setSchoolName}
-                agreementType={agreementType}
-                setAgreementType={setAgreementType}
                 loading={loading}
                 setLoading={setLoading}
                 loadOrders={loadOrders}
