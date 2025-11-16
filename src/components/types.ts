@@ -106,7 +106,8 @@ export interface Device {
   asset_status?: string | null;
   asset_group?: string | null;
   asset_condition?: string | null;
-  far_code?: string | null; // Added to match DevicesTable usage
+  asset_check?: string | null;
+  far_code?: number | null;
   status: 'Stock' | 'Assigned' | 'Available';
   created_at: string;
   created_by?: string;
@@ -116,6 +117,8 @@ export interface Device {
   is_deleted: boolean;
   order_id: string;
   material_type?: 'Inward' | 'Outward';
+  audited_at?: string | null;
+  audited_by?: string | null;
 }
 
 export interface OrderSummary {

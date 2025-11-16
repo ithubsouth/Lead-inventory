@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Search, Download } from 'lucide-react';
-import { OrderSummary, Device } from './types';
+import { Device } from './types';
 import { formatDate } from './utils';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Input } from '@/components/ui/input';
@@ -11,9 +11,9 @@ import { DatePickerWithRange } from './DatePickerWithRange';
 import { DateRange } from 'react-day-picker';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
-interface OrderSummary {
+interface LocalOrderSummary {
   warehouse: string;
-  asset_type: 'Tablet' | 'TV' | 'SD Card' | 'Pendrive';
+  asset_type: 'Tablet' | 'TV' | 'SD Card' | 'Pendrive' | 'Cover' | 'Other';
   model: string;
   inward?: number;
   outward?: number;
@@ -182,17 +182,17 @@ const OrderSummaryTable: React.FC<OrderSummaryTableProps> = ({
       filteredDevices = filteredDevices.filter(d => new Date(d.created_at || d.updated_at || '1970-01-01') <= new Date(fromDate.to));
     }
 
-    const summaryMap = new Map<string, OrderSummary>();
+    const summaries: Map<string, LocalOrderSummary> = new Map();
 
     filteredDevices.forEach((d) => {
       if (!d.warehouse || !d.asset_type || !d.model) return;
 
       // Main device summary
       const key = `${d.warehouse}-${d.asset_type}-${d.model}`;
-      if (!summaryMap.has(key)) {
-        summaryMap.set(key, {
+      if (!summaries.has(key)) {
+        summaries.set(key, {
           warehouse: d.warehouse,
-          asset_type: d.asset_type as 'Tablet' | 'TV' | 'SD Card' | 'Pendrive',
+          asset_type: d.asset_type as 'Tablet' | 'TV' | 'SD Card' | 'Pendrive' | 'Cover' | 'Other',
           model: d.model,
           inward: 0,
           outward: 0,
@@ -202,9 +202,9 @@ const OrderSummaryTable: React.FC<OrderSummaryTableProps> = ({
           stockAssetStatusCounts: {},
         });
       }
-      const s = summaryMap.get(key)!;
+      const s = summaries.get(key)!;
       const status = d.asset_status || 'Unknown';
-      const isInward = d.transaction_type === 'Inward' || (!d.transaction_type && d.status !== 'Assigned');
+      const isInward = d.material_type === 'Inward';
 
       if (isInward) {
         s.inward! += 1;
@@ -220,8 +220,8 @@ const OrderSummaryTable: React.FC<OrderSummaryTableProps> = ({
       // SD Card summary (only for Tablets with sd_card_size)
       if (d.asset_type === 'Tablet' && d.sd_card_size) {
         const sdKey = `${d.warehouse}-SD Card-${d.sd_card_size}`;
-        if (!summaryMap.has(sdKey)) {
-          summaryMap.set(sdKey, {
+        if (!summaries.has(sdKey)) {
+          summaries.set(sdKey, {
             warehouse: d.warehouse,
             asset_type: 'SD Card',
             model: d.sd_card_size,
@@ -233,7 +233,7 @@ const OrderSummaryTable: React.FC<OrderSummaryTableProps> = ({
             stockAssetStatusCounts: {},
           });
         }
-        const sd = summaryMap.get(sdKey)!;
+        const sd = summaries.get(sdKey)!;
         const sdStatus = d.asset_status || 'Unknown'; // SD Card inherits Tablet's status
         if (isInward) {
           sd.inward! += 1;
@@ -248,15 +248,15 @@ const OrderSummaryTable: React.FC<OrderSummaryTableProps> = ({
       }
     });
 
-    let computedSummaries = Array.from(summaryMap.values());
+    let computedSummaries = Array.from(summaries.values()) as LocalOrderSummary[];
     console.log('Computed Summaries:', computedSummaries);
 
     // Filter out zero counts for non-deleted view
     if (!showDeleted) {
       computedSummaries = computedSummaries.filter(s =>
         summaryType === 'stock'
-          ? s.inward! > 0 || s.outward! > 0
-          : s.stock! > 0 || Object.values(s.inwardAssetStatusCounts || {}).some(count => count > 0) || Object.values(s.outwardAssetStatusCounts || {}).some(count => count > 0) || Object.values(s.stockAssetStatusCounts || {}).some(count => count > 0)
+          ? (s.inward || 0) > 0 || (s.outward || 0) > 0
+          : (s.stock || 0) > 0 || Object.values(s.inwardAssetStatusCounts || {}).some(count => count > 0) || Object.values(s.outwardAssetStatusCounts || {}).some(count => count > 0) || Object.values(s.stockAssetStatusCounts || {}).some(count => count > 0)
       );
     }
 
@@ -343,7 +343,7 @@ const OrderSummaryTable: React.FC<OrderSummaryTableProps> = ({
   if (pageRange[pageRange.length - 1] < totalPages) pageRange.push('...');
   if (pageRange[pageRange.length - 1] !== totalPages) pageRange.push(totalPages);
 
-  const downloadCSV = (data: OrderSummary[], filename: string) => {
+  const downloadCSV = (data: LocalOrderSummary[], filename: string) => {
     if (data.length === 0) {
       toast({ title: 'No Data', description: 'No data available to download', variant: 'destructive' });
       return;
@@ -567,12 +567,11 @@ const OrderSummaryTable: React.FC<OrderSummaryTableProps> = ({
             />
             <div style={{ flex: '1', minWidth: '150px' }}>
               <label htmlFor="dateRangeFilter" style={{ fontSize: '12px', color: '#6b7280', display: 'block', marginBottom: '2px', whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' }}>Date Range</label>
-              <DatePickerWithRange
-                date={fromDate}
-                setDate={setFromDate}
-                className="h-7 w-full"
-                style={{ fontSize: '12px', border: '1px solid #d1d5db', borderRadius: '4px', padding: '6px', height: '28px' }}
-              />
+            <DatePickerWithRange
+              date={fromDate}
+              setDate={setFromDate}
+              className="h-7 w-full"
+            />
             </div>
           </div>
         </div>
