@@ -25,6 +25,8 @@ interface OrdersTableProps {
   setSelectedConfiguration: (value: string[]) => void;
   selectedOrderType: string[];
   setSelectedOrderType: (value: string[]) => void;
+  selectedAgreementType: string[];
+  setSelectedAgreementType: (value: string[]) => void;
   selectedProduct: string[];
   setSelectedProduct: (value: string[]) => void;
   selectedStatus: string[];
@@ -57,6 +59,8 @@ const OrdersTable: React.FC<OrdersTableProps> = ({
   setSelectedConfiguration,
   selectedOrderType,
   setSelectedOrderType,
+  selectedAgreementType,
+  setSelectedAgreementType,
   selectedProduct,
   setSelectedProduct,
   selectedStatus,
@@ -132,6 +136,7 @@ const OrdersTable: React.FC<OrdersTableProps> = ({
           model: selectedModel,
           configuration: selectedConfiguration,
           orderType: selectedOrderType,
+          agreementType: selectedAgreementType,
           product: selectedProduct,
           status: selectedStatus,
           sdCardSize: selectedSdCardSize,
@@ -158,6 +163,7 @@ const OrdersTable: React.FC<OrdersTableProps> = ({
                         key === 'model' ? 'model' :
                         key === 'configuration' ? 'configuration' :
                         key === 'orderType' ? 'order_type' :
+                        key === 'agreementType' ? 'agreement_type' :
                         key === 'product' ? 'product' :
                         key === 'status' ? 'status' :
                         key === 'sdCardSize' ? 'sd_card_size' : '';
@@ -173,6 +179,7 @@ const OrdersTable: React.FC<OrdersTableProps> = ({
       models: [...new Set(getFilteredOrders('model').map(o => o.model || ''))].filter(Boolean).sort(),
       configurations: [...new Set(getFilteredOrders('configuration').map(o => o.configuration || ''))].filter(Boolean).sort(),
       orderTypes: [...new Set(getFilteredOrders('orderType').map(o => o.order_type || ''))].filter(Boolean).sort(),
+      agreementTypes: [...new Set(getFilteredOrders('agreementType').map(o => o.agreement_type || ''))].filter(Boolean).sort(),
       products: [...new Set(getFilteredOrders('product').map(o => o.product || ''))].filter(Boolean).sort(),
       statuses: [...new Set(getFilteredOrders('status').map(o => o.status || ''))].filter(Boolean).sort(),
       sdCardSizes: [...new Set(getFilteredOrders('sdCardSize').map(o => o.sd_card_size || ''))].filter(Boolean).sort(),
@@ -186,6 +193,7 @@ const OrdersTable: React.FC<OrdersTableProps> = ({
     selectedModel,
     selectedConfiguration,
     selectedOrderType,
+    selectedAgreementType,
     selectedProduct,
     selectedStatus,
     selectedSdCardSize,
@@ -204,6 +212,7 @@ const OrdersTable: React.FC<OrdersTableProps> = ({
     resetIfInvalid(selectedModel, uniqueValues.models, setSelectedModel);
     resetIfInvalid(selectedConfiguration, uniqueValues.configurations, setSelectedConfiguration);
     resetIfInvalid(selectedOrderType, uniqueValues.orderTypes, setSelectedOrderType);
+    resetIfInvalid(selectedAgreementType, uniqueValues.agreementTypes, setSelectedAgreementType);
     resetIfInvalid(selectedProduct, uniqueValues.products, setSelectedProduct);
     resetIfInvalid(selectedStatus, uniqueValues.statuses, setSelectedStatus);
     resetIfInvalid(selectedSdCardSize, uniqueValues.sdCardSizes, setSelectedSdCardSize);
@@ -215,6 +224,7 @@ const OrdersTable: React.FC<OrdersTableProps> = ({
     selectedModel,
     selectedConfiguration,
     selectedOrderType,
+    selectedAgreementType,
     selectedProduct,
     selectedStatus,
     selectedSdCardSize,
@@ -223,6 +233,7 @@ const OrdersTable: React.FC<OrdersTableProps> = ({
     setSelectedModel,
     setSelectedConfiguration,
     setSelectedOrderType,
+    setSelectedAgreementType,
     setSelectedProduct,
     setSelectedStatus,
     setSelectedSdCardSize,
@@ -237,6 +248,7 @@ const OrdersTable: React.FC<OrdersTableProps> = ({
       const matchesModel = selectedModel.length === 0 || selectedModel.includes(order.model || '');
       const matchesConfiguration = selectedConfiguration.length === 0 || selectedConfiguration.includes(order.configuration || '');
       const matchesOrderType = selectedOrderType.length === 0 || selectedOrderType.includes(order.order_type || '');
+      const matchesAgreementType = selectedAgreementType.length === 0 || selectedAgreementType.includes(order.agreement_type || '');
       const matchesProduct = selectedProduct.length === 0 || selectedProduct.includes(order.product || '');
       const matchesStatus = selectedStatus.length === 0 || selectedStatus.includes(order.status || '');
       const matchesSdCardSize = selectedSdCardSize.length === 0 || selectedSdCardSize.includes(order.sd_card_size || '');
@@ -645,6 +657,14 @@ const OrdersTable: React.FC<OrdersTableProps> = ({
               value={selectedOrderType}
               onChange={setSelectedOrderType}
               placeholder="Select Order Types"
+            />
+            <MultiSelect
+              id="agreementTypeFilter"
+              label="Agreement Type"
+              options={uniqueValues.agreementTypes}
+              value={selectedAgreementType}
+              onChange={setSelectedAgreementType}
+              placeholder="Select Agreement Types"
             />
             <MultiSelect
               id="productFilter"

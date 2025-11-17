@@ -501,7 +501,9 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
           if (!serial) continue;
           const latestDevice = latestBySerial[serial];
           if (latestDevice) {
-            if (isInward && latestDevice.material_type === 'Inward' && latestDevice.warehouse !== asset.location) {
+            if (isInward && latestDevice.material_type === 'Inward' && latestDevice.warehouse === asset.location) {
+              serialErrors[i] = `Already in Stock`;
+            } else if (isInward && latestDevice.material_type === 'Inward' && latestDevice.warehouse !== asset.location) {
               serialErrors[i] = `Currently Inward in ${latestDevice.warehouse}`;
             } else if (!isInward && latestDevice.material_type === 'Outward' && latestDevice.warehouse !== asset.location) {
               serialErrors[i] = `Currently Outward in ${latestDevice.warehouse}`;
@@ -553,6 +555,10 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
     }
     if (!schoolName.trim()) {
       toast({ title: 'Error', description: 'School Name is required', variant: 'destructive' });
+      return false;
+    }
+    if (!dealId.trim()) {
+      toast({ title: 'Error', description: 'Deal ID is required', variant: 'destructive' });
       return false;
     }
     if (assets.length === 0) {
@@ -816,6 +822,7 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
               deal_id: dealId || null,
               school_name: schoolName,
               nucleus_id: nucleusId || null,
+              agreement_type: agreementType || null,
               serial_numbers: assetSerials,
               order_date: new Date().toISOString(),
               configuration: asset.configuration || null,
@@ -1469,7 +1476,7 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
             />
           </div>
           <div>
-            <label style={{ fontSize: '12px', display: 'block', marginBottom: '4px' }}>Deal ID</label>
+            <label className="required-asterisk" style={{ fontSize: '12px', display: 'block', marginBottom: '4px' }}>Deal ID</label>
             <input
               type="text"
               value={dealId}
@@ -1477,6 +1484,20 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
               disabled={editMode}
               style={{ width: '100%', padding: '8px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '14px' }}
             />
+          </div>
+          <div>
+            <label style={{ fontSize: '12px', display: 'block', marginBottom: '4px' }}>Agreement Type</label>
+            <select
+              value={agreementType}
+              onChange={(e) => setAgreementType(e.target.value)}
+              disabled={editMode}
+              style={{ width: '100%', padding: '8px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '14px' }}
+            >
+              <option value="">Select Agreement Type</option>
+              {['PX', 'PY', 'PZ', 'PAA', 'PB', 'PC', 'PD', 'PE', 'PF'].map(type => (
+                <option key={type} value={type}>{type}</option>
+              ))}
+            </select>
           </div>
           <div>
             <label style={{ fontSize: '12px', display: 'block', marginBottom: '4px' }}>Nucleus ID</label>
@@ -1588,6 +1609,7 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
                       'Deal ID',
                       'School Name',
                       'Nucleus ID',
+                      'Agreement Type',
                       'Order Type',
                       'Asset Type',
                       'Model',
@@ -1607,6 +1629,7 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
                         'DEAL123',
                         'School A',
                         'NUC001',
+                        'PX',
                         'Hardware',
                         'Tablet',
                         'Lenovo TB301XU',
@@ -1823,6 +1846,7 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
                         'Deal ID',
                         'School Name',
                         'Nucleus ID',
+                        'Agreement Type',
                         'Order Type',
                         'Asset Type',
                         'Model',
@@ -1862,6 +1886,7 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
                           const dealIdVal = getValue('Deal ID');
                           const schoolNameVal = getValue('School Name');
                           const nucleusIdVal = getValue('Nucleus ID');
+                          const agreementTypeVal = getValue('Agreement Type');
                           const orderTypeVal = getValue('Order Type');
                           const assetTypeVal = getValue('Asset Type');
                           const modelVal = getValue('Model');
@@ -1937,6 +1962,7 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
                           if (dealIdVal && !dealId) setDealId(dealIdVal);
                           if (schoolNameVal && !schoolName) setSchoolName(schoolNameVal);
                           if (nucleusIdVal && !nucleusId) setNucleusId(nucleusIdVal);
+                          if (agreementTypeVal && !agreementType) setAgreementType(agreementTypeVal);
                           if (orderTypeVal && !orderType) setOrderType(orderTypeVal);
                         } catch (rowError) {
                           errors.push({

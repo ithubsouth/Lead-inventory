@@ -129,4 +129,11 @@ All colors MUST be HSL.
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
   }
+
+  /* Required field indicator */
+  .required-asterisk::after {
+    content: ' *';
+    color: hsl(var(--destructive));
+    font-weight: 600;
+  }
 }
