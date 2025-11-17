@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Search, Download } from 'lucide-react';
-import { Device } from './types';
+import { OrderSummary, Device } from './types';
 import { formatDate } from './utils';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Input } from '@/components/ui/input';
@@ -39,10 +39,6 @@ interface OrderSummaryTableProps {
   setSelectedProduct: (value: string[]) => void;
   selectedAssetCondition: string[];
   setSelectedAssetCondition: (value: string[]) => void;
-  selectedAgreementType: string[];
-  setSelectedAgreementType: (value: string[]) => void;
-  selectedSdCardSize: string[];
-  setSelectedSdCardSize: (value: string[]) => void;
   fromDate: DateRange | undefined;
   setFromDate: (range: DateRange | undefined) => void;
   showDeleted: boolean;
@@ -67,10 +63,6 @@ const OrderSummaryTable: React.FC<OrderSummaryTableProps> = ({
   setSelectedProduct,
   selectedAssetCondition,
   setSelectedAssetCondition,
-  selectedAgreementType,
-  setSelectedAgreementType,
-  selectedSdCardSize,
-  setSelectedSdCardSize,
   fromDate,
   setFromDate,
   showDeleted,
@@ -109,8 +101,6 @@ const OrderSummaryTable: React.FC<OrderSummaryTableProps> = ({
       assetStatuses: [...new Set(filteredDevices.map(d => d.asset_status || '').filter(Boolean))].sort() as string[],
       assetGroups: [...new Set(filteredDevices.map(d => d.asset_group || '').filter(Boolean))].sort() as string[],
       assetConditions: [...new Set(filteredDevices.map(d => d.asset_condition || '').filter(Boolean))].sort() as string[],
-      agreementTypes: [...new Set(filteredDevices.map(d => d.agreement_type || '').filter(Boolean))].sort() as string[],
-      sdCardSizes: [...new Set(filteredDevices.map(d => d.sd_card_size || '').filter(Boolean))].sort() as string[],
     };
   }, [activeDevices, fromDate]);
 
@@ -214,7 +204,7 @@ const OrderSummaryTable: React.FC<OrderSummaryTableProps> = ({
       }
       const s = summaryMap.get(key)!;
       const status = d.asset_status || 'Unknown';
-      const isInward = d.material_type === 'Inward' || (!d.material_type && d.status !== 'Assigned');
+      const isInward = d.transaction_type === 'Inward' || (!d.transaction_type && d.status !== 'Assigned');
 
       if (isInward) {
         s.inward! += 1;
@@ -411,7 +401,7 @@ const OrderSummaryTable: React.FC<OrderSummaryTableProps> = ({
     setFromDate(undefined);
     setSearchQuery('');
     setShowDeleted(false);
-    setSummaryType('stockSplit');
+    setSummaryType('stock');
     setCurrentPage(1);
   };
 
@@ -425,20 +415,20 @@ const OrderSummaryTable: React.FC<OrderSummaryTableProps> = ({
     assetStatus: '100px',
   };
 
-  const headerStyle = (top: string | number): React.CSSProperties => ({
+  const headerStyle = (top: string | number) => ({
     fontSize: '12px',
     padding: '8px',
     borderBottom: '1px solid #d1d5db',
-    textAlign: 'left' as const,
-    position: 'sticky' as const,
+    textAlign: 'left',
+    position: 'sticky',
     top: typeof top === 'number' ? `${top}px` : top,
     background: '#fff',
     zIndex: 20,
   });
 
-  const subHeaderStyle = (top: string | number): React.CSSProperties => ({
+  const subHeaderStyle = (top: string | number) => ({
     ...headerStyle(top),
-    textAlign: 'center' as const,
+    textAlign: 'center',
   });
 
   const groupHeaderHeight = '28px';
@@ -575,20 +565,13 @@ const OrderSummaryTable: React.FC<OrderSummaryTableProps> = ({
               onChange={setSelectedAssetCondition}
               placeholder="Select Asset Conditions"
             />
-            <MultiSelect
-              id="sdCardSizeFilter"
-              label="SD Card Size"
-              options={uniqueValues.sdCardSizes}
-              value={selectedSdCardSize}
-              onChange={setSelectedSdCardSize}
-              placeholder="Select SD Card Sizes"
-            />
             <div style={{ flex: '1', minWidth: '150px' }}>
               <label htmlFor="dateRangeFilter" style={{ fontSize: '12px', color: '#6b7280', display: 'block', marginBottom: '2px', whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' }}>Date Range</label>
               <DatePickerWithRange
                 date={fromDate}
                 setDate={setFromDate}
                 className="h-7 w-full"
+                style={{ fontSize: '12px', border: '1px solid #d1d5db', borderRadius: '4px', padding: '6px', height: '28px' }}
               />
             </div>
           </div>
@@ -612,22 +595,22 @@ const OrderSummaryTable: React.FC<OrderSummaryTableProps> = ({
                 <TableHeader>
                   {summaryType === 'stock' ? (
                     <TableRow>
-                      <TableHead style={{ ...headerStyle(0), width: columnWidths.warehouse, position: 'sticky' as const }}>Warehouse</TableHead>
-                      <TableHead style={{ ...headerStyle(0), width: columnWidths.asset_type, position: 'sticky' as const }}>Asset Type</TableHead>
-                      <TableHead style={{ ...headerStyle(0), width: columnWidths.model, position: 'sticky' as const }}>Model</TableHead>
-                      <TableHead style={{ ...headerStyle(0), width: columnWidths.inward, textAlign: 'center', position: 'sticky' as const }}>Inward</TableHead>
-                      <TableHead style={{ ...headerStyle(0), width: columnWidths.outward, textAlign: 'center', position: 'sticky' as const }}>Outward</TableHead>
-                      <TableHead style={{ ...headerStyle(0), width: columnWidths.stock, textAlign: 'center', position: 'sticky' as const }}>Stock</TableHead>
+                      <TableHead style={{ ...headerStyle(0), width: columnWidths.warehouse }}>Warehouse</TableHead>
+                      <TableHead style={{ ...headerStyle(0), width: columnWidths.asset_type }}>Asset Type</TableHead>
+                      <TableHead style={{ ...headerStyle(0), width: columnWidths.model }}>Model</TableHead>
+                      <TableHead style={{ ...headerStyle(0), width: columnWidths.inward, textAlign: 'center' }}>Inward</TableHead>
+                      <TableHead style={{ ...headerStyle(0), width: columnWidths.outward, textAlign: 'center' }}>Outward</TableHead>
+                      <TableHead style={{ ...headerStyle(0), width: columnWidths.stock, textAlign: 'center' }}>Stock</TableHead>
                     </TableRow>
                   ) : (
                     <>
                       <TableRow>
-                        <TableHead rowSpan={2} style={{ ...headerStyle(0), width: columnWidths.warehouse, position: 'sticky' as const }}>Warehouse</TableHead>
-                        <TableHead rowSpan={2} style={{ ...headerStyle(0), width: columnWidths.asset_type, position: 'sticky' as const }}>Asset Type</TableHead>
-                        <TableHead rowSpan={2} style={{ ...headerStyle(0), width: columnWidths.model, borderRight: '1px solid #d1d5db', position: 'sticky' as const }}>Model</TableHead>
-                        <TableHead colSpan={assetStatusColumns.length} style={{ ...headerStyle(0), textAlign: 'center', borderRight: '1px solid #d1d5db', position: 'sticky' as const }}>Inward</TableHead>
-                        <TableHead colSpan={assetStatusColumns.length} style={{ ...headerStyle(0), textAlign: 'center', borderRight: '1px solid #d1d5db', position: 'sticky' as const }}>Outward</TableHead>
-                        <TableHead colSpan={assetStatusColumns.length} style={{ ...headerStyle(0), textAlign: 'center', position: 'sticky' as const }}>Stock</TableHead>
+                        <TableHead rowSpan={2} style={{ ...headerStyle(0), width: columnWidths.warehouse }}>Warehouse</TableHead>
+                        <TableHead rowSpan={2} style={{ ...headerStyle(0), width: columnWidths.asset_type }}>Asset Type</TableHead>
+                        <TableHead rowSpan={2} style={{ ...headerStyle(0), width: columnWidths.model, borderRight: '1px solid #d1d5db' }}>Model</TableHead>
+                        <TableHead colSpan={assetStatusColumns.length} style={{ ...headerStyle(0), textAlign: 'center', borderRight: '1px solid #d1d5db' }}>Inward</TableHead>
+                        <TableHead colSpan={assetStatusColumns.length} style={{ ...headerStyle(0), textAlign: 'center', borderRight: '1px solid #d1d5db' }}>Outward</TableHead>
+                        <TableHead colSpan={assetStatusColumns.length} style={{ ...headerStyle(0), textAlign: 'center' }}>Stock</TableHead>
                       </TableRow>
                       <TableRow>
                         {assetStatusColumns.map((status, idx) => (
@@ -637,7 +620,6 @@ const OrderSummaryTable: React.FC<OrderSummaryTableProps> = ({
                               ...subHeaderStyle(groupHeaderHeight),
                               width: columnWidths.assetStatus,
                               borderRight: idx === assetStatusColumns.length - 1 ? '1px solid #d1d5db' : 'none',
-                              position: 'sticky' as const
                             }}
                           >
                             {status}
@@ -650,7 +632,6 @@ const OrderSummaryTable: React.FC<OrderSummaryTableProps> = ({
                               ...subHeaderStyle(groupHeaderHeight),
                               width: columnWidths.assetStatus,
                               borderRight: idx === assetStatusColumns.length - 1 ? '1px solid #d1d5db' : 'none',
-                              position: 'sticky' as const
                             }}
                           >
                             {status}
@@ -663,7 +644,6 @@ const OrderSummaryTable: React.FC<OrderSummaryTableProps> = ({
                               ...subHeaderStyle(groupHeaderHeight),
                               width: columnWidths.assetStatus,
                               borderRight: idx === assetStatusColumns.length - 1 ? '1px solid #d1d5db' : 'none',
-                              position: 'sticky' as const
                             }}
                           >
                             {status}

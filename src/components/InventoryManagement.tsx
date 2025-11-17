@@ -677,7 +677,7 @@ const InventoryManagement = () => {
           </div>
         </div>
       </div>
-      <div className='flex-1 overflow-y-auto pt-[70px]'>
+      <div className='flex-1 overflow-y-auto pt-[50px]'>
         <div className='container mx-auto px-4 py-6 h-full'>
           <Tabs defaultValue='create' className='w-full h-full flex flex-col'>
             <TabsList className='grid w-full grid-cols-5 mb-6 bg-card/50 backdrop-blur-sm border border-border/50 flex-shrink-0'>
