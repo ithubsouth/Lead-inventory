@@ -30,6 +30,7 @@ const InventoryManagement = () => {
   const [selectedStatus, setSelectedStatus] = useState<string[]>([]);
   const [selectedSdCardSize, setSelectedSdCardSize] = useState<string[]>([]);
   const [selectedOrderType, setSelectedOrderType] = useState<string[]>([]);
+  const [selectedAgreementType, setSelectedAgreementType] = useState<string[]>([]);
   const [selectedAssetGroup, setSelectedAssetGroup] = useState<string[]>([]);
   const [selectedAssetCondition, setSelectedAssetCondition] = useState<string[]>([]);
   const [fromDate, setFromDate] = useState<DateRange | undefined>();
@@ -740,6 +741,8 @@ const InventoryManagement = () => {
                 setSelectedConfiguration={setSelectedConfiguration}
                 selectedOrderType={selectedOrderType}
                 setSelectedOrderType={setSelectedOrderType}
+                selectedAgreementType={selectedAgreementType}
+                setSelectedAgreementType={setSelectedAgreementType}
                 selectedProduct={selectedProduct}
                 setSelectedProduct={setSelectedProduct}
                 selectedStatus={selectedStatus}
@@ -785,7 +788,11 @@ const InventoryManagement = () => {
                 selectedProduct={selectedProduct}
                 setSelectedProduct={setSelectedProduct}
                 selectedAssetCondition={selectedAssetCondition}
-                setSelectedAssetCondition={setSelectedAssetCondition}                
+                setSelectedAssetCondition={setSelectedAssetCondition}
+                selectedAgreementType={selectedAgreementType}
+                setSelectedAgreementType={setSelectedAgreementType}
+                selectedSdCardSize={selectedSdCardSize}
+                setSelectedSdCardSize={setSelectedSdCardSize}
                 fromDate={fromDate}
                 setFromDate={setFromDate}
                 showDeleted={showDeleted}
@@ -815,6 +822,8 @@ const InventoryManagement = () => {
                 setSelectedSdCardSize={setSelectedSdCardSize}
                 selectedOrderType={selectedOrderType}
                 setSelectedOrderType={setSelectedOrderType}
+                selectedAgreementType={selectedAgreementType}
+                setSelectedAgreementType={setSelectedAgreementType}
                 selectedAssetGroup={selectedAssetGroup}
                 setSelectedAssetGroup={setSelectedAssetGroup}
                 selectedAssetCondition={selectedAssetCondition}

@@ -28,6 +28,8 @@ interface DevicesTableProps {
   setSelectedStatus: (value: string[]) => void;
   selectedOrderType: string[];
   setSelectedOrderType: (value: string[]) => void;
+  selectedAgreementType: string[];
+  setSelectedAgreementType: (value: string[]) => void;
   selectedAssetGroup: string[];
   setSelectedAssetGroup: (value: string[]) => void;
   selectedAssetCondition: string[];
@@ -60,6 +62,8 @@ const DevicesTable: React.FC<DevicesTableProps> = ({
   setSelectedStatus,
   selectedOrderType,
   setSelectedOrderType,
+  selectedAgreementType,
+  setSelectedAgreementType,
   selectedAssetGroup,
   setSelectedAssetGroup,
   selectedAssetCondition,
