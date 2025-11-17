@@ -141,8 +141,8 @@ const AuditTable: React.FC<AuditTableProps> = ({
       (d) =>
         getEffectiveStatus(d) === 'Stock' &&
         !d.is_deleted &&
-        !excludedAuditItems.assetTypes.includes(d.asset_type || '') &&
-        !excludedAuditItems.models.includes(d.model || '')
+        !excludedAuditItems.assetTypes.includes(d.asset_type as any) &&
+        !excludedAuditItems.models.includes(d.model as any)
     );
 
     const getFilteredDevices = (excludeFilter: string) => {
@@ -181,7 +181,7 @@ const AuditTable: React.FC<AuditTableProps> = ({
             }
             const prop = propertyMap[key as keyof typeof propertyMap];
             const value = d[prop as keyof Device];
-            return (filterValue as string[]).length === 0 || (filterValue as string[]).includes(value);
+            return (filterValue as string[]).length === 0 || (filterValue as string[]).includes(String(value));
           });
         const searchMatch =
           searchQuery.trim() === '' ||
@@ -204,7 +204,7 @@ const AuditTable: React.FC<AuditTableProps> = ({
             d.asset_condition || '',
           ]
             .filter(Boolean)
-            .some((field) => field.toLowerCase().includes(searchQuery.toLowerCase()));
+            .some((field) => String(field).toLowerCase().includes(searchQuery.toLowerCase()));
         return matches && searchMatch;
       });
     };
@@ -251,8 +251,8 @@ const AuditTable: React.FC<AuditTableProps> = ({
       const isStock =
         getEffectiveStatus(d) === 'Stock' &&
         !d.is_deleted &&
-        !excludedAuditItems.assetTypes.includes(d.asset_type || '') &&
-        !excludedAuditItems.models.includes(d.model || '');
+        !excludedAuditItems.assetTypes.includes(d.asset_type as any) &&
+        !excludedAuditItems.models.includes(d.model as any);
       const warehouseMatch = selectedWarehouse.length === 0 || selectedWarehouse.includes(d.warehouse || '');
       const assetTypeMatch = selectedAssetType.length === 0 || selectedAssetType.includes(d.asset_type || '');
       const modelMatch = selectedModel.length === 0 || selectedModel.includes(d.model || '');
@@ -298,7 +298,7 @@ const AuditTable: React.FC<AuditTableProps> = ({
           d.asset_condition || '',
         ]
           .filter(Boolean)
-          .some((field) => field.toLowerCase().includes(searchQuery.toLowerCase()));
+          .some((field) => String(field).toLowerCase().includes(searchQuery.toLowerCase()));
       const checkMatch = selectedAssetChecks.length === 0 || selectedAssetChecks.includes(d.asset_check || 'Unmatched');
 
       return (
@@ -468,7 +468,7 @@ const AuditTable: React.FC<AuditTableProps> = ({
       d.asset_check || 'Unmatched',
     ]);
 
-    const csvContent = [headers.join(','), ...csvRows.map((row) => row.map((value) => `"${value.replace(/"/g, '""')}"`).join(','))].join('\n');
+    const csvContent = [headers.join(','), ...csvRows.map((row) => row.map((value) => `"${String(value).replace(/"/g, '""')}"`).join(','))].join('\n');
 
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
@@ -730,7 +730,6 @@ const AuditTable: React.FC<AuditTableProps> = ({
                 date={fromDate}
                 setDate={setFromDate}
                 className="h-7 w-full"
-                style={{ fontSize: '12px', border: '1px solid #d1d5db', borderRadius: '4px', padding: '6px', height: '28px' }}
               />
             </div>
           </div>

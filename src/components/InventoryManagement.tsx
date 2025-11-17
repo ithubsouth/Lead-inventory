@@ -656,14 +656,11 @@ const InventoryManagement = () => {
     }
   };
 
-  const devicesFromDate: DateRange | undefined = fromDate || toDate ? {
-    from: fromDate ? new Date(fromDate) : undefined,
-    to: toDate ? new Date(toDate) : undefined
-  } : undefined;
+  const devicesFromDate: DateRange | undefined = fromDate;
 
   const setDevicesFromDate = (range: DateRange | undefined) => {
-    setFromDate(range?.from ? range.from.toISOString().split('T')[0] : '');
-    setToDate(range?.to ? range.to.toISOString().split('T')[0] : '');
+    setFromDate(range);
+    setToDate(undefined);
   };
 
   return (
@@ -749,10 +746,8 @@ const InventoryManagement = () => {
                 setSelectedStatus={setSelectedStatus}
                 selectedSdCardSize={selectedSdCardSize}
                 setSelectedSdCardSize={setSelectedSdCardSize}      
-                fromDate={fromDate}
-                setFromDate={setFromDate}
-                toDate={toDate}
-                setToDate={setToDate}
+                fromDate={devicesFromDate}
+                setFromDate={setDevicesFromDate}
                 showDeleted={showDeleted}
                 setShowDeleted={setShowDeleted}
                 searchQuery={searchQuery}
@@ -767,7 +762,6 @@ const InventoryManagement = () => {
             <TabsContent value='order' className='flex-1 overflow-y-auto'>
               <OrderSummaryTable
                 devices={devices}
-                orderSummary={orderSummary}
                 selectedWarehouse={selectedWarehouse}
                 setSelectedWarehouse={(value) => {
                   setSelectedWarehouse(Array.isArray(value) ? value : [value]);
@@ -790,14 +784,10 @@ const InventoryManagement = () => {
                 setSelectedAssetGroup={setSelectedAssetGroup}
                 selectedProduct={selectedProduct}
                 setSelectedProduct={setSelectedProduct}
-                selectedSdCardSize={selectedSdCardSize}
-                setSelectedSdCardSize={setSelectedSdCardSize}
                 selectedAssetCondition={selectedAssetCondition}
                 setSelectedAssetCondition={setSelectedAssetCondition}                
                 fromDate={fromDate}
                 setFromDate={setFromDate}
-                toDate={toDate}
-                setToDate={setToDate}
                 showDeleted={showDeleted}
                 setShowDeleted={setShowDeleted}
                 searchQuery={searchQuery}
@@ -858,8 +848,8 @@ const InventoryManagement = () => {
                 setSelectedAssetGroup={setSelectedAssetGroup}
                 selectedAssetCondition={selectedAssetCondition}
                 setSelectedAssetCondition={setSelectedAssetCondition}
-                fromDate={fromDate ? { from: new Date(fromDate), to: undefined } : undefined}
-                setFromDate={(range) => setFromDate(range?.from?.toISOString().split('T')[0] || '')}
+                fromDate={fromDate}
+                setFromDate={setFromDate}
                 searchQuery={searchQuery}
                 setSearchQuery={setSearchQuery}
                 onUpdateAssetCheck={handleUpdateAssetCheck}

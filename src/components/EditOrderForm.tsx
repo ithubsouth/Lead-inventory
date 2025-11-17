@@ -206,7 +206,7 @@ const EditOrderForm: React.FC<EditOrderFormProps> = ({ order, onSave, onCancel }
   const updateFarCode = (index: number, value: string) => {
     setDevices(prev => {
       const newDevices = [...prev];
-      newDevices[index] = { ...newDevices[index], far_code: value };
+      newDevices[index] = { ...newDevices[index], far_code: value ? parseInt(value) : null };
       return newDevices;
     });
   };
@@ -428,7 +428,7 @@ const EditOrderForm: React.FC<EditOrderFormProps> = ({ order, onSave, onCancel }
 
       orderFields.forEach(field => {
         if (formData[field as keyof Order] !== originalOrder[field as keyof Order]) {
-          orderChanges[field as keyof Order] = formData[field as keyof Order];
+          (orderChanges as any)[field] = formData[field as keyof Order];
         }
       });
 
@@ -575,8 +575,8 @@ const EditOrderForm: React.FC<EditOrderFormProps> = ({ order, onSave, onCancel }
           if (deviceData.asset_condition) {
             await logHistory('devices', newDevice.id, 'asset_condition', '', deviceData.asset_condition, userEmail, formData.sales_order, 'INSERT');
           }
-          if (deviceData.far_code) {
-            await logHistory('devices', newDevice.id, 'far_code', '', deviceData.far_code, userEmail, formData.sales_order, 'INSERT');
+          if (deviceData.far_code !== null && deviceData.far_code !== undefined) {
+            await logHistory('devices', newDevice.id, 'far_code', '', String(deviceData.far_code), userEmail, formData.sales_order, 'INSERT');
           }
           if (deviceData.sd_card_size) {
             await logHistory('devices', newDevice.id, 'sd_card_size', '', deviceData.sd_card_size, userEmail, formData.sales_order, 'INSERT');
