@@ -28,8 +28,6 @@ interface DevicesTableProps {
   setSelectedStatus: (value: string[]) => void;
   selectedOrderType: string[];
   setSelectedOrderType: (value: string[]) => void;
-  selectedAgreementType: string[];
-  setSelectedAgreementType: (value: string[]) => void;
   selectedAssetGroup: string[];
   setSelectedAssetGroup: (value: string[]) => void;
   selectedAssetCondition: string[];
@@ -62,8 +60,6 @@ const DevicesTable: React.FC<DevicesTableProps> = ({
   setSelectedStatus,
   selectedOrderType,
   setSelectedOrderType,
-  selectedAgreementType,
-  setSelectedAgreementType,
   selectedAssetGroup,
   setSelectedAssetGroup,
   selectedAssetCondition,
@@ -306,7 +302,7 @@ const DevicesTable: React.FC<DevicesTableProps> = ({
             device.sd_card_size || '',
             device.profile_id || '',
             device.updated_by || '',
-          ].some((field) => String(field).toLowerCase().includes(searchQuery.toLowerCase()));
+          ].some((field) => field.toLowerCase().includes(searchQuery.toLowerCase()));
 
       return (
         matchesDeleted &&
@@ -689,6 +685,7 @@ const DevicesTable: React.FC<DevicesTableProps> = ({
                 date={fromDate}
                 setDate={setFromDate}
                 className="h-7 w-full"
+                style={{ fontSize: '12px', border: '1px solid #d1d5db', borderRadius: '4px', padding: '6px', height: '28px' }}
               />
             </div>
           </div>
