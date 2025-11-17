@@ -415,20 +415,20 @@ const OrderSummaryTable: React.FC<OrderSummaryTableProps> = ({
     assetStatus: '100px',
   };
 
-  const headerStyle = (top: string | number) => ({
+  const headerStyle = (top: string | number): React.CSSProperties => ({
     fontSize: '12px',
     padding: '8px',
     borderBottom: '1px solid #d1d5db',
-    textAlign: 'left',
-    position: 'sticky',
+    textAlign: 'left' as const,
+    position: 'sticky' as const,
     top: typeof top === 'number' ? `${top}px` : top,
     background: '#fff',
     zIndex: 20,
   });
 
-  const subHeaderStyle = (top: string | number) => ({
+  const subHeaderStyle = (top: string | number): React.CSSProperties => ({
     ...headerStyle(top),
-    textAlign: 'center',
+    textAlign: 'center' as const,
   });
 
   const groupHeaderHeight = '28px';
@@ -594,22 +594,22 @@ const OrderSummaryTable: React.FC<OrderSummaryTableProps> = ({
                 <TableHeader>
                   {summaryType === 'stock' ? (
                     <TableRow>
-                      <TableHead style={{ ...headerStyle(0), width: columnWidths.warehouse }}>Warehouse</TableHead>
-                      <TableHead style={{ ...headerStyle(0), width: columnWidths.asset_type }}>Asset Type</TableHead>
-                      <TableHead style={{ ...headerStyle(0), width: columnWidths.model }}>Model</TableHead>
-                      <TableHead style={{ ...headerStyle(0), width: columnWidths.inward, textAlign: 'center' }}>Inward</TableHead>
-                      <TableHead style={{ ...headerStyle(0), width: columnWidths.outward, textAlign: 'center' }}>Outward</TableHead>
-                      <TableHead style={{ ...headerStyle(0), width: columnWidths.stock, textAlign: 'center' }}>Stock</TableHead>
+                      <TableHead style={{ ...headerStyle(0), width: columnWidths.warehouse, position: 'sticky' as const }}>Warehouse</TableHead>
+                      <TableHead style={{ ...headerStyle(0), width: columnWidths.asset_type, position: 'sticky' as const }}>Asset Type</TableHead>
+                      <TableHead style={{ ...headerStyle(0), width: columnWidths.model, position: 'sticky' as const }}>Model</TableHead>
+                      <TableHead style={{ ...headerStyle(0), width: columnWidths.inward, textAlign: 'center', position: 'sticky' as const }}>Inward</TableHead>
+                      <TableHead style={{ ...headerStyle(0), width: columnWidths.outward, textAlign: 'center', position: 'sticky' as const }}>Outward</TableHead>
+                      <TableHead style={{ ...headerStyle(0), width: columnWidths.stock, textAlign: 'center', position: 'sticky' as const }}>Stock</TableHead>
                     </TableRow>
                   ) : (
                     <>
                       <TableRow>
-                        <TableHead rowSpan={2} style={{ ...headerStyle(0), width: columnWidths.warehouse }}>Warehouse</TableHead>
-                        <TableHead rowSpan={2} style={{ ...headerStyle(0), width: columnWidths.asset_type }}>Asset Type</TableHead>
-                        <TableHead rowSpan={2} style={{ ...headerStyle(0), width: columnWidths.model, borderRight: '1px solid #d1d5db' }}>Model</TableHead>
-                        <TableHead colSpan={assetStatusColumns.length} style={{ ...headerStyle(0), textAlign: 'center', borderRight: '1px solid #d1d5db' }}>Inward</TableHead>
-                        <TableHead colSpan={assetStatusColumns.length} style={{ ...headerStyle(0), textAlign: 'center', borderRight: '1px solid #d1d5db' }}>Outward</TableHead>
-                        <TableHead colSpan={assetStatusColumns.length} style={{ ...headerStyle(0), textAlign: 'center' }}>Stock</TableHead>
+                        <TableHead rowSpan={2} style={{ ...headerStyle(0), width: columnWidths.warehouse, position: 'sticky' as const }}>Warehouse</TableHead>
+                        <TableHead rowSpan={2} style={{ ...headerStyle(0), width: columnWidths.asset_type, position: 'sticky' as const }}>Asset Type</TableHead>
+                        <TableHead rowSpan={2} style={{ ...headerStyle(0), width: columnWidths.model, borderRight: '1px solid #d1d5db', position: 'sticky' as const }}>Model</TableHead>
+                        <TableHead colSpan={assetStatusColumns.length} style={{ ...headerStyle(0), textAlign: 'center', borderRight: '1px solid #d1d5db', position: 'sticky' as const }}>Inward</TableHead>
+                        <TableHead colSpan={assetStatusColumns.length} style={{ ...headerStyle(0), textAlign: 'center', borderRight: '1px solid #d1d5db', position: 'sticky' as const }}>Outward</TableHead>
+                        <TableHead colSpan={assetStatusColumns.length} style={{ ...headerStyle(0), textAlign: 'center', position: 'sticky' as const }}>Stock</TableHead>
                       </TableRow>
                       <TableRow>
                         {assetStatusColumns.map((status, idx) => (
@@ -619,6 +619,7 @@ const OrderSummaryTable: React.FC<OrderSummaryTableProps> = ({
                               ...subHeaderStyle(groupHeaderHeight),
                               width: columnWidths.assetStatus,
                               borderRight: idx === assetStatusColumns.length - 1 ? '1px solid #d1d5db' : 'none',
+                              position: 'sticky' as const
                             }}
                           >
                             {status}
@@ -631,6 +632,7 @@ const OrderSummaryTable: React.FC<OrderSummaryTableProps> = ({
                               ...subHeaderStyle(groupHeaderHeight),
                               width: columnWidths.assetStatus,
                               borderRight: idx === assetStatusColumns.length - 1 ? '1px solid #d1d5db' : 'none',
+                              position: 'sticky' as const
                             }}
                           >
                             {status}
@@ -643,6 +645,7 @@ const OrderSummaryTable: React.FC<OrderSummaryTableProps> = ({
                               ...subHeaderStyle(groupHeaderHeight),
                               width: columnWidths.assetStatus,
                               borderRight: idx === assetStatusColumns.length - 1 ? '1px solid #d1d5db' : 'none',
+                              position: 'sticky' as const
                             }}
                           >
                             {status}

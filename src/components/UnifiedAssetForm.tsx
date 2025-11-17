@@ -453,7 +453,7 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
           const newFarCodes = [...a.farCodes];
           newStatuses[index] = device.asset_status || 'Fresh';
           newGroups[index] = device.asset_group || 'NFA';
-          newFarCodes[index] = device.far_code || '';
+          newFarCodes[index] = device.far_code !== null && device.far_code !== undefined ? String(device.far_code) : '';
           return { ...a, assetStatuses: newStatuses, assetGroups: newGroups, farCodes: newFarCodes };
         }
         return a;
@@ -690,7 +690,7 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
           const assetGroup = asset.assetGroups[i] || 'NFA';
           const assetCondition = asset.asset_conditions[i] || null;
           const farCode = asset.farCodes[i] || null;
-          await supabase.from('devices').insert({
+          await supabase.from('devices').insert([{
             asset_type: asset.assetType,
             model: asset.model,
             serial_number: serialNumber,
@@ -709,10 +709,10 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
             asset_status: assetStatus,
             asset_group: assetGroup,
             asset_condition: assetCondition,
-            far_code: farCode,
+            far_code: farCode ? parseInt(farCode) : null,
             created_by: userEmail,
             updated_by: userEmail,
-          });
+          }]);
         }
         await logHistory('orders', orderData.id, 'order_type', orderType, userEmail, salesOrderId);
       }
@@ -777,7 +777,7 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
             const assetGroup = asset.assetGroups[i] || 'NFA';
             const assetCondition = asset.asset_conditions[i] || null;
             const farCode = asset.farCodes[i] || null;
-            await supabase.from('devices').insert({
+            await supabase.from('devices').insert([{
               asset_type: asset.assetType,
               model: asset.model,
               serial_number: serialNumber,
@@ -796,10 +796,10 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
               asset_status: assetStatus,
               asset_group: assetGroup,
               asset_condition: assetCondition,
-              far_code: farCode,
+              far_code: farCode ? parseInt(farCode) : null,
               created_by: userEmail,
               updated_by: userEmail,
-            });
+            }]);
           }
           await logHistory('orders', asset.orderId, 'quantity', asset.quantity.toString(), userEmail, salesOrderId);
         } else {
@@ -834,7 +834,7 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
             const assetGroup = asset.assetGroups[i] || 'NFA';
             const assetCondition = asset.asset_conditions[i] || null;
             const farCode = asset.farCodes[i] || null;
-            await supabase.from('devices').insert({
+            await supabase.from('devices').insert([{
               asset_type: asset.assetType,
               model: asset.model,
               serial_number: serialNumber,
@@ -853,10 +853,10 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
               asset_status: assetStatus,
               asset_group: assetGroup,
               asset_condition: assetCondition,
-              far_code: farCode,
+              far_code: farCode ? parseInt(farCode) : null,
               created_by: userEmail,
               updated_by: userEmail,
-            });
+            }]);
           }
           await logHistory('orders', orderData.id, 'order_type', orderType, userEmail, salesOrderId);
         }
@@ -2137,7 +2137,7 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
                           .from('devices')
                           .update({
                             asset_group,
-                            far_code,
+                            far_code: far_code ? parseInt(far_code) : null,
                             updated_at: new Date().toISOString(),
                             updated_by: userEmail,
                           })
