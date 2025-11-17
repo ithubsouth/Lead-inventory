@@ -18,7 +18,7 @@ import {
   additionalAssetTypes,
   assetModels,
   profileIds,
-  agreementTypes, // ← Imported from constants.ts
+  agreementTypes,
 } from './constants';
 
 interface AssetItem {
@@ -106,7 +106,6 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
   const [searchTimeout, setSearchTimeout] = useState<NodeJS.Timeout | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
 
-  // Silent feedback only (no alert)
   const toast = ({ title, description, variant }: { title: string; description: string; variant?: 'destructive' }) => {
     console.log(`[${variant === 'destructive' ? 'ERROR' : 'INFO'}] ${title}: ${description}`);
   };
@@ -119,7 +118,6 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
     fetchUser();
   }, []);
 
-  // Debounced search
   useEffect(() => {
     if (searchTimeout) clearTimeout(searchTimeout);
     if (searchQuery.trim().length < 3) {
@@ -294,7 +292,6 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
 
   const removeAsset = (id: string) => setAssets(assets.filter(asset => asset.id !== id));
 
-  // Load order for edit
   const loadOrderForEdit = async (selectedSalesOrder: string) => {
     try {
       setLoading(true);
@@ -548,56 +545,58 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
     await fetchAssetDetails(asset, index, serial.trim());
   };
 
+  // CORRECTED VALIDATION: Deal ID optional when Order Type is "Stock"
   const validateForm = () => {
     if (!orderType) {
       toast({ title: 'Error', description: 'Please select an order type', variant: 'destructive' });
       return false;
     }
+
     if (!schoolName.trim()) {
       toast({ title: 'Error', description: 'School Name is required', variant: 'destructive' });
       return false;
     }
-    if (!dealId.trim()) {
+
+    // Deal ID required only if NOT Stock
+    if (orderType !== 'Stock' && !dealId.trim()) {
       toast({ title: 'Error', description: 'Deal ID is required', variant: 'destructive' });
       return false;
     }
+
     if (assets.length === 0) {
       toast({ title: 'Error', description: 'Please add at least one asset', variant: 'destructive' });
       return false;
     }
+
     const isInward = ['Stock', 'Return'].includes(orderType);
+
     for (const asset of assets) {
       if (!asset.location) {
         toast({ title: 'Error', description: `Location is required for ${asset.assetType}`, variant: 'destructive' });
         return false;
       }
+
       if (assetTypes.includes(asset.assetType as any) && !asset.model) {
         toast({ title: 'Error', description: `Model is required for ${asset.assetType}`, variant: 'destructive' });
         return false;
       }
+
       if (additionalAssetTypes.includes(asset.assetType) && hasModels(asset.assetType) && !asset.model) {
         toast({ title: 'Error', description: `Model is required for ${asset.assetType}`, variant: 'destructive' });
         return false;
       }
-      if (asset.assetStatuses.length !== asset.quantity) {
-        toast({ title: 'Error', description: `Asset statuses count mismatch for ${asset.assetType}`, variant: 'destructive' });
+
+      if (asset.assetStatuses.length !== asset.quantity ||
+          asset.assetGroups.length !== asset.quantity ||
+          asset.asset_conditions.length !== asset.quantity ||
+          asset.farCodes.length !== asset.quantity) {
+        toast({ title: 'Error', description: `Data mismatch for ${asset.assetType}`, variant: 'destructive' });
         return false;
       }
-      if (asset.assetGroups.length !== asset.quantity) {
-        toast({ title: 'Error', description: `Asset groups count mismatch for ${asset.assetType}`, variant: 'destructive' });
-        return false;
-      }
-      if (asset.asset_conditions.length !== asset.quantity) {
-        toast({ title: 'Error', description: `Asset conditions count mismatch for ${asset.assetType}`, variant: 'destructive' });
-        return false;
-      }
-      if (asset.farCodes.length !== asset.quantity) {
-        toast({ title: 'Error', description: `FAR codes count mismatch for ${asset.assetType}`, variant: 'destructive' });
-        return false;
-      }
+
       for (let i = 0; i < asset.quantity; i++) {
         if (isInward && asset.assetStatuses[i] === 'Scrap' && !asset.asset_conditions[i]?.trim()) {
-          toast({ title: 'Error', description: `Asset condition is required for scrapped item in ${asset.assetType} at position ${i + 1}`, variant: 'destructive' });
+          toast({ title: 'Error', description: `Asset condition required for scrapped item in ${asset.assetType} at position ${i + 1}`, variant: 'destructive' });
           return false;
         }
       }
@@ -1480,13 +1479,15 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
           </div>
           <div>
             <label style={{ fontSize: '12px', display: 'block', marginBottom: '4px' }}>
-              Deal ID <span style={{ color: '#ef4444' }}>*</span>
+              Deal ID {orderType !== 'Stock' && <span style={{ color: '#ef4444' }}>*</span>}
+              {orderType === 'Stock' && <span style={{ fontSize: '10px', color: '#6b7280', marginLeft: '4px' }}>(Optional)</span>}
             </label>
             <input
               type="text"
               value={dealId}
               onChange={(e) => setDealId(e.target.value)}
               disabled={editMode}
+              placeholder={orderType === 'Stock' ? 'Optional for Stock orders' : ''}
               style={{ width: '100%', padding: '8px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '14px' }}
             />
           </div>
