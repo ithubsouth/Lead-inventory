@@ -1318,7 +1318,7 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
                       <select
                         value={asset.assetStatuses[index] || 'Fresh'}
                         onChange={(e) => {
-                          const newStatuses = [...a.assetStatuses];
+                          const newStatuses = [...asset.assetStatuses];
                           newStatuses[index] = e.target.value;
                           updateAsset(asset.id, 'assetStatuses', newStatuses);
                         }}
@@ -1330,7 +1330,7 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
                       <select
                         value={asset.assetGroups[index] || 'NFA'}
                         onChange={(e) => {
-                          const newGroups = [...a.assetGroups];
+                          const newGroups = [...asset.assetGroups];
                           newGroups[index] = e.target.value;
                           updateAsset(asset.id, 'assetGroups', newGroups);
                         }}
@@ -1350,7 +1350,7 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
                           type="text"
                           value={asset.asset_conditions[index] || ''}
                           onChange={(e) => {
-                            const newConditions = [...a.asset_conditions];
+                            const newConditions = [...asset.asset_conditions];
                             newConditions[index] = e.target.value;
                             updateAsset(asset.id, 'asset_conditions', newConditions);
                           }}
@@ -1389,11 +1389,14 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
                 </div>
               ))}
             </div>
+            <div style={{ marginTop: '8px', fontSize: '12px', color: '#6b7280' }}>
+            </div>
           </div>
         )}
       </div>
     );
   };
+
 
   const mainAssetTypes = ['Tablet', 'TV', 'SD Card', 'Cover', 'Pendrive'];
 
