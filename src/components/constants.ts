@@ -43,6 +43,7 @@ export const configurations = [
   '2G+32 GB (Android-9)',
   '2G+32 GB (Android-10)',
   '3G+32 GB (Android-10)',
+  '2G+32 GB (Android-11)',  
   '3G+32 GB (Android-13)',
   '4G+64 GB (Android-13)',
 ];
