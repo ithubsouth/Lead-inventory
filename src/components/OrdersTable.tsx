@@ -31,6 +31,8 @@ interface OrdersTableProps {
   setSelectedStatus: (value: string[]) => void;
   selectedSdCardSize: string[];
   setSelectedSdCardSize: (value: string[]) => void;
+  selectedAgreementType?: string[];
+  setSelectedAgreementType?: (value: string[]) => void;
   fromDate: DateRange | undefined;
   setFromDate: (range: DateRange | undefined) => void;
   showDeleted: boolean;
@@ -676,7 +678,6 @@ const OrdersTable: React.FC<OrdersTableProps> = ({
                 date={fromDate}
                 setDate={setFromDate}
                 className="h-7 w-full"
-                style={{ fontSize: '12px', border: '1px solid #d1d5db', borderRadius: '4px', padding: '6px', height: '28px' }}
               />
             </div>
           </div>
