@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Plus, Minus, Trash2, Camera, ChevronDown, ChevronUp, Search, Edit2, X } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
+import { fetchSalesOrderDetails } from './api';
 import {
   orderTypes,
   tabletModels,
@@ -1464,6 +1465,19 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
               type="text"
               value={salesOrder}
               onChange={(e) => setSalesOrder(e.target.value)}
+              onBlur={async (e) => {
+                const so = e.target.value.trim();
+                if (so && !editMode) {
+                  const result = await fetchSalesOrderDetails(so);
+                  if (result.valid) {
+                    if (result.schoolName) setSchoolName(result.schoolName);
+                    if (result.dealId) setDealId(result.dealId);
+                    if (result.nucleusId) setNucleusId(result.nucleusId);
+                    if (result.agreementType) setAgreementType(result.agreementType);
+                    toast({ title: 'Auto-filled', description: `Details fetched for SO ${so}. You can edit manually if needed.` });
+                  }
+                }
+              }}
               disabled={editMode}
               style={{ width: '100%', padding: '8px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '14px' }}
             />
