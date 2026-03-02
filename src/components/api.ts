@@ -26,6 +26,14 @@ export async function fetchSalesOrderDetails(salesOrderNo: string): Promise<Sale
       return { valid: false };
     }
 
+    // Check content type before parsing
+    const contentType = response.headers.get('content-type');
+    if (!contentType?.includes('application/json')) {
+      const text = await response.text();
+      console.error('Expected JSON but got:', contentType, 'Preview:', text.substring(0, 200));
+      return { valid: false };
+    }
+
     const data = await response.json();
     console.log('Sales Order API response:', data);
 

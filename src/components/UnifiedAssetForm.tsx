@@ -1461,26 +1461,46 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
           </div>
           <div>
             <label style={{ fontSize: '12px', display: 'block', marginBottom: '4px' }}>Sales Order</label>
-            <input
-              type="text"
-              value={salesOrder}
-              onChange={(e) => setSalesOrder(e.target.value)}
-              onBlur={async (e) => {
-                const so = e.target.value.trim();
-                if (so && !editMode) {
-                  const result = await fetchSalesOrderDetails(so);
-                  if (result.valid) {
-                    if (result.schoolName) setSchoolName(result.schoolName);
-                    if (result.dealId) setDealId(result.dealId);
-                    if (result.nucleusId) setNucleusId(result.nucleusId);
-                    if (result.agreementType) setAgreementType(result.agreementType);
-                    toast({ title: 'Auto-filled', description: `Details fetched for SO ${so}. You can edit manually if needed.` });
-                  }
-                }
-              }}
-              disabled={editMode}
-              style={{ width: '100%', padding: '8px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '14px' }}
-            />
+            <div style={{ position: 'relative' }}>
+              <input
+                type="text"
+                value={salesOrder}
+                onChange={(e) => setSalesOrder(e.target.value)}
+                disabled={editMode}
+                style={{ width: '100%', padding: '8px', paddingRight: '36px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '14px' }}
+              />
+              {!editMode && (
+                <button
+                  type="button"
+                  title="Fetch SO details"
+                  onClick={async () => {
+                    const so = salesOrder.trim();
+                    if (!so) {
+                      toast({ title: 'Enter Sales Order', description: 'Please enter a sales order number first.', variant: 'destructive' });
+                      return;
+                    }
+                    toast({ title: 'Fetching...', description: `Looking up SO ${so}` });
+                    const result = await fetchSalesOrderDetails(so);
+                    if (result.valid) {
+                      if (result.schoolName) setSchoolName(result.schoolName);
+                      if (result.dealId) setDealId(result.dealId);
+                      if (result.nucleusId) setNucleusId(result.nucleusId);
+                      if (result.agreementType) setAgreementType(result.agreementType);
+                      toast({ title: 'Auto-filled', description: `Details fetched for SO ${so}. You can edit manually if needed.` });
+                    } else {
+                      toast({ title: 'Not found', description: `Could not fetch details for SO ${so}. You can fill manually.`, variant: 'destructive' });
+                    }
+                  }}
+                  style={{
+                    position: 'absolute', right: '4px', top: '50%', transform: 'translateY(-50%)',
+                    background: 'none', border: 'none', cursor: 'pointer', padding: '4px',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  }}
+                >
+                  <Search size={16} color="#6b7280" />
+                </button>
+              )}
+            </div>
           </div>
           <div>
             <label style={{ fontSize: '12px', display: 'block', marginBottom: '4px' }}>
