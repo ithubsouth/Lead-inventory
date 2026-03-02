@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Plus, Minus, Trash2, Camera, ChevronDown, ChevronUp, Search, Edit2, X } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
-import { fetchSalesOrderDetails } from './api';
 import {
   orderTypes,
   tabletModels,
@@ -1461,46 +1460,13 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
           </div>
           <div>
             <label style={{ fontSize: '12px', display: 'block', marginBottom: '4px' }}>Sales Order</label>
-            <div style={{ position: 'relative' }}>
-              <input
-                type="text"
-                value={salesOrder}
-                onChange={(e) => setSalesOrder(e.target.value)}
-                disabled={editMode}
-                style={{ width: '100%', padding: '8px', paddingRight: '36px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '14px' }}
-              />
-              {!editMode && (
-                <button
-                  type="button"
-                  title="Fetch SO details"
-                  onClick={async () => {
-                    const so = salesOrder.trim();
-                    if (!so) {
-                      toast({ title: 'Enter Sales Order', description: 'Please enter a sales order number first.', variant: 'destructive' });
-                      return;
-                    }
-                    toast({ title: 'Fetching...', description: `Looking up SO ${so}` });
-                    const result = await fetchSalesOrderDetails(so);
-                    if (result.valid) {
-                      if (result.schoolName) setSchoolName(result.schoolName);
-                      if (result.dealId) setDealId(result.dealId);
-                      if (result.nucleusId) setNucleusId(result.nucleusId);
-                      if (result.agreementType) setAgreementType(result.agreementType);
-                      toast({ title: 'Auto-filled', description: `Details fetched for SO ${so}. You can edit manually if needed.` });
-                    } else {
-                      toast({ title: 'Not found', description: `Could not fetch details for SO ${so}. You can fill manually.`, variant: 'destructive' });
-                    }
-                  }}
-                  style={{
-                    position: 'absolute', right: '4px', top: '50%', transform: 'translateY(-50%)',
-                    background: 'none', border: 'none', cursor: 'pointer', padding: '4px',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  }}
-                >
-                  <Search size={16} color="#6b7280" />
-                </button>
-              )}
-            </div>
+            <input
+              type="text"
+              value={salesOrder}
+              onChange={(e) => setSalesOrder(e.target.value)}
+              disabled={editMode}
+              style={{ width: '100%', padding: '8px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '14px' }}
+            />
           </div>
           <div>
             <label style={{ fontSize: '12px', display: 'block', marginBottom: '4px' }}>
