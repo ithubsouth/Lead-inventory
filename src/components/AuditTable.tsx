@@ -449,7 +449,7 @@ const AuditTable: React.FC<AuditTableProps> = ({
       'Product',
       'Asset Status',
       'Asset Group',
-      'FAR Code',
+      'Asset Code',
       'Asset Condition',
       'Warehouse',
       'Asset Check',
@@ -781,7 +781,7 @@ const AuditTable: React.FC<AuditTableProps> = ({
                 <TableHead
                   style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', textAlign: 'left', position: 'sticky', top: 0, background: '#fff', zIndex: 20 }}
                 >
-                  FAR Code
+                  Asset Code
                 </TableHead>
                 <TableHead
                   style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', textAlign: 'left', position: 'sticky', top: 0, background: '#fff', zIndex: 20 }}
