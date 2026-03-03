@@ -1255,7 +1255,7 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
                 )}
               </div>
               <div>
-                <label style={{ fontSize: '12px', display: 'block', marginBottom: '4px' }}>FAR Code</label>
+                <label style={{ fontSize: '12px', display: 'block', marginBottom: '4px' }}>Asset Code</label>
                 <input
                   type="text"
                   value={asset.farCodes[0] || ''}
@@ -1869,7 +1869,7 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
         <label style={{ fontSize: '14px', fontWeight: 'bold' }}>Download Template</label>
         <button
           onClick={() => {
-            const headers = ['Serial number', 'Asset group', 'FAR Code'];
+            const headers = ['Serial number', 'Asset group', 'Asset Code'];
             const rows = [['SN001', 'NFA', '123'], ['SN002', 'FA', '456']];
             const quote = (v: any) => /[\n\r,"]/.test(String(v)) ? `"${String(v).replace(/"/g, '""')}"` : v;
             const csv = [headers.join(','), ...rows.map(r => r.map(quote).join(','))].join('\n');

@@ -25,6 +25,8 @@ interface OrdersTableProps {
   setSelectedConfiguration: (value: string[]) => void;
   selectedOrderType: string[];
   setSelectedOrderType: (value: string[]) => void;
+  selectedAgreementType: string[];
+  setSelectedAgreementType: (value: string[]) => void;
   selectedProduct: string[];
   setSelectedProduct: (value: string[]) => void;
   selectedStatus: string[];
@@ -57,6 +59,8 @@ const OrdersTable: React.FC<OrdersTableProps> = ({
   setSelectedConfiguration,
   selectedOrderType,
   setSelectedOrderType,
+  selectedAgreementType,
+  setSelectedAgreementType,
   selectedProduct,
   setSelectedProduct,
   selectedStatus,
@@ -676,7 +680,6 @@ const OrdersTable: React.FC<OrdersTableProps> = ({
                 date={fromDate}
                 setDate={setFromDate}
                 className="h-7 w-full"
-                style={{ fontSize: '12px', border: '1px solid #d1d5db', borderRadius: '4px', padding: '6px', height: '28px' }}
               />
             </div>
           </div>

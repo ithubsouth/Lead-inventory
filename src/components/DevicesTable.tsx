@@ -28,6 +28,8 @@ interface DevicesTableProps {
   setSelectedStatus: (value: string[]) => void;
   selectedOrderType: string[];
   setSelectedOrderType: (value: string[]) => void;
+  selectedAgreementType: string[];
+  setSelectedAgreementType: (value: string[]) => void;
   selectedAssetGroup: string[];
   setSelectedAssetGroup: (value: string[]) => void;
   selectedAssetCondition: string[];
@@ -60,6 +62,8 @@ const DevicesTable: React.FC<DevicesTableProps> = ({
   setSelectedStatus,
   selectedOrderType,
   setSelectedOrderType,
+  selectedAgreementType,
+  setSelectedAgreementType,
   selectedAssetGroup,
   setSelectedAssetGroup,
   selectedAssetCondition,
@@ -302,7 +306,7 @@ const DevicesTable: React.FC<DevicesTableProps> = ({
             device.sd_card_size || '',
             device.profile_id || '',
             device.updated_by || '',
-          ].some((field) => field.toLowerCase().includes(searchQuery.toLowerCase()));
+          ].some((field) => String(field).toLowerCase().includes(searchQuery.toLowerCase()));
 
       return (
         matchesDeleted &&
@@ -568,7 +572,7 @@ const DevicesTable: React.FC<DevicesTableProps> = ({
                   id="search"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="        Search by Serial, Sales Order, Deal ID, School, Nucleus ID, Asset Type, Model, Configuration, Asset Status, Asset Condition, Product, Status, Order Type, Asset Group, FAR Code, SD Card Size, Profile ID, Updated By"
+                  placeholder="        Search by Serial, Sales Order, Deal ID, School, Nucleus ID, Asset Type, Model, Configuration, Asset Status, Asset Condition, Product, Status, Order Type, Asset Group, Asset Code, SD Card Size, Profile ID, Updated By"
                   style={{ paddingLeft: '28px', fontSize: '12px', width: '100%', border: '1px solid #d1d5db', borderRadius: '4px', padding: '6px', height: '28px' }}
                 />
               </div>
@@ -685,7 +689,6 @@ const DevicesTable: React.FC<DevicesTableProps> = ({
                 date={fromDate}
                 setDate={setFromDate}
                 className="h-7 w-full"
-                style={{ fontSize: '12px', border: '1px solid #d1d5db', borderRadius: '4px', padding: '6px', height: '28px' }}
               />
             </div>
           </div>
@@ -725,7 +728,7 @@ const DevicesTable: React.FC<DevicesTableProps> = ({
                     <TableHead style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', textAlign: 'left', position: 'sticky', top: 0, background: '#fff', zIndex: 20, width: columnWidths.asset_status }}>Asset Status</TableHead>
                     <TableHead style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', textAlign: 'left', position: 'sticky', top: 0, background: '#fff', zIndex: 20, width: columnWidths.asset_condition }}>Asset Condition</TableHead>
                     <TableHead style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', textAlign: 'left', position: 'sticky', top: 0, background: '#fff', zIndex: 20, width: columnWidths.asset_group }}>Asset Group</TableHead>
-                    <TableHead style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', textAlign: 'left', position: 'sticky', top: 0, background: '#fff', zIndex: 20, width: columnWidths.far_code }}>FAR Code</TableHead>
+                    <TableHead style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', textAlign: 'left', position: 'sticky', top: 0, background: '#fff', zIndex: 20, width: columnWidths.far_code }}>Asset Code</TableHead>
                     <TableHead style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', textAlign: 'left', position: 'sticky', top: 0, background: '#fff', zIndex: 20, width: columnWidths.status }}>Status</TableHead>
                     <TableHead style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', textAlign: 'left', position: 'sticky', top: 0, background: '#fff', zIndex: 20, width: columnWidths.created_at }}>Created At</TableHead>
                     <TableHead style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', textAlign: 'left', position: 'sticky', top: 0, background: '#fff', zIndex: 20, width: columnWidths.updated_by }}>Updated By</TableHead>
@@ -886,7 +889,7 @@ const DevicesTable: React.FC<DevicesTableProps> = ({
                     <p><strong>Asset Status:</strong> {viewingDevice.asset_status || ''}</p>
                     <p><strong>Asset Condition:</strong> {viewingDevice.asset_condition || ''}</p>
                     <p><strong>Asset Group:</strong> {viewingDevice.asset_group || ''}</p>
-                    <p><strong>FAR Code:</strong> {viewingDevice.far_code || ''}</p>
+                    <p><strong>Asset Code:</strong> {viewingDevice.far_code || ''}</p>
                     <p><strong>Status:</strong> {viewingDevice.status || ''}</p>
                     <p><strong>Created At:</strong> {formatDate(viewingDevice.created_at) || ''}</p>
                     <p><strong>Updated At:</strong> {formatDate(viewingDevice.updated_at) || ''}</p>

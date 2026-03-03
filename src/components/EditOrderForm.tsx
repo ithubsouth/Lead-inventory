@@ -1048,7 +1048,7 @@ const EditOrderForm: React.FC<EditOrderFormProps> = ({ order, onSave, onCancel }
                 <Input
                   value={device.far_code || ''}
                   onChange={(e) => updateFarCode(index, e.target.value)}
-                  placeholder="FAR Code"
+                  placeholder="Asset Code"
                   className='text-xs w-32 bg-white border-gray-300'
                   disabled={!isInward}
                 />
