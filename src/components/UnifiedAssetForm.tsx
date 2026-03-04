@@ -676,6 +676,7 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
             deal_id: dealId || null,
             school_name: schoolName,
             nucleus_id: nucleusId || null,
+            agreement_type: agreementType || null,
             serial_numbers: assetSerials,
             order_date: new Date().toISOString(),
             configuration: asset.configuration || null,
@@ -1734,7 +1735,7 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
                   return idx >= 0 ? rawValues[idx] : '';
                 };
 
-                const salesOrder = get('Sales Order');
+                const csvSalesOrder = get('Sales Order');
                 const dealIdVal = get('Deal ID');
                 const schoolNameVal = get('School Name');
                 const nucleusIdVal = get('Nucleus ID');
@@ -1753,7 +1754,7 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
                 const group = get('Asset Group') || 'NFA';
 
                 // Global form values
-                if (salesOrder && !salesOrder) setSalesOrder(salesOrder);
+                if (csvSalesOrder && !salesOrder) setSalesOrder(csvSalesOrder);
                 if (dealIdVal && !dealId) setDealId(dealIdVal);
                 if (schoolNameVal && !schoolName) setSchoolName(schoolNameVal);
                 if (nucleusIdVal && !nucleusId) setNucleusId(nucleusIdVal);
@@ -1932,10 +1933,12 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
                   .select('id, material_type')
                   .eq('serial_number', serial)
                   .eq('is_deleted', false)
-                  .single();
+                  .order('updated_at', { ascending: false })
+                  .limit(1);
 
-                if (error || !data) { errors.push(`Row ${i + 1}: Not found`); continue; }
-                if (data.material_type !== 'Inward') { errors.push(`Row ${i + 1}: Not Inward`); continue; }
+                if (error || !data || data.length === 0) { errors.push(`Row ${i + 1}: Not found`); continue; }
+                const deviceRow = data[0];
+                if (deviceRow.material_type !== 'Inward') { errors.push(`Row ${i + 1}: Not Inward`); continue; }
 
                 const { error: updErr } = await supabase
                   .from('devices')
@@ -1945,7 +1948,7 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
                     updated_at: new Date().toISOString(),
                     updated_by: userEmail,
                   })
-                  .eq('id', data.id);
+                  .eq('id', deviceRow.id);
 
                 if (updErr) errors.push(`Row ${i + 1}: ${updErr.message}`);
                 else updated++;
