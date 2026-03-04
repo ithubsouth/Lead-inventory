@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Plus, Minus, Trash2, Camera, ChevronDown, ChevronUp, Search, Edit2, X } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
+import { toast } from '@/components/ui/use-toast';
 import {
   orderTypes,
   tabletModels,
@@ -106,9 +107,6 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
   const [searchTimeout, setSearchTimeout] = useState<NodeJS.Timeout | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
 
-  const toast = ({ title, description, variant }: { title: string; description: string; variant?: 'destructive' }) => {
-    console.log(`[${variant === 'destructive' ? 'ERROR' : 'INFO'}] ${title}: ${description}`);
-  };
 
   useEffect(() => {
     const fetchUser = async () => {
@@ -621,9 +619,11 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
     if (!validateForm()) return;
     setLoading(true);
     try {
-      const { data: userData, error: userError } = await supabase.auth.getUser();
-      if (userError || !userData?.user?.email) throw new Error('Failed to retrieve authenticated user email');
-      const userEmail = userData.user.email;
+      const { data: { user }, error: userError } = await supabase.auth.getUser();
+      if (userError) {
+        console.warn('Auth lookup warning while creating order:', userError.message);
+      }
+      const userEmail = user?.email || 'system';
       const materialType = ['Stock', 'Return'].includes(orderType) ? 'Inward' : 'Outward';
       let salesOrderId = salesOrder;
       if (!salesOrderId) {
@@ -743,9 +743,11 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
     if (!validateForm()) return;
     setLoading(true);
     try {
-      const { data: userData, error: userError } = await supabase.auth.getUser();
-      if (userError || !userData?.user?.email) throw new Error('Failed to retrieve authenticated user email');
-      const userEmail = userData.user.email;
+      const { data: { user }, error: userError } = await supabase.auth.getUser();
+      if (userError) {
+        console.warn('Auth lookup warning while updating order:', userError.message);
+      }
+      const userEmail = user?.email || 'system';
       const materialType = ['Stock', 'Return'].includes(orderType) ? 'Inward' : 'Outward';
       let salesOrderId = salesOrder;
       if (!salesOrderId) {
@@ -1946,7 +1948,7 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
                     asset_group: group || null,
                     far_code: far ? parseInt(far) : null,
                     updated_at: new Date().toISOString(),
-                    updated_by: userEmail,
+                    updated_by: userEmail || 'system',
                   })
                   .eq('id', deviceRow.id);
 
