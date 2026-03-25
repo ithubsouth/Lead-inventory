@@ -1,6 +1,6 @@
 export const OMS_API_CONFIG = {
-  // Use proxy in development to avoid CORS/timeout issues
-  BASE_URL: window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+  // Use Vite proxy in all dev environments (localhost + Lovable preview) to avoid CORS issues
+  BASE_URL: import.meta.env.DEV
     ? '/api-oms/oms/warehouse/orders/devices'
     : 'https://apigw.leadschool.in/oms/warehouse/orders/devices',
   API_KEY: 'f6kA3UF8?9GV',
