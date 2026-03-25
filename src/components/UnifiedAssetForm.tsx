@@ -1449,22 +1449,23 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
   const mainAssetTypes = ['Tablet', 'TV', 'SD Card', 'Cover', 'Pendrive'];
 
   return (
-    <div style={{ padding: '16px', maxWidth: '1200px', margin: '0 auto', position: 'relative' }}>
-      <h2 style={{ fontSize: '20px', fontWeight: 'bold', marginBottom: '16px' }}>
-        {editMode ? (
-          <>
-            <Edit2 size={20} style={{ display: 'inline', marginRight: '8px', verticalAlign: 'middle' }} />
-            Edit Order
-          </>
-        ) : (
-          'Create Order'
-        )}
-      </h2>
+    <div className="app-shell">
+      <div className="layout-container full-width-card">
+        <h2 className="page-title">
+          {editMode ? (
+            <>
+              <Edit2 size={20} style={{ display: 'inline', marginRight: '8px', verticalAlign: 'middle' }} />
+              Edit Order
+            </>
+          ) : (
+            'Create Order'
+          )}
+        </h2>
 
-      {/* Sales Order Search */}
-      <div style={{ border: '1px solid #e5e7eb', borderRadius: '8px', padding: '16px', marginBottom: '16px', background: '#fff' }}>
+        {/* Sales Order Search */}
+        <div className="section-card">
         <form onSubmit={handleSalesOrderSearch} style={{ position: 'relative' }}>
-          <div style={{ display: 'flex', gap: '8px' }}>
+          <div className="grid grid-cols-[1fr_auto_auto] gap-2">
             <input
               type="text"
               value={searchQuery}
@@ -1475,12 +1476,13 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
               }}
               onKeyDown={(e) => e.key === 'Enter' && handleSalesOrderSearch(e)}
               placeholder="Search by Sales order"
-              style={{ flex: 1, padding: '8px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '14px' }}
+              className="input-base"
+              style={{ flex: '1' }}
             />
-            <button type="submit" style={{ padding: '8px', border: '1px solid #3b82f6', borderRadius: '4px', background: '#3b82f6', color: '#fff', cursor: 'pointer' }}>
+            <button type="submit" className="btn-primary">
               <Search size={16} />
             </button>
-            <button type="button" onClick={handleCancelSearch} style={{ padding: '8px', border: '1px solid #ef4444', borderRadius: '4px', background: '#ef4444', color: '#fff', cursor: 'pointer' }}>
+            <button type="button" onClick={handleCancelSearch} className="btn-danger">
               <X size={16} />
             </button>
           </div>
@@ -1489,9 +1491,9 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
       </div>
 
       {/* Order Details */}
-      <div style={{ border: '1px solid #e5e7eb', borderRadius: '8px', padding: '16px', marginBottom: '16px', background: '#fff' }}>
-        <h3 style={{ fontSize: '16px', fontWeight: 'bold', marginBottom: '12px' }}>Order Details</h3>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '12px' }}>
+      <div className="section-card">
+        <h3 className="text-xl font-semibold mb-3">Order Details</h3>
+        <div className="order-details-grid">
           <div>
             <label style={{ fontSize: '12px', display: 'block', marginBottom: '4px' }}>
               Order Type <span style={{ color: '#ef4444' }}>*</span>
@@ -1500,7 +1502,7 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
               value={orderType}
               onChange={(e) => setOrderType(e.target.value)}
               disabled={editMode}
-              style={{ width: '100%', padding: '8px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '14px' }}
+              className="select-base"
             >
               <option value="">Select Order Type</option>
               {orderTypes.map(t => <option key={t} value={t}>{t}</option>)}
@@ -1508,18 +1510,19 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
           </div>
           <div>
             <label style={{ fontSize: '12px', display: 'block', marginBottom: '4px' }}>Sales Order</label>
-            <div style={{ display: 'flex', gap: '8px', alignItems: 'flex-end' }}>
+            <div className="input-with-action">
               <input
                 type="text"
                 value={salesOrder}
                 onChange={(e) => setSalesOrder(e.target.value)}
                 disabled={editMode}
-                style={{ flex: 1, padding: '8px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '14px' }}
+                className="input-base"
               />
               <button
                 type="button"
                 onClick={handleFetchOrderDetails}
                 disabled={editMode || fetchingOrderDetails || !salesOrder.trim()}
+                className="action-button"
                 style={{
                   padding: '8px 12px',
                   border: '1px solid #3b82f6',
@@ -1548,7 +1551,7 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
               value={schoolName}
               onChange={(e) => setSchoolName(e.target.value)}
               disabled={editMode}
-              style={{ width: '100%', padding: '8px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '14px' }}
+              className="input-base"
             />
           </div>
           <div>
@@ -1562,7 +1565,7 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
               onChange={(e) => setDealId(e.target.value)}
               disabled={editMode}
               placeholder={orderType === 'Stock' ? 'Optional for Stock orders' : ''}
-              style={{ width: '100%', padding: '8px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '14px' }}
+              className="input-base"
             />
           </div>
           <div>
@@ -1572,7 +1575,7 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
               value={nucleusId}
               onChange={(e) => setNucleusId(e.target.value)}
               disabled={editMode}
-              style={{ width: '100%', padding: '8px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '14px' }}
+              className="input-base"
             />
           </div>
           <div>
@@ -1581,7 +1584,7 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
               value={agreementType}
               onChange={(e) => setAgreementType(e.target.value)}
               disabled={editMode}
-              style={{ width: '100%', padding: '8px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '14px' }}
+              className="select-base"
             >
               <option value="">Select Agreement Type</option>
               {agreementTypes.map(type => (
@@ -2072,6 +2075,7 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
         {loading ? 'Processing...' : (editMode ? 'Update Order' : 'Create Order')}
       </button>
     </div>
+  </div>
   );
 };
 
