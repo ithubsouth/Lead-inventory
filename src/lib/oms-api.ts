@@ -1,4 +1,5 @@
 import { OMS_API_CONFIG } from './api-config';
+import { supabase } from '@/integrations/supabase/client';
 
 export interface OMSOrderDetails {
   dealId: string;
@@ -8,37 +9,26 @@ export interface OMSOrderDetails {
 }
 
 export const fetchOrderDetails = async (soNo: string): Promise<OMSOrderDetails | null> => {
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 15000); // 15s timeout
-
   try {
-    const response = await fetch(`${OMS_API_CONFIG.BASE_URL}?soNo=${soNo}`, {
-      method: 'GET',
-      headers: {
-        'api_key': OMS_API_CONFIG.API_KEY,
-        'Content-Type': 'application/json',
-      },
-      signal: controller.signal
+    const { data: json, error } = await supabase.functions.invoke(OMS_API_CONFIG.FUNCTION_NAME, {
+      body: { soNo },
     });
 
-    clearTimeout(timeoutId);
-
-    if (!response.ok) {
-      const text = await response.text();
-      throw new Error(`OMS API HTTP ${response.status}: ${text || response.statusText}`);
+    if (error) {
+      throw new Error(error.message || 'Failed to call OMS proxy');
     }
 
-    const json = await response.json();
+    const response = json as any;
 
-    if (!json.success) {
-      throw new Error(`OMS API responded false: ${json.msg || 'no message'}`);
+    if (!response?.success) {
+      throw new Error(`OMS API responded false: ${response?.msg || response?.error || 'no message'}`);
     }
 
-    if (!json.data) {
+    if (!response.data) {
       throw new Error('OMS API responded success:true but empty data');
     }
 
-    const data = json.data;
+    const data = response.data;
     const firstDevice = data.devices && data.devices.length > 0 ? data.devices[0] : null;
 
     return {
@@ -48,11 +38,7 @@ export const fetchOrderDetails = async (soNo: string): Promise<OMSOrderDetails |
       agreementType: data.agreementType || '',
     };
   } catch (error: any) {
-    if (error.name === 'AbortError') {
-      console.error('OMS API request timed out');
-    } else {
-      console.error('Error fetching OMS order details:', error);
-    }
+    console.error('Error fetching OMS order details:', error);
     return null;
   }
 };
