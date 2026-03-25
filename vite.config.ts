@@ -8,6 +8,13 @@ export default defineConfig(({ mode }) => ({
   server: {
     host: "::",
     port: 8080,
+    proxy: {
+      '/api-oms': {
+        target: 'https://apigw.leadschool.in',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api-oms/, ''),
+      },
+    },
   },
   plugins: [
     react(),

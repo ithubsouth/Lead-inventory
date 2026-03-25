@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Plus, Minus, Trash2, Camera, ChevronDown, ChevronUp, Search, Edit2, X } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from '@/components/ui/use-toast';
+import { fetchOrderDetails } from '@/lib/oms-api';
 import {
   orderTypes,
   tabletModels,
@@ -106,6 +107,7 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [searchTimeout, setSearchTimeout] = useState<NodeJS.Timeout | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
+  const [fetchingOrderDetails, setFetchingOrderDetails] = useState(false);
 
 
   useEffect(() => {
@@ -411,6 +413,49 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
     setDealId('');
     setNucleusId('');
     setAgreementType('');
+  };
+
+  const handleFetchOrderDetails = async () => {
+    if (!salesOrder.trim()) {
+      toast({
+        title: 'Error',
+        description: 'Please enter a sales order number',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    setFetchingOrderDetails(true);
+    try {
+      const orderDetails = await fetchOrderDetails(salesOrder.trim());
+      
+      if (orderDetails) {
+        setDealId(orderDetails.dealId);
+        setNucleusId(orderDetails.nucleusId);
+        setSchoolName(orderDetails.schoolName);
+        setAgreementType(orderDetails.agreementType);
+        
+        toast({
+          title: 'Success',
+          description: 'Order details fetched successfully',
+        });
+      } else {
+        toast({
+          title: 'Error',
+          description: 'Order not found. Please check the sales order number',
+          variant: 'destructive',
+        });
+      }
+    } catch (error) {
+      console.error('Error fetching order details:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to fetch order details',
+        variant: 'destructive',
+      });
+    } finally {
+      setFetchingOrderDetails(false);
+    }
   };
 
   const fetchAssetDetails = async (asset: AssetItem, index: number, serialNumber: string) => {
@@ -1463,13 +1508,36 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
           </div>
           <div>
             <label style={{ fontSize: '12px', display: 'block', marginBottom: '4px' }}>Sales Order</label>
-            <input
-              type="text"
-              value={salesOrder}
-              onChange={(e) => setSalesOrder(e.target.value)}
-              disabled={editMode}
-              style={{ width: '100%', padding: '8px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '14px' }}
-            />
+            <div style={{ display: 'flex', gap: '8px', alignItems: 'flex-end' }}>
+              <input
+                type="text"
+                value={salesOrder}
+                onChange={(e) => setSalesOrder(e.target.value)}
+                disabled={editMode}
+                style={{ flex: 1, padding: '8px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '14px' }}
+              />
+              <button
+                type="button"
+                onClick={handleFetchOrderDetails}
+                disabled={editMode || fetchingOrderDetails || !salesOrder.trim()}
+                style={{
+                  padding: '8px 12px',
+                  border: '1px solid #3b82f6',
+                  borderRadius: '4px',
+                  background: '#3b82f6',
+                  color: '#fff',
+                  cursor: fetchingOrderDetails || !salesOrder.trim() ? 'not-allowed' : 'pointer',
+                  opacity: fetchingOrderDetails || !salesOrder.trim() ? 0.5 : 1,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  minWidth: '40px',
+                }}
+                title="Fetch order details from OMS"
+              >
+                <Search size={16} />
+              </button>
+            </div>
           </div>
           <div>
             <label style={{ fontSize: '12px', display: 'block', marginBottom: '4px' }}>
