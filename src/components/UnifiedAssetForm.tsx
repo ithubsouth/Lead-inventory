@@ -1501,7 +1501,6 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
             <select
               value={orderType}
               onChange={(e) => setOrderType(e.target.value)}
-              disabled={editMode}
               className="select-base"
             >
               <option value="">Select Order Type</option>
@@ -1515,13 +1514,12 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
                 type="text"
                 value={salesOrder}
                 onChange={(e) => setSalesOrder(e.target.value)}
-                disabled={editMode}
                 className="input-base"
               />
               <button
                 type="button"
                 onClick={handleFetchOrderDetails}
-                disabled={editMode || fetchingOrderDetails || !salesOrder.trim()}
+                disabled={fetchingOrderDetails || !salesOrder.trim()}
                 className="action-button"
                 style={{
                   padding: '8px 12px',
@@ -1550,7 +1548,6 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
               type="text"
               value={schoolName}
               onChange={(e) => setSchoolName(e.target.value)}
-              disabled={editMode}
               className="input-base"
             />
           </div>
@@ -1563,7 +1560,6 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
               type="text"
               value={dealId}
               onChange={(e) => setDealId(e.target.value)}
-              disabled={editMode}
               placeholder={orderType === 'Stock' ? 'Optional for Stock orders' : ''}
               className="input-base"
             />
@@ -1574,7 +1570,6 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
               type="text"
               value={nucleusId}
               onChange={(e) => setNucleusId(e.target.value)}
-              disabled={editMode}
               className="input-base"
             />
           </div>
@@ -1583,7 +1578,6 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
             <select
               value={agreementType}
               onChange={(e) => setAgreementType(e.target.value)}
-              disabled={editMode}
               className="select-base"
             >
               <option value="">Select Agreement Type</option>
