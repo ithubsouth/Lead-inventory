@@ -24,24 +24,29 @@ export const fetchOrderDetails = async (soNo: string): Promise<OMSOrderDetails |
     clearTimeout(timeoutId);
 
     if (!response.ok) {
-      throw new Error(`API error: ${response.status}`);
+      const text = await response.text();
+      throw new Error(`OMS API HTTP ${response.status}: ${text || response.statusText}`);
     }
 
     const json = await response.json();
 
-    if (json.success && json.data) {
-      const data = json.data;
-      const firstDevice = data.devices && data.devices.length > 0 ? data.devices[0] : null;
-
-      return {
-        dealId: data.dealId?.toString() || '',
-        nucleusId: firstDevice?.nucleusId?.toString() || '',
-        schoolName: firstDevice?.schoolName || '',
-        agreementType: data.agreementType || '',
-      };
+    if (!json.success) {
+      throw new Error(`OMS API responded false: ${json.msg || 'no message'}`);
     }
 
-    return null;
+    if (!json.data) {
+      throw new Error('OMS API responded success:true but empty data');
+    }
+
+    const data = json.data;
+    const firstDevice = data.devices && data.devices.length > 0 ? data.devices[0] : null;
+
+    return {
+      dealId: data.dealId?.toString() || '',
+      nucleusId: firstDevice?.nucleusId?.toString() || '',
+      schoolName: firstDevice?.schoolName || '',
+      agreementType: data.agreementType || '',
+    };
   } catch (error: any) {
     if (error.name === 'AbortError') {
       console.error('OMS API request timed out');

@@ -446,11 +446,11 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
           variant: 'destructive',
         });
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error fetching order details:', error);
       toast({
         title: 'Error',
-        description: 'Failed to fetch order details',
+        description: error?.message ? `Failed to fetch order details: ${error.message}` : 'Failed to fetch order details',
         variant: 'destructive',
       });
     } finally {
