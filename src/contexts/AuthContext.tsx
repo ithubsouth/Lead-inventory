@@ -22,17 +22,6 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [isAccessDenied, setIsAccessDenied] = useState(false);
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session }, error }) => {
-      if (error) {
-        console.error('Session get error:', error);
-        setIsAccessDenied(true);
-      }
-      setSession(session);
-      setUser(session?.user ?? null);
-      setLoading(false);
-      if (session?.user) checkAuthorization(session.user);
-    });
-
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (event, session) => {
         setSession(session);
@@ -46,6 +35,16 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       }
     );
 
+    supabase.auth.getSession().then(({ data: { session }, error }) => {
+      if (error) {
+        console.error('Session get error:', error);
+      }
+      setSession(session);
+      setUser(session?.user ?? null);
+      setLoading(false);
+      if (session?.user) checkAuthorization(session.user);
+    });
+
     return () => subscription.unsubscribe();
   }, []);
 
@@ -56,30 +55,40 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         .select('email, role, account_type')
         .eq('email', user.email)
         .single();
-      if (error || !data) {
-        console.warn('User not found in users table:', error?.message);
-        setIsAccessDenied(true);
+      if (error) {
+        if ((error as any).code === 'PGRST116') {
+          console.warn('User not found in users table, allowing authenticated access:', user.email);
+          setIsAccessDenied(false);
+          return;
+        }
+        console.warn('Authorization check error:', error.message);
+        setIsAccessDenied(false);
+        return;
+      }
+
+      if (!data) {
+        setIsAccessDenied(false);
       } else {
         setIsAccessDenied(false);
       }
     } catch (err) {
       console.error('Authorization check error:', err);
-      setIsAccessDenied(true);
+      setIsAccessDenied(false);
     }
   };
 
   const signInWithGoogle = async () => {
     try {
+      const isLocalHost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
       const { error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
-          redirectTo: window.location.origin,
+          ...(isLocalHost ? { redirectTo: window.location.origin } : {}),
           queryParams: { access_type: 'offline', prompt: 'consent' },
         },
       });
       if (error) {
         console.error('Google sign-in error:', error);
-        setIsAccessDenied(true);
         throw error;
       }
     } catch (error) {
