@@ -1,1 +1,4 @@
 project_id = "cglzrsorabappusuxavs"
+
+[functions.oms-order-details]
+verify_jwt = false
