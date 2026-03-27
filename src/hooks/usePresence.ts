@@ -20,6 +20,15 @@ export const usePresence = () => {
       return;
     }
 
+    // Show current user immediately
+    const currentUser: PresenceUser = {
+      email: user.email || '',
+      name: user.user_metadata?.full_name || user.email?.split('@')[0] || 'User',
+      avatar_url: user.user_metadata?.avatar_url || '',
+      online_at: new Date().toISOString(),
+    };
+    setOnlineUsers([currentUser]);
+
     // Clean up any existing channel
     if (channelRef.current) {
       supabase.removeChannel(channelRef.current);
@@ -50,17 +59,13 @@ export const usePresence = () => {
             }
           });
         });
-        setOnlineUsers(users);
+        if (users.length > 0) {
+          setOnlineUsers(users);
+        }
       })
       .subscribe(async (status) => {
         if (status === 'SUBSCRIBED') {
-          const trackData = {
-            email: user.email || '',
-            name: user.user_metadata?.full_name || user.email?.split('@')[0] || 'User',
-            avatar_url: user.user_metadata?.avatar_url || '',
-            online_at: new Date().toISOString(),
-          };
-          await channel.track(trackData);
+          await channel.track(currentUser);
         }
       });
 
