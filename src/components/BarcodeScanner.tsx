@@ -14,9 +14,27 @@ interface BarcodeScannerProps {
 
 const BarcodeScanner: React.FC<BarcodeScannerProps> = ({ isOpen, onClose, onScan }) => {
   const webcamRef = useRef<Webcam>(null);
+  const scanTimerRef = useRef<number | null>(null);
   const [isScanning, setIsScanning] = useState(false);
   const readerRef = useRef<BrowserMultiFormatReader | null>(null);
   const { toast } = useToast();
+
+  const stopCameraTracks = () => {
+    const video = webcamRef.current?.video;
+    const stream = video?.srcObject as MediaStream | null;
+
+    if (stream) {
+      stream.getTracks().forEach((track) => track.stop());
+      video.srcObject = null;
+    }
+  };
+
+  const clearScanTimer = () => {
+    if (scanTimerRef.current !== null) {
+      window.clearTimeout(scanTimerRef.current);
+      scanTimerRef.current = null;
+    }
+  };
 
   useEffect(() => {
     if (isOpen && !readerRef.current) {
@@ -24,6 +42,8 @@ const BarcodeScanner: React.FC<BarcodeScannerProps> = ({ isOpen, onClose, onScan
     }
 
     return () => {
+      clearScanTimer();
+      stopCameraTracks();
       if (readerRef.current) {
         readerRef.current.reset();
       }
@@ -34,55 +54,59 @@ const BarcodeScanner: React.FC<BarcodeScannerProps> = ({ isOpen, onClose, onScan
     if (!readerRef.current || !webcamRef.current?.video) return;
 
     setIsScanning(true);
-    
+
     try {
       const videoElement = webcamRef.current.video;
-      
-      const scanImage = () => {
-        if (!isOpen || !readerRef.current || !videoElement) return;
-        
-        try {
-          const canvas = document.createElement('canvas');
-          const context = canvas.getContext('2d');
-          
-          if (context && videoElement.videoWidth > 0) {
-            canvas.width = videoElement.videoWidth;
-            canvas.height = videoElement.videoHeight;
-            context.drawImage(videoElement, 0, 0);
-            
-            readerRef.current.decodeFromImageUrl(canvas.toDataURL())
-              .then((result: Result) => {
-                if (result) {
-                  const scannedText = result.getText();
-                  onScan(scannedText);
-                  setIsScanning(false);
-                  onClose();
-                  toast({
-                    title: "Scan Successful",
-                    description: `Scanned: ${scannedText}`,
-                  });
-                }
-              })
-              .catch(() => {
-                // Continue scanning - no result found
-                if (isOpen) {
-                  setTimeout(scanImage, 300);
-                }
-              });
-          } else if (isOpen) {
-            setTimeout(scanImage, 300);
-          }
-        } catch (error) {
-          console.error('Scanning error:', error);
+
+      const scanImage = async () => {
+        if (!isOpen || !readerRef.current || !videoElement || !isScanning) return;
+
+        if (videoElement.videoWidth <= 0) {
           if (isOpen) {
-            setTimeout(scanImage, 300);
+            scanTimerRef.current = window.setTimeout(scanImage, 300);
           }
+          return;
+        }
+
+        const canvas = document.createElement('canvas');
+        const context = canvas.getContext('2d');
+
+        if (!context) {
+          if (isOpen) {
+            scanTimerRef.current = window.setTimeout(scanImage, 300);
+          }
+          return;
+        }
+
+        canvas.width = videoElement.videoWidth;
+        canvas.height = videoElement.videoHeight;
+        context.drawImage(videoElement, 0, 0);
+
+        try {
+          const result = await readerRef.current.decodeFromImageUrl(canvas.toDataURL());
+          if (result) {
+            const scannedText = result.getText();
+            onScan(scannedText);
+            stopScanning();
+            onClose();
+            toast({
+              title: "Scan Successful",
+              description: `Scanned: ${scannedText}`,
+            });
+            return;
+          }
+        } catch {
+          // Continue scanning when no code found
+        }
+
+        if (isOpen) {
+          scanTimerRef.current = window.setTimeout(scanImage, 300);
         }
       };
 
       // Start scanning after a short delay to ensure video is ready
-      setTimeout(scanImage, 500);
-      
+      scanTimerRef.current = window.setTimeout(scanImage, 500);
+
     } catch (error) {
       console.error('Failed to start scanning:', error);
       toast({
@@ -96,6 +120,9 @@ const BarcodeScanner: React.FC<BarcodeScannerProps> = ({ isOpen, onClose, onScan
 
   const stopScanning = () => {
     setIsScanning(false);
+    clearScanTimer();
+    stopCameraTracks();
+
     if (readerRef.current) {
       readerRef.current.reset();
     }

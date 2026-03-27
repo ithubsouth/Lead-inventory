@@ -99,15 +99,22 @@ export const EnhancedBarcodeScanner = ({
       codeReader.current.reset();
     }
 
-    const videoElement = videoRef.current;
-    if (videoElement && videoElement.srcObject) {
-      const stream = videoElement.srcObject as MediaStream;
+    const stream = streamRef.current || (videoRef.current?.srcObject as MediaStream | null);
+    if (stream) {
       stream.getTracks().forEach((track) => track.stop());
-      videoElement.srcObject = null;
+    }
+
+    if (videoRef.current) {
+      videoRef.current.srcObject = null;
     }
 
     setIsScanning(false);
     streamRef.current = null;
+  };
+
+  const handleClose = () => {
+    stopScanning();
+    onClose();
   };
 
   const validateAndHandleScan = (scannedText: string) => {
@@ -195,7 +202,7 @@ export const EnhancedBarcodeScanner = ({
               <ScanBarcode className="h-5 w-5" />
               Scan Barcode
             </h3>
-            <Button variant="outline" size="sm" onClick={onClose}>
+            <Button variant="outline" size="sm" onClick={handleClose}>
               <X className="h-4 w-4" />
             </Button>
           </div>
