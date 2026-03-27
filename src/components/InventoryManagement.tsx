@@ -11,6 +11,7 @@ import AuditTable from './AuditTable';
 import EnhancedBarcodeScanner from './EnhancedBarcodeScanner';
 import { Order, Device, OrderSummary, TabletItem, TVItem } from './types';
 import { UserProfile } from '@/components/UserProfile';
+import { ActiveUsers } from '@/components/ActiveUsers';
 import { DateRange } from 'react-day-picker';
 
 const InventoryManagement = () => {
@@ -673,6 +674,7 @@ const InventoryManagement = () => {
             <h1 className='text-2xl font-bold bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent'>Lead Inventory Management</h1>
           </div>
           <div className='flex items-center space-x-4'>
+            <ActiveUsers />
             <UserProfile />
           </div>
         </div>
