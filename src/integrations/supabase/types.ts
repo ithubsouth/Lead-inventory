@@ -14,6 +14,33 @@ export type Database = {
   }
   public: {
     Tables: {
+      active_users: {
+        Row: {
+          email: string | null
+          full_name: string | null
+          last_seen: string
+          session_id: string
+          status: string
+          user_id: string
+        }
+        Insert: {
+          email?: string | null
+          full_name?: string | null
+          last_seen?: string
+          session_id: string
+          status?: string
+          user_id: string
+        }
+        Update: {
+          email?: string | null
+          full_name?: string | null
+          last_seen?: string
+          session_id?: string
+          status?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       audit_check_history: {
         Row: {
           audited_at: string
