@@ -783,17 +783,26 @@ const DevicesTable: React.FC<DevicesTableProps> = ({
                         <TableCell style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', width: columnWidths.created_at }}>{formatDate(device.created_at) || ''}</TableCell>
                         <TableCell style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', width: columnWidths.updated_by }}>{device.updated_by || ''}</TableCell>
                         <TableCell style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', width: columnWidths.actions }}>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => {
-                              setViewingDevice(device);
-                              setShowViewDialog(true);
-                            }}
-                            style={{ border: '1px solid #d1d5db', borderRadius: '4px', padding: '4px', fontSize: '12px', height: '28px' }}
-                          >
-                            <Eye style={{ width: '12px', height: '12px' }} />
-                          </Button>
+                          <div style={{ display: 'flex', gap: 4 }}>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => { setViewingDevice(device); setShowViewDialog(true); }}
+                              style={{ border: '1px solid #d1d5db', borderRadius: '4px', padding: '4px', fontSize: '12px', height: '28px' }}
+                              title="View"
+                            >
+                              <Eye style={{ width: '12px', height: '12px' }} />
+                            </Button>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => setDocsDevice(device)}
+                              style={{ border: '1px solid #d1d5db', borderRadius: '4px', padding: '4px', fontSize: '12px', height: '28px' }}
+                              title="Documents"
+                            >
+                              <FileText style={{ width: '12px', height: '12px' }} />
+                            </Button>
+                          </div>
                         </TableCell>
                       </TableRow>
                     ))
@@ -801,6 +810,14 @@ const DevicesTable: React.FC<DevicesTableProps> = ({
                 </TableBody>
               </Table>
             </div>
+            {docsDevice && (
+              <AssetDocumentsDialog
+                open={!!docsDevice}
+                onOpenChange={(v) => !v && setDocsDevice(null)}
+                deviceId={docsDevice.id}
+                serialNumber={docsDevice.serial_number}
+              />
+            )}
 
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '4px', fontSize: '12px' }}>
               <div>
