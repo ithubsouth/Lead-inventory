@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
-import { Package, BarChart3, Archive } from 'lucide-react';
+import { Package, BarChart3, Archive, Clock } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import UnifiedAssetForm from './UnifiedAssetForm';
@@ -8,6 +8,7 @@ import OrdersTable from './OrdersTable';
 import DevicesTable from './DevicesTable';
 import OrderSummaryTable from './OrderSummaryTable';
 import AuditTable from './AuditTable';
+import ActivityLogs from './ActivityLogs';
 import EnhancedBarcodeScanner from './EnhancedBarcodeScanner';
 import { Order, Device, OrderSummary, TabletItem, TVItem } from './types';
 import { UserProfile } from '@/components/UserProfile';
