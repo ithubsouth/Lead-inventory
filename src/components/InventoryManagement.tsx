@@ -683,7 +683,7 @@ const InventoryManagement = () => {
       <div className='flex-1 overflow-y-auto pt-[50px]'>
         <div className='container mx-auto px-4 py-6 h-full'>
           <Tabs defaultValue='create' className='w-full h-full flex flex-col'>
-            <TabsList className='grid w-full grid-cols-5 mb-6 bg-card/50 backdrop-blur-sm border border-border/50 flex-shrink-0'>
+            <TabsList className='grid w-full grid-cols-6 mb-6 bg-card/50 backdrop-blur-sm border border-border/50 flex-shrink-0'>
               <TabsTrigger value='create' className='flex items-center gap-2 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground'>
                 <Package className='w-4 h-4' />
                 Create Order
@@ -703,6 +703,10 @@ const InventoryManagement = () => {
               <TabsTrigger value='audit' className='flex items-center gap-2 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground'>
                 <Archive className='w-4 h-4' />
                 Audit View
+              </TabsTrigger>
+              <TabsTrigger value='activity' className='flex items-center gap-2 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground'>
+                <Clock className='w-4 h-4' />
+                Activity Logs
               </TabsTrigger>
             </TabsList>
             <TabsContent value='create' className='space-y-6 flex-1 overflow-y-auto'>
