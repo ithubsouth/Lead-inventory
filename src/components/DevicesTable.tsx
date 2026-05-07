@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { Search, Download, Eye, Calendar } from 'lucide-react';
+import { Search, Download, Eye, Calendar, FileText } from 'lucide-react';
+import AssetDocumentsDialog from './AssetDocumentsDialog';
 import { Device } from './types';
 import { formatDate } from './utils';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -81,6 +82,7 @@ const DevicesTable: React.FC<DevicesTableProps> = ({
   const [rowsPerPage, setRowsPerPage] = useState(10);
   const [viewingDevice, setViewingDevice] = useState<Device | null>(null);
   const [showViewDialog, setShowViewDialog] = useState(false);
+  const [docsDevice, setDocsDevice] = useState<Device | null>(null);
   const tableContainerRef = useRef<HTMLDivElement>(null);
 
   const toast = ({ title, description, variant }: { title: string; description: string; variant?: 'destructive' }) => {
@@ -781,17 +783,26 @@ const DevicesTable: React.FC<DevicesTableProps> = ({
                         <TableCell style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', width: columnWidths.created_at }}>{formatDate(device.created_at) || ''}</TableCell>
                         <TableCell style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', width: columnWidths.updated_by }}>{device.updated_by || ''}</TableCell>
                         <TableCell style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', width: columnWidths.actions }}>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => {
-                              setViewingDevice(device);
-                              setShowViewDialog(true);
-                            }}
-                            style={{ border: '1px solid #d1d5db', borderRadius: '4px', padding: '4px', fontSize: '12px', height: '28px' }}
-                          >
-                            <Eye style={{ width: '12px', height: '12px' }} />
-                          </Button>
+                          <div style={{ display: 'flex', gap: 4 }}>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => { setViewingDevice(device); setShowViewDialog(true); }}
+                              style={{ border: '1px solid #d1d5db', borderRadius: '4px', padding: '4px', fontSize: '12px', height: '28px' }}
+                              title="View"
+                            >
+                              <Eye style={{ width: '12px', height: '12px' }} />
+                            </Button>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => setDocsDevice(device)}
+                              style={{ border: '1px solid #d1d5db', borderRadius: '4px', padding: '4px', fontSize: '12px', height: '28px' }}
+                              title="Documents"
+                            >
+                              <FileText style={{ width: '12px', height: '12px' }} />
+                            </Button>
+                          </div>
                         </TableCell>
                       </TableRow>
                     ))
@@ -799,6 +810,14 @@ const DevicesTable: React.FC<DevicesTableProps> = ({
                 </TableBody>
               </Table>
             </div>
+            {docsDevice && (
+              <AssetDocumentsDialog
+                open={!!docsDevice}
+                onOpenChange={(v) => !v && setDocsDevice(null)}
+                deviceId={docsDevice.id}
+                serialNumber={docsDevice.serial_number}
+              />
+            )}
 
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '4px', fontSize: '12px' }}>
               <div>
