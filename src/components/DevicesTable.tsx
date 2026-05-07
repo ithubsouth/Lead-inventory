@@ -82,6 +82,7 @@ const DevicesTable: React.FC<DevicesTableProps> = ({
   const [rowsPerPage, setRowsPerPage] = useState(10);
   const [viewingDevice, setViewingDevice] = useState<Device | null>(null);
   const [showViewDialog, setShowViewDialog] = useState(false);
+  const [docsDevice, setDocsDevice] = useState<Device | null>(null);
   const tableContainerRef = useRef<HTMLDivElement>(null);
 
   const toast = ({ title, description, variant }: { title: string; description: string; variant?: 'destructive' }) => {
