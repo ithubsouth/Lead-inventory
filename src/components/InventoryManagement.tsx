@@ -873,6 +873,9 @@ const InventoryManagement = () => {
                 userRole={userRole || 'unknown'}
               />
             </TabsContent>
+            <TabsContent value='activity' className='flex-1 overflow-y-auto'>
+              <ActivityLogs />
+            </TabsContent>
           </Tabs>
         </div>
       </div>
