@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { Search, Download, Eye, Calendar } from 'lucide-react';
+import { Search, Download, Eye, Calendar, FileText } from 'lucide-react';
+import AssetDocumentsDialog from './AssetDocumentsDialog';
 import { Device } from './types';
 import { formatDate } from './utils';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
