@@ -12,7 +12,7 @@ const ALLOWED = ['application/pdf', 'image/jpeg', 'image/png', 'image/webp'];
 type AssetDoc = {
   id: string;
   device_id: string;
-  serial_number: string;
+  serial_number?: string;
   file_name: string;
   file_path: string;
   file_size: number;

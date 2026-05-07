@@ -76,7 +76,13 @@ export const useActiveUsers = () => {
     };
   }, [user]);
 
-  const otherUsers = activeUsers.filter(u => u.user_id !== user?.id);
+  const uniqueOtherUsers = Array.from(
+    new Map(
+      activeUsers
+        .filter(u => u.user_id !== user?.id)
+        .map(u => [u.user_id, u])
+    ).values()
+  );
 
-  return { activeUsers, otherUsers, loading };
+  return { activeUsers: uniqueOtherUsers, loading };
 };

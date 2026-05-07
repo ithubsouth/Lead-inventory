@@ -525,17 +525,17 @@ export const UserProfile = () => {
                             index % 2 === 0 ? 'bg-background' : 'bg-muted/30'
                           } hover:bg-muted/50`}
                         >
-                          <TableCell className="w-[150px] py-3 px-4 text-sm font-medium text-foreground align-top border-r last:border-r-0">
-                            <div className="truncate max-w-[150px]">{user.full_name || user.email.split('@')[0]}</div>
+                          <TableCell className="py-3 px-4 text-sm font-medium text-foreground align-top border-r last:border-r-0">
+                            <div className="break-words whitespace-normal">{user.full_name || '—'}</div>
                           </TableCell>
-                          <TableCell className="w-[150px] py-3 px-4 text-sm text-muted-foreground align-top border-r last:border-r-0">
-                            <div className="truncate max-w-[150px]">{user.department || '—'}</div>
+                          <TableCell className="py-3 px-4 text-sm text-muted-foreground align-top border-r last:border-r-0">
+                            <div className="break-words whitespace-normal">{user.department || '—'}</div>
                           </TableCell>
-                          <TableCell className="w-[200px] py-3 px-4 text-sm text-foreground align-top border-r last:border-r-0">
-                            <div className="truncate max-w-[200px]">{user.email}</div>
+                          <TableCell className="py-3 px-4 text-sm font-medium text-primary align-top border-r last:border-r-0">
+                            <div className="break-words whitespace-normal underline cursor-pointer hover:opacity-80" title={user.email}>{user.email}</div>
                           </TableCell>
-                          <TableCell className="w-[120px] py-3 px-4 text-sm align-top border-r last:border-r-0">
-                            <div className="truncate max-w-[120px]">
+                          <TableCell className="py-3 px-4 text-sm align-top border-r last:border-r-0">
+                            <div className="break-words">
                               <span
                                 className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
                                   user.role === 'Super Admin'
@@ -551,10 +551,10 @@ export const UserProfile = () => {
                               </span>
                             </div>
                           </TableCell>
-                          <TableCell className="w-[120px] py-3 px-4 text-sm text-muted-foreground align-top border-r last:border-r-0">
-                            <div className="truncate max-w-[120px]">{user.account_type || '0'}</div>
+                          <TableCell className="py-3 px-4 text-sm text-muted-foreground align-top border-r last:border-r-0">
+                            <div className="break-words whitespace-normal">{user.account_type || '0'}</div>
                           </TableCell>
-                          <TableCell className="w-[100px] py-3 px-4 align-top">
+                          <TableCell className="py-3 px-4 align-top">
                             <div className="flex items-center space-x-1">
                               {((canEditAllRoles) ||
                                 (canEditOperatorReporter && ['Operator', 'Reporter'].includes(user.role || '')) ||

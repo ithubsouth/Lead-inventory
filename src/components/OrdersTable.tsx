@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { Search, Eye, Edit, Trash2, RotateCcw, Download, Calendar } from 'lucide-react';
+import { Search, Eye, Edit, Trash2, RotateCcw, Download, Calendar, FileText } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import EditOrderForm from './EditOrderForm';
+import AssetDocumentsDialog from './AssetDocumentsDialog';
 import { Order } from './types';
 import { formatDate } from './utils';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -83,6 +84,7 @@ const OrdersTable: React.FC<OrdersTableProps> = ({
   const [rowsPerPage, setRowsPerPage] = useState(10);
   const [viewingOrder, setViewingOrder] = useState<Order | null>(null);
   const [editingOrder, setEditingOrder] = useState<Order | null>(null);
+  const [docsOrder, setDocsOrder] = useState<Order | null>(null);
   const [showViewDialog, setShowViewDialog] = useState(false);
   const [showEditDialog, setShowEditDialog] = useState(false);
   const [showStatusDialog, setShowStatusDialog] = useState(false);
@@ -773,8 +775,18 @@ const OrdersTable: React.FC<OrdersTableProps> = ({
                                 setShowViewDialog(true);
                               }}
                               style={{ border: '1px solid #d1d5db', borderRadius: '4px', padding: '4px', fontSize: '12px', height: '28px' }}
+                              title="View"
                             >
                               <Eye style={{ width: '12px', height: '12px' }} />
+                            </Button>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => setDocsOrder(order)}
+                              style={{ border: '1px solid #d1d5db', borderRadius: '4px', padding: '4px', fontSize: '12px', height: '28px' }}
+                              title="Documents"
+                            >
+                              <FileText style={{ width: '12px', height: '12px' }} />
                             </Button>
                             {!order.is_deleted && (
                               <>
@@ -884,6 +896,15 @@ const OrdersTable: React.FC<OrdersTableProps> = ({
                 </Button>
               </div>
             </div>
+
+            {docsOrder && (
+              <AssetDocumentsDialog
+                open={!!docsOrder}
+                onOpenChange={(v) => !v && setDocsOrder(null)}
+                deviceId={docsOrder.id}
+                serialNumber={docsOrder.sales_order || 'N/A'}
+              />
+            )}
 
             {showViewDialog && viewingOrder && (
               <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>

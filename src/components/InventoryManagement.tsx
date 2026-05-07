@@ -9,10 +9,10 @@ import DevicesTable from './DevicesTable';
 import OrderSummaryTable from './OrderSummaryTable';
 import AuditTable from './AuditTable';
 import ActivityLogs from './ActivityLogs';
+import { UserProfile } from './UserProfile';
+import { ActiveUsers } from '@/components/ActiveUsers';
 import EnhancedBarcodeScanner from './EnhancedBarcodeScanner';
 import { Order, Device, OrderSummary, TabletItem, TVItem } from './types';
-import { UserProfile } from '@/components/UserProfile';
-import { ActiveUsers } from '@/components/ActiveUsers';
 import { DateRange } from 'react-day-picker';
 
 const InventoryManagement = () => {
