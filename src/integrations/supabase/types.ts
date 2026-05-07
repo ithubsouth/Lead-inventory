@@ -41,6 +41,45 @@ export type Database = {
         }
         Relationships: []
       }
+      asset_documents: {
+        Row: {
+          created_at: string
+          device_id: string
+          file_name: string
+          file_path: string
+          file_size: number
+          id: string
+          mime_type: string | null
+          serial_number: string
+          uploaded_at: string
+          uploaded_by: string | null
+        }
+        Insert: {
+          created_at?: string
+          device_id: string
+          file_name: string
+          file_path: string
+          file_size?: number
+          id?: string
+          mime_type?: string | null
+          serial_number: string
+          uploaded_at?: string
+          uploaded_by?: string | null
+        }
+        Update: {
+          created_at?: string
+          device_id?: string
+          file_name?: string
+          file_path?: string
+          file_size?: number
+          id?: string
+          mime_type?: string | null
+          serial_number?: string
+          uploaded_at?: string
+          uploaded_by?: string | null
+        }
+        Relationships: []
+      }
       audit_check_history: {
         Row: {
           audited_at: string
