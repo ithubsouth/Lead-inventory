@@ -137,9 +137,9 @@ export const ActivityLogs: React.FC = () => {
       <CardContent className="pt-4 space-y-3">
         <div className="flex items-center gap-2 flex-wrap">
           <div className="relative flex-1 min-w-[240px]">
-            <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-            <Input placeholder="Search by field, value, user, sales order…" className="pl-9"
+            <Input placeholder="Search by field, value, user, sales order…" className="pr-9"
               value={search} onChange={e => setSearch(e.target.value)} />
+            <Search className="w-4 h-4 absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
           </div>
           <Select value={tableFilter} onValueChange={setTableFilter}>
             <SelectTrigger className="h-9 w-36"><Filter className="w-3 h-3 mr-1" /><SelectValue /></SelectTrigger>

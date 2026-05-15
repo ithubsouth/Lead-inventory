@@ -569,14 +569,14 @@ const DevicesTable: React.FC<DevicesTableProps> = ({
           <div style={{ display: 'flex', alignItems: 'center', gap: '4px', flexWrap: 'wrap' }}>
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ position: 'relative', width: '100%' }}>
-                <Search style={{ position: 'absolute', left: '8px', top: '50%', transform: 'translateY(-50%)', width: '12px', height: '12px', color: '#6b7280' }} />
                 <Input
                   id="search"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="        Search by Serial, Sales Order, Deal ID, School, Nucleus ID, Asset Type, Model, Configuration, Asset Status, Asset Condition, Product, Status, Order Type, Asset Group, Asset Code, SD Card Size, Profile ID, Updated By"
-                  style={{ paddingLeft: '28px', fontSize: '12px', width: '100%', border: '1px solid #d1d5db', borderRadius: '4px', padding: '6px', height: '28px' }}
+                  placeholder="Search by Serial, Sales Order, Deal ID, School, Nucleus ID, Asset Type, Model, Configuration, Asset Status, Asset Condition, Product, Status, Order Type, Asset Group, Asset Code, SD Card Size, Profile ID, Updated By"
+                  style={{ paddingLeft: '8px', paddingRight: '28px', fontSize: '12px', width: '100%', border: '1px solid #d1d5db', borderRadius: '4px', padding: '6px 28px 6px 8px', height: '28px' }}
                 />
+                <Search style={{ position: 'absolute', right: '8px', top: '50%', transform: 'translateY(-50%)', width: '12px', height: '12px', color: '#6b7280', pointerEvents: 'none' }} />
               </div>
             </div>
             <Button
