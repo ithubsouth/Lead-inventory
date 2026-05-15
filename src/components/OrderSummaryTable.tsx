@@ -477,14 +477,14 @@ const OrderSummaryTable: React.FC<OrderSummaryTableProps> = ({
           <div style={{ display: 'flex', alignItems: 'center', gap: '4px', flexWrap: 'wrap' }}>
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ position: 'relative', width: '100%' }}>
-                <Search style={{ position: 'absolute', left: '8px', top: '50%', transform: 'translateY(-50%)', width: '12px', height: '12px', color: '#6b7280' }} />
                 <Input
                   id="search"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   placeholder="Search by Warehouse, Asset Type, or Model"
-                  style={{ paddingLeft: '28px', fontSize: '12px', width: '100%', height: '28px' }}
+                  style={{ paddingLeft: '8px', paddingRight: '28px', fontSize: '12px', width: '100%', height: '28px' }}
                 />
+                <Search style={{ position: 'absolute', right: '8px', top: '50%', transform: 'translateY(-50%)', width: '12px', height: '12px', color: '#6b7280', pointerEvents: 'none' }} />
               </div>
             </div>
             <Button
