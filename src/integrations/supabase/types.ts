@@ -434,6 +434,7 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      current_user_role: { Args: never; Returns: string }
       get_user_by_email: {
         Args: { email_param: string }
         Returns: {
