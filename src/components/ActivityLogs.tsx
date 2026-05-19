@@ -21,10 +21,12 @@ type HistoryRow = {
   sales_order: string | null;
 };
 
-type GroupedLog = {
+type LogEntry = {
+  id: string;
   timestamp: string;
   record_id: string;
   table_name: string;
+  operation: string;
   sales_order: string | null;
   user: string;
   serial_number: string;
@@ -36,7 +38,6 @@ export const ActivityLogs: React.FC = () => {
   const [deviceMap, setDeviceMap] = useState<Record<string, any>>({});
   const [orderMap, setOrderMap] = useState<Record<string, any>>({});
   const [userMap, setUserMap] = useState<Record<string, string>>({});
-  const [soToSchoolMap, setSoToSchoolMap] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(false);
   const [search, setSearch] = useState('');
   const [pageSize, setPageSize] = useState(10);
@@ -47,36 +48,30 @@ export const ActivityLogs: React.FC = () => {
     if (!container) return;
 
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'ArrowLeft') {
-        container.scrollBy({ left: -150, behavior: 'smooth' });
-        e.preventDefault();
-      } else if (e.key === 'ArrowRight') {
-        container.scrollBy({ left: 150, behavior: 'smooth' });
-        e.preventDefault();
-      } else if (e.key === 'ArrowUp') {
-        container.scrollBy({ top: -60, behavior: 'smooth' });
-        e.preventDefault();
-      } else if (e.key === 'ArrowDown') {
-        container.scrollBy({ top: 60, behavior: 'smooth' });
-        e.preventDefault();
+      const active = document.activeElement;
+      if (active === container || container.contains(active)) {
+        if (e.key === 'ArrowLeft') { container.scrollBy({ left: -250, behavior: 'smooth' }); e.preventDefault(); }
+        else if (e.key === 'ArrowRight') { container.scrollBy({ left: 250, behavior: 'smooth' }); e.preventDefault(); }
+        else if (e.key === 'ArrowUp') { container.scrollBy({ top: -100, behavior: 'smooth' }); e.preventDefault(); }
+        else if (e.key === 'ArrowDown') { container.scrollBy({ top: 100, behavior: 'smooth' }); e.preventDefault(); }
       }
     };
 
     const handleWheel = (e: WheelEvent) => {
       if (e.deltaX !== 0) {
-        container.scrollBy({ left: e.deltaX * 2, behavior: 'smooth' });
+        container.scrollBy({ left: e.deltaX * 2.5, behavior: 'smooth' });
         e.preventDefault();
       } else if (e.shiftKey && e.deltaY !== 0) {
-        container.scrollBy({ left: e.deltaY * 2, behavior: 'smooth' });
+        container.scrollBy({ left: e.deltaY * 2.5, behavior: 'smooth' });
         e.preventDefault();
       }
     };
 
-    container.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('keydown', handleKeyDown);
     container.addEventListener('wheel', handleWheel, { passive: false });
 
     return () => {
-      container.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('keydown', handleKeyDown);
       container.removeEventListener('wheel', handleWheel);
     };
   }, []);
@@ -94,7 +89,6 @@ export const ActivityLogs: React.FC = () => {
       const historyData = (data as HistoryRow[]) || [];
       setRows(historyData);
 
-      // Fetch devices context
       const deviceIds = Array.from(new Set(historyData.filter(r => r.table_name === 'devices').map(r => r.record_id)));
       let fetchedDevices: any[] = [];
       if (deviceIds.length > 0) {
@@ -105,34 +99,17 @@ export const ActivityLogs: React.FC = () => {
         setDeviceMap(dMap);
       }
 
-      // Fetch orders context (including parent orders for devices)
-      const orderIdsFromHistory = historyData.filter(r => r.table_name === 'orders').map(r => r.record_id);
-      const orderIdsFromDevices = fetchedDevices.map(d => d.order_id).filter(Boolean);
-      const allOrderIds = Array.from(new Set([...orderIdsFromHistory, ...orderIdsFromDevices]));
-
-      let fetchedOrders: any[] = [];
-      if (allOrderIds.length > 0) {
-        const { data: orders } = await supabase.from('orders').select('*').in('id', allOrderIds);
-        fetchedOrders = orders || [];
+      const orderIds = Array.from(new Set([
+        ...historyData.filter(r => r.table_name === 'orders').map(r => r.record_id),
+        ...fetchedDevices.map(d => d.order_id).filter(Boolean)
+      ]));
+      if (orderIds.length > 0) {
+        const { data: orders } = await supabase.from('orders').select('*').in('id', orderIds);
         const oMap: Record<string, any> = {};
-        fetchedOrders.forEach(o => oMap[o.id] = o);
+        orders?.forEach(o => oMap[o.id] = o);
         setOrderMap(oMap);
       }
 
-      // Build Global Sales Order to School Map for cross-matching
-      const soMap: Record<string, string> = {};
-      fetchedOrders.forEach(o => { if (o.sales_order && o.school_name) soMap[o.sales_order] = o.school_name; });
-      fetchedDevices.forEach(d => { if (d.sales_order && d.school_name) soMap[d.sales_order] = d.school_name; });
-
-      // If some SOs are still missing school names, try a direct lookup
-      const missingSO = Array.from(new Set(historyData.map(r => r.sales_order).filter(s => s && !soMap[s])));
-      if (missingSO.length > 0) {
-        const { data: extraSO } = await supabase.from('orders').select('sales_order, school_name').in('sales_order', missingSO).eq('is_deleted', false);
-        extraSO?.forEach(o => { if (o.school_name) soMap[o.sales_order] = o.school_name; });
-      }
-      setSoToSchoolMap(soMap);
-
-      // Fetch users context for email mapping
       const { data: users } = await supabase.from('users').select('id, email');
       const uMap: Record<string, string> = {};
       users?.forEach(u => uMap[u.id] = u.email);
@@ -147,124 +124,106 @@ export const ActivityLogs: React.FC = () => {
 
   useEffect(() => { load(); }, []);
 
-  const groupedLogs = useMemo(() => {
-    const groups: Record<string, GroupedLog> = {};
+  const logEntries = useMemo(() => {
+    const extractValue = (val: any): string => (val === null || val === undefined) ? '' : (typeof val === 'object') ? JSON.stringify(val) : String(val);
 
-    rows.forEach(row => {
+    // 1. Process all rows into raw events with extracted data
+    const rawEvents = rows.map(row => {
       const device = deviceMap[row.record_id];
       const order = orderMap[row.record_id] || (device ? orderMap[device.order_id] : null);
 
-      const time = new Date(row.created_at).getTime();
-      const roundedTime = Math.floor(time / 5000) * 5000;
-
-      const rawUser = row.changed_by || row.updated_by || 'system';
-      const displayUser = userMap[rawUser] || rawUser;
-
-      const key = `${row.record_id}-${roundedTime}-${rawUser}`;
-
-      if (!groups[key]) {
-        groups[key] = {
-          timestamp: row.created_at,
-          record_id: row.record_id,
-          table_name: row.table_name,
-          sales_order: row.sales_order || device?.sales_order || order?.sales_order || null,
-          user: displayUser,
-          serial_number: device?.serial_number || '',
-          fields: {}
-        };
+      const eventFields: Record<string, string> = {};
+      if (typeof row.new_data === 'object' && row.new_data !== null && !Array.isArray(row.new_data)) {
+        Object.entries(row.new_data).forEach(([k, v]) => { eventFields[k] = extractValue(v); });
+      } else if (row.field_name) {
+        eventFields[row.field_name] = extractValue(row.new_data);
       }
 
-      const extractValue = (val: any): string => {
-        if (val === null || val === undefined) return '';
-        if (typeof val === 'object') return JSON.stringify(val);
-        return String(val);
+      return {
+        ...row,
+        serial_number: eventFields.serial_number || device?.serial_number || '',
+        sales_order: eventFields.sales_order || row.sales_order || device?.sales_order || order?.sales_order || '',
+        school_name: eventFields.school_name || device?.school_name || order?.school_name || '',
+        extractedFields: eventFields,
+        user: userMap[row.changed_by || row.updated_by || ''] || row.changed_by || row.updated_by || 'system'
       };
-
-      if (!row.field_name && typeof row.new_data === 'object' && row.new_data !== null && !Array.isArray(row.new_data)) {
-        Object.entries(row.new_data).forEach(([k, v]) => {
-          groups[key].fields[k] = { old: extractValue(row.old_data?.[k]), new: extractValue(v) };
-          if (k === 'serial_number' && !groups[key].serial_number) groups[key].serial_number = extractValue(v);
-          if (k === 'sales_order' && !groups[key].sales_order) groups[key].sales_order = extractValue(v);
-        });
-      } else {
-        const field = row.field_name || 'details';
-        groups[key].fields[field] = { old: extractValue(row.old_data), new: extractValue(row.new_data) };
-        if (field === 'serial_number' && !groups[key].serial_number) groups[key].serial_number = extractValue(row.new_data);
-        if ((field === 'sales_order' || field === 'order_id') && !groups[key].sales_order) groups[key].sales_order = extractValue(row.new_data);
-      }
     });
 
-    const sorted = Object.values(groups).sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+    // 2. Sort oldest first to calculate progressive changes
+    const sortedEvents = [...rawEvents].sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
 
-    // Pass 2: Backfill missing "old" values from previous log entries for the same record
-    const lastSeenValue: Record<string, Record<string, string>> = {};
+    // 3. Track state per identifier (Serial or Record ID)
+    const finalEntries: LogEntry[] = [];
+    const lastState: Record<string, Record<string, string>> = {};
 
-    // We iterate backwards in time (from oldest to newest) to track values
-    [...sorted].reverse().forEach(group => {
-      Object.entries(group.fields).forEach(([field, data]) => {
-        const recordId = group.record_id;
-        if (!lastSeenValue[recordId]) lastSeenValue[recordId] = {};
+    sortedEvents.forEach(ev => {
+      const key = ev.serial_number || ev.record_id;
+      if (!lastState[key]) lastState[key] = {};
 
-        // If this entry has an empty old value, fill it with the last new value we saw for this record
-        if (!data.old && lastSeenValue[recordId][field]) {
-          data.old = lastSeenValue[recordId][field];
-        }
+      const changes: Record<string, { old: string; new: string }> = {};
 
-        // Update our tracker with the newest value from this entry
-        if (data.new) {
-          lastSeenValue[recordId][field] = data.new;
+      Object.entries(ev.extractedFields).forEach(([f, newVal]) => {
+        const prevVal = lastState[key][f] || '';
+        if (newVal !== prevVal) {
+          changes[f] = { old: prevVal, new: newVal };
+          lastState[key][f] = newVal;
         }
       });
+
+      // Special check for school_name consistency
+      if (!changes.school_name && ev.school_name && ev.school_name !== (lastState[key].school_name || '')) {
+         changes.school_name = { old: lastState[key].school_name || '', new: ev.school_name };
+         lastState[key].school_name = ev.school_name;
+      }
+
+      if (Object.keys(changes).length > 0) {
+        finalEntries.push({
+          id: ev.id,
+          timestamp: ev.created_at,
+          record_id: ev.record_id,
+          table_name: ev.table_name,
+          operation: ev.operation,
+          sales_order: ev.sales_order,
+          user: ev.user,
+          serial_number: ev.serial_number,
+          fields: changes
+        });
+      }
     });
 
-    return sorted;
+    // 4. Return newest first for display
+    return finalEntries.reverse();
   }, [rows, deviceMap, orderMap, userMap]);
 
   const filtered = useMemo(() => {
-    if (!search) return groupedLogs;
+    if (!search) return logEntries;
     const q = search.toLowerCase();
-    return groupedLogs.filter(g =>
-      g.serial_number.toLowerCase().includes(q) ||
-      g.sales_order?.toLowerCase().includes(q) ||
-      g.user.toLowerCase().includes(q)
+    return logEntries.filter(e =>
+      e.serial_number.toLowerCase().includes(q) ||
+      (e.sales_order || '').toLowerCase().includes(q) ||
+      e.user.toLowerCase().includes(q)
     );
-  }, [groupedLogs, search]);
+  }, [logEntries, search]);
 
   const visible = filtered.slice(0, pageSize);
+  const formatDate = (ds: string) => new Date(ds).toLocaleString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true }).replace(',', '');
 
-  const formatDate = (dateStr: string) => {
-    const d = new Date(dateStr);
-    return d.toLocaleString('en-GB', {
-      day: '2-digit', month: 'short', year: 'numeric',
-      hour: '2-digit', minute: '2-digit', hour12: true
-    }).replace(',', '');
-  };
-
-  const renderCell = (field: string, group: GroupedLog, defaultValue: string = '—') => {
-    const data = group.fields[field];
-    const device = deviceMap[group.record_id];
-    const order = orderMap[group.record_id] || (device ? orderMap[device.order_id] : null);
-    const source = group.table_name === 'devices' ? device : order;
-    const staticValue = source?.[field];
-
-    const oldV = data?.old || '';
-    const newV = data?.new || '';
-
-    // We show the change if the old value is recorded and different from new
-    const hasChange = oldV !== newV && oldV !== '' && oldV !== 'null' && oldV !== 'undefined';
-
-    return (
-      <div className="flex flex-col min-h-[42px] justify-center">
-        <span className="text-emerald-600 font-bold text-[12px] leading-tight">
-          {newV || staticValue || defaultValue}
-        </span>
-        {hasChange && (
-          <span className="text-red-600 font-extrabold text-[11px] leading-tight mt-1">
-            {oldV}
-          </span>
-        )}
-      </div>
-    );
+  const renderCell = (field: string, entry: LogEntry, defaultValue: string = '—') => {
+    const data = entry.fields[field];
+    if (data) {
+      const isDiff = data.old !== data.new && data.old !== '' && data.old !== 'null';
+      return (
+        <div className="flex flex-col min-h-[44px] justify-center">
+          <span className="text-emerald-600 font-bold text-[12px] leading-tight">{data.new || defaultValue}</span>
+          {isDiff && <span className="text-red-600 font-extrabold text-[11px] leading-tight mt-1.5">{data.old}</span>}
+        </div>
+      );
+    }
+    // For non-changing fields in this row, look up current state from device/order context
+    const device = deviceMap[entry.record_id];
+    const order = orderMap[entry.record_id] || (device ? orderMap[device.order_id] : null);
+    const source = entry.table_name === 'devices' ? device : order;
+    return <span className="text-gray-400 font-medium text-[11px]">{source?.[field] || defaultValue}</span>;
   };
 
   return (
@@ -277,12 +236,7 @@ export const ActivityLogs: React.FC = () => {
           <div className="flex items-center gap-3">
             <div className="relative w-80">
               <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-              <Input
-                placeholder="Search..."
-                className="pl-9 bg-white border-gray-200 h-10 rounded-lg"
-                value={search}
-                onChange={e => setSearch(e.target.value)}
-              />
+              <Input placeholder="Search..." className="pl-9 bg-white border-gray-200 h-10 rounded-lg focus-visible:ring-blue-500" value={search} onChange={e => setSearch(e.target.value)} />
             </div>
             <Select value={String(pageSize)} onValueChange={v => setPageSize(Number(v))}>
               <SelectTrigger className="w-32 bg-white h-10"><SelectValue /></SelectTrigger>
@@ -290,9 +244,8 @@ export const ActivityLogs: React.FC = () => {
                 {[10, 25, 50, 100].map(n => <SelectItem key={n} value={String(n)}>{n} rows</SelectItem>)}
               </SelectContent>
             </Select>
-            <Button variant="outline" onClick={load} disabled={loading} className="bg-white h-10">
-              <RefreshCw className={`w-4 h-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
-              Refresh
+            <Button variant="outline" onClick={load} disabled={loading} className="bg-white h-10 hover:bg-gray-50">
+              <RefreshCw className={`w-4 h-4 mr-2 ${loading ? 'animate-spin' : ''}`} /> Refresh
             </Button>
           </div>
         </div>
@@ -301,16 +254,7 @@ export const ActivityLogs: React.FC = () => {
         <div
           ref={tableContainerRef}
           tabIndex={0}
-          style={{
-            overflowX: 'auto',
-            overflowY: 'auto',
-            height: '400px',
-            maxHeight: '400px',
-            position: 'relative',
-            overscrollBehavior: 'contain',
-            boxSizing: 'border-box',
-            width: '100%'
-          }}
+          style={{ overflowX: 'auto', overflowY: 'auto', height: '500px', maxHeight: '500px', position: 'relative', overscrollBehavior: 'contain', boxSizing: 'border-box', width: '100%' }}
           className="rounded-xl border border-gray-200 bg-white shadow-sm focus:outline-none focus:ring-1 focus:ring-blue-400"
         >
           <Table wrapperOverflow="visible" style={{ minWidth: '1800px' }}>
@@ -325,21 +269,18 @@ export const ActivityLogs: React.FC = () => {
                 <TableHead style={{ position: 'sticky', top: 0, background: '#f8fafc', zIndex: 20, borderBottom: '1px solid #e2e8f0' }} className="text-[10px] font-extrabold uppercase tracking-wider text-gray-500">Asset Status</TableHead>
                 <TableHead style={{ position: 'sticky', top: 0, background: '#f8fafc', zIndex: 20, borderBottom: '1px solid #e2e8f0' }} className="text-[10px] font-extrabold uppercase tracking-wider text-gray-500">Asset Group</TableHead>
                 <TableHead style={{ position: 'sticky', top: 0, background: '#f8fafc', zIndex: 20, borderBottom: '1px solid #e2e8f0' }} className="text-[10px] font-extrabold uppercase tracking-wider text-gray-500">Asset Condition</TableHead>
-                <TableHead style={{ position: 'sticky', top: 0, background: '#f8fafc', zIndex: 20, borderBottom: '1px solid #e2e8f0' }} className="text-[10px) font-extrabold uppercase tracking-wider text-gray-500">Status</TableHead>
+                <TableHead style={{ position: 'sticky', top: 0, background: '#f8fafc', zIndex: 20, borderBottom: '1px solid #e2e8f0' }} className="text-[10px] font-extrabold uppercase tracking-wider text-gray-500">Status</TableHead>
                 <TableHead style={{ position: 'sticky', top: 0, background: '#f8fafc', zIndex: 20, borderBottom: '1px solid #e2e8f0' }} className="text-[10px] font-extrabold uppercase tracking-wider text-gray-500">Location</TableHead>
                 <TableHead style={{ position: 'sticky', top: 0, background: '#f8fafc', zIndex: 20, borderBottom: '1px solid #e2e8f0' }} className="text-[10px] font-extrabold uppercase tracking-wider text-gray-500">Updated By</TableHead>
                 <TableHead style={{ position: 'sticky', top: 0, background: '#f8fafc', zIndex: 20, borderBottom: '1px solid #e2e8f0' }} className="text-[10px] font-extrabold uppercase tracking-wider text-gray-500 pr-6">School Name</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {loading ? (
-                <TableRow><TableCell colSpan={13} className="text-center py-20 text-gray-400">Loading activity data...</TableCell></TableRow>
-              ) : visible.length === 0 ? (
-                <TableRow><TableCell colSpan={13} className="text-center py-20 text-gray-400">No logs found</TableCell></TableRow>
-              ) : visible.map((g, i) => {
-                const so = g.sales_order || (deviceMap[g.record_id]?.sales_order) || (orderMap[g.record_id]?.sales_order);
-                const school = g.fields['school_name']?.new || soToSchoolMap[so || ''] || deviceMap[g.record_id]?.school_name || orderMap[g.record_id]?.school_name || '—';
-
+              {loading ? ( <TableRow><TableCell colSpan={13} className="text-center py-20 text-gray-400">Loading activity data...</TableCell></TableRow> ) : visible.length === 0 ? ( <TableRow><TableCell colSpan={13} className="text-center py-20 text-gray-400">No activity found</TableCell></TableRow> ) : visible.map((g, i) => {
+                const device = deviceMap[g.record_id];
+                const order = orderMap[g.record_id] || (device ? orderMap[device.order_id] : null);
+                const so = g.sales_order || device?.sales_order || order?.sales_order;
+                const school = g.fields.school_name?.new || device?.school_name || order?.school_name || '—';
                 return (
                   <TableRow key={i} className="hover:bg-gray-50/40 transition-colors border-b border-gray-100 last:border-0">
                     <TableCell className="text-[11px] text-gray-500 whitespace-nowrap py-4 pl-6">{formatDate(g.timestamp)}</TableCell>
@@ -352,7 +293,7 @@ export const ActivityLogs: React.FC = () => {
                     <TableCell className="text-[11px]">{renderCell('asset_group', g)}</TableCell>
                     <TableCell className="text-[11px]">{renderCell('asset_condition', g)}</TableCell>
                     <TableCell className="text-[11px]">{renderCell('status', g)}</TableCell>
-                    <TableCell className="text-[11px]">{renderCell('warehouse', g, '—')}</TableCell>
+                    <TableCell className="text-[11px]">{renderCell('warehouse', g)}</TableCell>
                     <TableCell className="text-[11px] text-red-500 font-medium">{g.user}</TableCell>
                     <TableCell className="text-[11px] text-red-500 font-medium pr-6">{school}</TableCell>
                   </TableRow>
