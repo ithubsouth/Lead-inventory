@@ -121,6 +121,30 @@ export type Database = {
           },
         ]
       }
+      custom_options: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          field_key: string
+          id: string
+          value: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          field_key: string
+          id?: string
+          value: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          field_key?: string
+          id?: string
+          value?: string
+        }
+        Relationships: []
+      }
       devices: {
         Row: {
           asset_check: string | null
