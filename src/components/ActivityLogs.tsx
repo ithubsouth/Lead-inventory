@@ -108,41 +108,47 @@ export const ActivityLogs: React.FC = () => {
     : 'bg-info text-info-foreground';
 
   return (
-    <Card className="border-border/50 shadow-sm">
-      <CardHeader className="bg-gradient-to-r from-primary/5 to-accent/5 border-b">
-        <div className="flex items-center justify-between gap-4 flex-wrap">
+    <Card className="border-border/50 shadow-sm overflow-hidden">
+      <CardHeader className="bg-gradient-to-br from-sky-50 via-blue-50 to-indigo-50 border-b pb-5">
+        <div className="flex items-center justify-between gap-4 flex-wrap mb-4">
           <CardTitle className="flex items-center gap-2 text-lg">
             <Clock className="w-5 h-5 text-primary" /> Activity Logs
           </CardTitle>
           <div className="flex items-center gap-2">
-            <div className="flex rounded-full overflow-hidden border bg-card">
+            <div className="flex rounded-full overflow-hidden border bg-card shadow-sm">
               <button onClick={() => setView('grouped')}
-                className={`px-3 py-1 text-xs font-medium ${view === 'grouped' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground'}`}>Grouped</button>
+                className={`px-4 py-1.5 text-xs font-semibold transition ${view === 'grouped' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-muted'}`}>Grouped</button>
               <button onClick={() => setView('raw')}
-                className={`px-3 py-1 text-xs font-medium ${view === 'raw' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground'}`}>Raw</button>
+                className={`px-4 py-1.5 text-xs font-semibold transition ${view === 'raw' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-muted'}`}>Raw</button>
             </div>
             <Select value={String(pageSize)} onValueChange={(v) => setPageSize(Number(v))}>
-              <SelectTrigger className="h-8 w-28 text-xs"><SelectValue /></SelectTrigger>
+              <SelectTrigger className="h-9 w-28 text-xs rounded-full bg-card shadow-sm"><SelectValue /></SelectTrigger>
               <SelectContent>
                 {[25, 50, 100, 200].map(n => <SelectItem key={n} value={String(n)}>{n} / page</SelectItem>)}
               </SelectContent>
             </Select>
-            <span className="text-xs px-2 py-1 rounded bg-muted">{filtered.length} entries</span>
-            <Button size="sm" variant="outline" onClick={load} disabled={loading}>
-              <RefreshCw className={`w-3 h-3 mr-1 ${loading ? 'animate-spin' : ''}`} /> Refresh
+            <span className="text-xs px-3 py-1.5 rounded-full bg-card border shadow-sm font-medium">{filtered.length} entries</span>
+            <Button size="sm" variant="outline" className="rounded-full bg-card shadow-sm"
+              onClick={() => { setSearch(''); setTableFilter('all'); setOpFilter('all'); }}>
+              Clear all
+            </Button>
+            <Button size="sm" variant="outline" className="rounded-full bg-card shadow-sm" onClick={load} disabled={loading}>
+              <RefreshCw className={`w-3 h-3 mr-1 ${loading ? 'animate-spin' : ''}`} />
+              Refresh
             </Button>
           </div>
         </div>
-      </CardHeader>
-      <CardContent className="pt-4 space-y-3">
-        <div className="flex items-center gap-2 flex-wrap">
-          <div className="relative flex-1 min-w-[240px]">
-            <Input placeholder="Search by field, value, user, sales order…" className="pr-9"
-              value={search} onChange={e => setSearch(e.target.value)} />
-            <Search className="w-4 h-4 absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
+        <div className="flex items-center gap-3 flex-wrap">
+          <div className="relative flex-1 min-w-[260px]">
+            <Search className="w-4 h-4 absolute left-4 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
+            <Input
+              placeholder="Search by field, value, user, sales order…"
+              className="pl-11 h-12 rounded-full bg-card shadow-sm border-0 focus-visible:ring-2"
+              value={search} onChange={e => setSearch(e.target.value)}
+            />
           </div>
           <Select value={tableFilter} onValueChange={setTableFilter}>
-            <SelectTrigger className="h-9 w-36"><Filter className="w-3 h-3 mr-1" /><SelectValue /></SelectTrigger>
+            <SelectTrigger className="h-12 w-40 rounded-full bg-card shadow-sm border-0"><Filter className="w-3.5 h-3.5 mr-1" /><SelectValue /></SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All tables</SelectItem>
               <SelectItem value="devices">Devices</SelectItem>
@@ -151,7 +157,7 @@ export const ActivityLogs: React.FC = () => {
             </SelectContent>
           </Select>
           <Select value={opFilter} onValueChange={setOpFilter}>
-            <SelectTrigger className="h-9 w-32"><SelectValue /></SelectTrigger>
+            <SelectTrigger className="h-12 w-36 rounded-full bg-card shadow-sm border-0"><SelectValue /></SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All actions</SelectItem>
               <SelectItem value="INSERT">Created</SelectItem>
@@ -160,6 +166,8 @@ export const ActivityLogs: React.FC = () => {
             </SelectContent>
           </Select>
         </div>
+      </CardHeader>
+      <CardContent className="pt-4 space-y-3">
 
         {view === 'grouped' ? (
           <div className="overflow-auto rounded-lg border">

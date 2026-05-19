@@ -22,6 +22,7 @@ import {
   profileIds,
   agreementTypes,
 } from './constants';
+import ComboInput from './ComboInput';
 
 interface AssetItem {
   id: string;
@@ -1023,47 +1024,43 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
             <>
               <div>
                 <label style={{ fontSize: '12px', display: 'block', marginBottom: '4px' }}>Model *</label>
-                <select
+                <ComboInput
+                  fieldKey="tablet_model"
+                  baseOptions={tabletModels}
                   value={asset.model}
-                  onChange={(e) => updateAsset(asset.id, 'model', e.target.value)}
-                  style={{ width: '100%', padding: '8px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '14px' }}
-                >
-                  <option value="">Select Model</option>
-                  {tabletModels.map(m => <option key={m} value={m}>{m}</option>)}
-                </select>
+                  onChange={(v) => updateAsset(asset.id, 'model', v)}
+                  placeholder="Select Model"
+                />
               </div>
               <div>
                 <label style={{ fontSize: '12px', display: 'block', marginBottom: '4px' }}>Configuration</label>
-                <select
+                <ComboInput
+                  fieldKey="configuration"
+                  baseOptions={configurations}
                   value={asset.configuration || ''}
-                  onChange={(e) => updateAsset(asset.id, 'configuration', e.target.value)}
-                  style={{ width: '100%', padding: '8px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '14px' }}
-                >
-                  <option value="">Select Configuration</option>
-                  {configurations.map(c => <option key={c} value={c}>{c}</option>)}
-                </select>
+                  onChange={(v) => updateAsset(asset.id, 'configuration', v)}
+                  placeholder="Select Configuration"
+                />
               </div>
               <div>
                 <label style={{ fontSize: '12px', display: 'block', marginBottom: '4px' }}>Product</label>
-                <select
+                <ComboInput
+                  fieldKey="product"
+                  baseOptions={products}
                   value={asset.product || ''}
-                  onChange={(e) => updateAsset(asset.id, 'product', e.target.value)}
-                  style={{ width: '100%', padding: '8px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '14px' }}
-                >
-                  <option value="">Select Product</option>
-                  {products.map(p => <option key={p} value={p}>{p}</option>)}
-                </select>
+                  onChange={(v) => updateAsset(asset.id, 'product', v)}
+                  placeholder="Select Product"
+                />
               </div>
               <div>
                 <label style={{ fontSize: '12px', display: 'block', marginBottom: '4px' }}>SD Card Size</label>
-                <select
+                <ComboInput
+                  fieldKey="sd_card_size"
+                  baseOptions={sdCardSizes}
                   value={asset.sdCardSize || ''}
-                  onChange={(e) => updateAsset(asset.id, 'sdCardSize', e.target.value)}
-                  style={{ width: '100%', padding: '8px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '14px' }}
-                >
-                  <option value="">Select Size</option>
-                  {sdCardSizes.map(s => <option key={s} value={s}>{s}</option>)}
-                </select>
+                  onChange={(v) => updateAsset(asset.id, 'sdCardSize', v)}
+                  placeholder="Select Size"
+                />
               </div>
               <div>
                 <label style={{ fontSize: '12px', display: 'block', marginBottom: '4px' }}>Profile ID</label>
@@ -1080,36 +1077,33 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
             <>
               <div>
                 <label style={{ fontSize: '12px', display: 'block', marginBottom: '4px' }}>Model *</label>
-                <select
+                <ComboInput
+                  fieldKey="tv_model"
+                  baseOptions={tvModels}
                   value={asset.model}
-                  onChange={(e) => updateAsset(asset.id, 'model', e.target.value)}
-                  style={{ width: '100%', padding: '8px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '14px' }}
-                >
-                  <option value="">Select Model</option>
-                  {tvModels.map(m => <option key={m} value={m}>{m}</option>)}
-                </select>
+                  onChange={(v) => updateAsset(asset.id, 'model', v)}
+                  placeholder="Select Model"
+                />
               </div>
               <div>
                 <label style={{ fontSize: '12px', display: 'block', marginBottom: '4px' }}>Configuration</label>
-                <select
+                <ComboInput
+                  fieldKey="tv_configuration"
+                  baseOptions={tvConfigurations}
                   value={asset.configuration || ''}
-                  onChange={(e) => updateAsset(asset.id, 'configuration', e.target.value)}
-                  style={{ width: '100%', padding: '8px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '14px' }}
-                >
-                  <option value="">Select Configuration</option>
-                  {tvConfigurations.map(c => <option key={c} value={c}>{c}</option>)}
-                </select>
+                  onChange={(v) => updateAsset(asset.id, 'configuration', v)}
+                  placeholder="Select Configuration"
+                />
               </div>
               <div>
                 <label style={{ fontSize: '12px', display: 'block', marginBottom: '4px' }}>Product</label>
-                <select
+                <ComboInput
+                  fieldKey="product"
+                  baseOptions={products}
                   value={asset.product || ''}
-                  onChange={(e) => updateAsset(asset.id, 'product', e.target.value)}
-                  style={{ width: '100%', padding: '8px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '14px' }}
-                >
-                  <option value="">Select Product</option>
-                  {products.map(p => <option key={p} value={p}>{p}</option>)}
-                </select>
+                  onChange={(v) => updateAsset(asset.id, 'product', v)}
+                  placeholder="Select Product"
+                />
               </div>
             </>
           )}
@@ -1117,14 +1111,13 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
             <>
               <div>
                 <label style={{ fontSize: '12px', display: 'block', marginBottom: '4px' }}>Model *</label>
-                <select
+                <ComboInput
+                  fieldKey="sd_card_size"
+                  baseOptions={sdCardSizes}
                   value={asset.model}
-                  onChange={(e) => updateAsset(asset.id, 'model', e.target.value)}
-                  style={{ width: '100%', padding: '8px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '14px' }}
-                >
-                  <option value="">Select Model</option>
-                  {sdCardSizes.map(s => <option key={s} value={s}>{s}</option>)}
-                </select>
+                  onChange={(v) => updateAsset(asset.id, 'model', v)}
+                  placeholder="Select Model"
+                />
               </div>
               <div>
                 <label style={{ fontSize: '12px', display: 'block', marginBottom: '4px' }}>Profile ID</label>
@@ -1137,14 +1130,13 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
               </div>
               <div>
                 <label style={{ fontSize: '12px', display: 'block', marginBottom: '4px' }}>Product</label>
-                <select
+                <ComboInput
+                  fieldKey="product"
+                  baseOptions={products}
                   value={asset.product || ''}
-                  onChange={(e) => updateAsset(asset.id, 'product', e.target.value)}
-                  style={{ width: '100%', padding: '8px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '14px' }}
-                >
-                  <option value="">Select Product</option>
-                  {products.map(p => <option key={p} value={p}>{p}</option>)}
-                </select>
+                  onChange={(v) => updateAsset(asset.id, 'product', v)}
+                  placeholder="Select Product"
+                />
               </div>
             </>
           )}
@@ -1152,25 +1144,23 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
             <>
               <div>
                 <label style={{ fontSize: '12px', display: 'block', marginBottom: '4px' }}>Model *</label>
-                <select
+                <ComboInput
+                  fieldKey="cover_model"
+                  baseOptions={coverModels}
                   value={asset.model}
-                  onChange={(e) => updateAsset(asset.id, 'model', e.target.value)}
-                  style={{ width: '100%', padding: '8px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '14px' }}
-                >
-                  <option value="">Select Model</option>
-                  {coverModels.map(m => <option key={m} value={m}>{m}</option>)}
-                </select>
+                  onChange={(v) => updateAsset(asset.id, 'model', v)}
+                  placeholder="Select Model"
+                />
               </div>
               <div>
                 <label style={{ fontSize: '12px', display: 'block', marginBottom: '4px' }}>Product</label>
-                <select
+                <ComboInput
+                  fieldKey="product"
+                  baseOptions={products}
                   value={asset.product || ''}
-                  onChange={(e) => updateAsset(asset.id, 'product', e.target.value)}
-                  style={{ width: '100%', padding: '8px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '14px' }}
-                >
-                  <option value="">Select Product</option>
-                  {products.map(p => <option key={p} value={p}>{p}</option>)}
-                </select>
+                  onChange={(v) => updateAsset(asset.id, 'product', v)}
+                  placeholder="Select Product"
+                />
               </div>
             </>
           )}
@@ -1178,25 +1168,23 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
             <>
               <div>
                 <label style={{ fontSize: '12px', display: 'block', marginBottom: '4px' }}>Model *</label>
-                <select
+                <ComboInput
+                  fieldKey="pendrive_size"
+                  baseOptions={pendriveSizes}
                   value={asset.model}
-                  onChange={(e) => updateAsset(asset.id, 'model', e.target.value)}
-                  style={{ width: '100%', padding: '8px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '14px' }}
-                >
-                  <option value="">Select Model</option>
-                  {pendriveSizes.map(s => <option key={s} value={s}>{s}</option>)}
-                </select>
+                  onChange={(v) => updateAsset(asset.id, 'model', v)}
+                  placeholder="Select Model"
+                />
               </div>
               <div>
                 <label style={{ fontSize: '12px', display: 'block', marginBottom: '4px' }}>Product</label>
-                <select
+                <ComboInput
+                  fieldKey="product"
+                  baseOptions={products}
                   value={asset.product || ''}
-                  onChange={(e) => updateAsset(asset.id, 'product', e.target.value)}
-                  style={{ width: '100%', padding: '8px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '14px' }}
-                >
-                  <option value="">Select Product</option>
-                  {products.map(p => <option key={p} value={p}>{p}</option>)}
-                </select>
+                  onChange={(v) => updateAsset(asset.id, 'product', v)}
+                  placeholder="Select Product"
+                />
               </div>
             </>
           )}
@@ -1204,38 +1192,35 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
             <>
               <div>
                 <label style={{ fontSize: '12px', display: 'block', marginBottom: '4px' }}>Model *</label>
-                <select
+                <ComboInput
+                  fieldKey={`asset_model__${asset.assetType}`}
+                  baseOptions={hasModels(asset.assetType) ? assetModels[asset.assetType] : []}
                   value={asset.model}
-                  onChange={(e) => updateAsset(asset.id, 'model', e.target.value)}
-                  style={{ width: '100%', padding: '8px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '14px' }}
-                >
-                  <option value="">Select Model</option>
-                  {hasModels(asset.assetType) ? assetModels[asset.assetType].map(m => <option key={m} value={m}>{m}</option>) : null}
-                </select>
+                  onChange={(v) => updateAsset(asset.id, 'model', v)}
+                  placeholder="Select Model"
+                />
               </div>
               <div>
                 <label style={{ fontSize: '12px', display: 'block', marginBottom: '4px' }}>Product</label>
-                <select
+                <ComboInput
+                  fieldKey="product"
+                  baseOptions={products}
                   value={asset.product || ''}
-                  onChange={(e) => updateAsset(asset.id, 'product', e.target.value)}
-                  style={{ width: '100%', padding: '8px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '14px' }}
-                >
-                  <option value="">Select Product</option>
-                  {products.map(p => <option key={p} value={p}>{p}</option>)}
-                </select>
+                  onChange={(v) => updateAsset(asset.id, 'product', v)}
+                  placeholder="Select Product"
+                />
               </div>
             </>
           )}
           <div>
             <label style={{ fontSize: '12px', display: 'block', marginBottom: '4px' }}>Location *</label>
-            <select
+            <ComboInput
+              fieldKey="location"
+              baseOptions={locations}
               value={asset.location}
-              onChange={(e) => updateAsset(asset.id, 'location', e.target.value)}
-              style={{ width: '100%', padding: '8px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '14px' }}
-            >
-              <option value="">Select Location</option>
-              {locations.map(l => <option key={l} value={l}>{l}</option>)}
-            </select>
+              onChange={(v) => updateAsset(asset.id, 'location', v)}
+              placeholder="Select Location"
+            />
           </div>
           <div>
             <label style={{ fontSize: '12px', display: 'block', marginBottom: '4px' }}>Quantity *</label>
