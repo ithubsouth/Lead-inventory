@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -36,9 +36,50 @@ export const ActivityLogs: React.FC = () => {
   const [deviceMap, setDeviceMap] = useState<Record<string, any>>({});
   const [orderMap, setOrderMap] = useState<Record<string, any>>({});
   const [userMap, setUserMap] = useState<Record<string, string>>({});
+  const [soToSchoolMap, setSoToSchoolMap] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(false);
   const [search, setSearch] = useState('');
-  const [pageSize, setPageSize] = useState(50);
+  const [pageSize, setPageSize] = useState(10);
+  const tableContainerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const container = tableContainerRef.current;
+    if (!container) return;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'ArrowLeft') {
+        container.scrollBy({ left: -150, behavior: 'smooth' });
+        e.preventDefault();
+      } else if (e.key === 'ArrowRight') {
+        container.scrollBy({ left: 150, behavior: 'smooth' });
+        e.preventDefault();
+      } else if (e.key === 'ArrowUp') {
+        container.scrollBy({ top: -60, behavior: 'smooth' });
+        e.preventDefault();
+      } else if (e.key === 'ArrowDown') {
+        container.scrollBy({ top: 60, behavior: 'smooth' });
+        e.preventDefault();
+      }
+    };
+
+    const handleWheel = (e: WheelEvent) => {
+      if (e.deltaX !== 0) {
+        container.scrollBy({ left: e.deltaX * 2, behavior: 'smooth' });
+        e.preventDefault();
+      } else if (e.shiftKey && e.deltaY !== 0) {
+        container.scrollBy({ left: e.deltaY * 2, behavior: 'smooth' });
+        e.preventDefault();
+      }
+    };
+
+    container.addEventListener('keydown', handleKeyDown);
+    container.addEventListener('wheel', handleWheel, { passive: false });
+
+    return () => {
+      container.removeEventListener('keydown', handleKeyDown);
+      container.removeEventListener('wheel', handleWheel);
+    };
+  }, []);
 
   const load = async () => {
     setLoading(true);
@@ -55,21 +96,41 @@ export const ActivityLogs: React.FC = () => {
 
       // Fetch devices context
       const deviceIds = Array.from(new Set(historyData.filter(r => r.table_name === 'devices').map(r => r.record_id)));
+      let fetchedDevices: any[] = [];
       if (deviceIds.length > 0) {
         const { data: devices } = await supabase.from('devices').select('*').in('id', deviceIds);
-        const map: Record<string, any> = {};
-        devices?.forEach(d => map[d.id] = d);
-        setDeviceMap(map);
+        fetchedDevices = devices || [];
+        const dMap: Record<string, any> = {};
+        fetchedDevices.forEach(d => dMap[d.id] = d);
+        setDeviceMap(dMap);
       }
 
-      // Fetch orders context
-      const orderIds = Array.from(new Set(historyData.filter(r => r.table_name === 'orders').map(r => r.record_id)));
-      if (orderIds.length > 0) {
-        const { data: orders } = await supabase.from('orders').select('*').in('id', orderIds);
-        const map: Record<string, any> = {};
-        orders?.forEach(o => map[o.id] = o);
-        setOrderMap(map);
+      // Fetch orders context (including parent orders for devices)
+      const orderIdsFromHistory = historyData.filter(r => r.table_name === 'orders').map(r => r.record_id);
+      const orderIdsFromDevices = fetchedDevices.map(d => d.order_id).filter(Boolean);
+      const allOrderIds = Array.from(new Set([...orderIdsFromHistory, ...orderIdsFromDevices]));
+
+      let fetchedOrders: any[] = [];
+      if (allOrderIds.length > 0) {
+        const { data: orders } = await supabase.from('orders').select('*').in('id', allOrderIds);
+        fetchedOrders = orders || [];
+        const oMap: Record<string, any> = {};
+        fetchedOrders.forEach(o => oMap[o.id] = o);
+        setOrderMap(oMap);
       }
+
+      // Build Global Sales Order to School Map for cross-matching
+      const soMap: Record<string, string> = {};
+      fetchedOrders.forEach(o => { if (o.sales_order && o.school_name) soMap[o.sales_order] = o.school_name; });
+      fetchedDevices.forEach(d => { if (d.sales_order && d.school_name) soMap[d.sales_order] = d.school_name; });
+
+      // If some SOs are still missing school names, try a direct lookup
+      const missingSO = Array.from(new Set(historyData.map(r => r.sales_order).filter(s => s && !soMap[s])));
+      if (missingSO.length > 0) {
+        const { data: extraSO } = await supabase.from('orders').select('sales_order, school_name').in('sales_order', missingSO).eq('is_deleted', false);
+        extraSO?.forEach(o => { if (o.school_name) soMap[o.sales_order] = o.school_name; });
+      }
+      setSoToSchoolMap(soMap);
 
       // Fetch users context for email mapping
       const { data: users } = await supabase.from('users').select('id, email');
@@ -91,9 +152,11 @@ export const ActivityLogs: React.FC = () => {
 
     rows.forEach(row => {
       const device = deviceMap[row.record_id];
-      const order = orderMap[row.record_id];
+      const order = orderMap[row.record_id] || (device ? orderMap[device.order_id] : null);
+
       const time = new Date(row.created_at).getTime();
       const roundedTime = Math.floor(time / 5000) * 5000;
+
       const rawUser = row.changed_by || row.updated_by || 'system';
       const displayUser = userMap[rawUser] || rawUser;
 
@@ -131,7 +194,30 @@ export const ActivityLogs: React.FC = () => {
       }
     });
 
-    return Object.values(groups).sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+    const sorted = Object.values(groups).sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+
+    // Pass 2: Backfill missing "old" values from previous log entries for the same record
+    const lastSeenValue: Record<string, Record<string, string>> = {};
+
+    // We iterate backwards in time (from oldest to newest) to track values
+    [...sorted].reverse().forEach(group => {
+      Object.entries(group.fields).forEach(([field, data]) => {
+        const recordId = group.record_id;
+        if (!lastSeenValue[recordId]) lastSeenValue[recordId] = {};
+
+        // If this entry has an empty old value, fill it with the last new value we saw for this record
+        if (!data.old && lastSeenValue[recordId][field]) {
+          data.old = lastSeenValue[recordId][field];
+        }
+
+        // Update our tracker with the newest value from this entry
+        if (data.new) {
+          lastSeenValue[recordId][field] = data.new;
+        }
+      });
+    });
+
+    return sorted;
   }, [rows, deviceMap, orderMap, userMap]);
 
   const filtered = useMemo(() => {
@@ -156,22 +242,29 @@ export const ActivityLogs: React.FC = () => {
 
   const renderCell = (field: string, group: GroupedLog, defaultValue: string = '—') => {
     const data = group.fields[field];
-    const source = group.table_name === 'devices' ? deviceMap[group.record_id] : orderMap[group.record_id];
+    const device = deviceMap[group.record_id];
+    const order = orderMap[group.record_id] || (device ? orderMap[device.order_id] : null);
+    const source = group.table_name === 'devices' ? device : order;
     const staticValue = source?.[field];
 
-    // If we have a change recorded in this log entry
-    if (data) {
-      const hasChange = data.old !== data.new && data.old !== '';
-      return (
-        <div className="flex flex-col min-h-[32px] justify-center">
-          <span className="text-emerald-600 font-bold">{data.new || staticValue || defaultValue}</span>
-          {hasChange && <span className="text-red-500 text-[10px] leading-tight font-medium mt-0.5">{data.old}</span>}
-        </div>
-      );
-    }
+    const oldV = data?.old || '';
+    const newV = data?.new || '';
 
-    // Fallback to static data from context map
-    return <span className="text-gray-400 font-medium">{staticValue || defaultValue}</span>;
+    // We show the change if the old value is recorded and different from new
+    const hasChange = oldV !== newV && oldV !== '' && oldV !== 'null' && oldV !== 'undefined';
+
+    return (
+      <div className="flex flex-col min-h-[42px] justify-center">
+        <span className="text-emerald-600 font-bold text-[12px] leading-tight">
+          {newV || staticValue || defaultValue}
+        </span>
+        {hasChange && (
+          <span className="text-red-600 font-extrabold text-[11px] leading-tight mt-1">
+            {oldV}
+          </span>
+        )}
+      </div>
+    );
   };
 
   return (
@@ -194,7 +287,7 @@ export const ActivityLogs: React.FC = () => {
             <Select value={String(pageSize)} onValueChange={v => setPageSize(Number(v))}>
               <SelectTrigger className="w-32 bg-white h-10"><SelectValue /></SelectTrigger>
               <SelectContent>
-                {[50, 100, 200, 500].map(n => <SelectItem key={n} value={String(n)}>{n} rows</SelectItem>)}
+                {[10, 25, 50, 100].map(n => <SelectItem key={n} value={String(n)}>{n} rows</SelectItem>)}
               </SelectContent>
             </Select>
             <Button variant="outline" onClick={load} disabled={loading} className="bg-white h-10">
@@ -205,49 +298,66 @@ export const ActivityLogs: React.FC = () => {
         </div>
       </CardHeader>
       <CardContent className="px-0">
-        <div className="rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden overflow-x-auto">
-          <Table>
-            <TableHeader className="bg-gray-50/80 border-b border-gray-200">
+        <div
+          ref={tableContainerRef}
+          tabIndex={0}
+          style={{
+            overflowX: 'auto',
+            overflowY: 'auto',
+            height: '400px',
+            maxHeight: '400px',
+            position: 'relative',
+            overscrollBehavior: 'contain',
+            boxSizing: 'border-box',
+            width: '100%'
+          }}
+          className="rounded-xl border border-gray-200 bg-white shadow-sm focus:outline-none focus:ring-1 focus:ring-blue-400"
+        >
+          <Table wrapperOverflow="visible" style={{ minWidth: '1800px' }}>
+            <TableHeader className="bg-white border-b border-gray-200">
               <TableRow>
-                <TableHead className="text-[10px] font-extrabold uppercase tracking-wider text-gray-500 py-4 pl-6">Timestamp</TableHead>
-                <TableHead className="text-[10px] font-extrabold uppercase tracking-wider text-gray-500">Sales Order</TableHead>
-                <TableHead className="text-[10px] font-extrabold uppercase tracking-wider text-gray-500">Serial Number</TableHead>
-                <TableHead className="text-[10px] font-extrabold uppercase tracking-wider text-gray-500">Asset Type</TableHead>
-                <TableHead className="text-[10px] font-extrabold uppercase tracking-wider text-gray-500">Model</TableHead>
-                <TableHead className="text-[10px] font-extrabold uppercase tracking-wider text-gray-500">Configuration</TableHead>
-                <TableHead className="text-[10px] font-extrabold uppercase tracking-wider text-gray-500">Asset Status</TableHead>
-                <TableHead className="text-[10px] font-extrabold uppercase tracking-wider text-gray-500">Status</TableHead>
-                <TableHead className="text-[10px] font-extrabold uppercase tracking-wider text-gray-500">Location</TableHead>
-                <TableHead className="text-[10px] font-extrabold uppercase tracking-wider text-gray-500">Updated By</TableHead>
-                <TableHead className="text-[10px] font-extrabold uppercase tracking-wider text-gray-500 pr-6">School Name</TableHead>
+                <TableHead style={{ position: 'sticky', top: 0, background: '#f8fafc', zIndex: 20, borderBottom: '1px solid #e2e8f0' }} className="text-[10px] font-extrabold uppercase tracking-wider text-gray-500 py-4 pl-6">Timestamp</TableHead>
+                <TableHead style={{ position: 'sticky', top: 0, background: '#f8fafc', zIndex: 20, borderBottom: '1px solid #e2e8f0' }} className="text-[10px] font-extrabold uppercase tracking-wider text-gray-500">Sales Order</TableHead>
+                <TableHead style={{ position: 'sticky', top: 0, background: '#f8fafc', zIndex: 20, borderBottom: '1px solid #e2e8f0' }} className="text-[10px] font-extrabold uppercase tracking-wider text-gray-500">Serial Number</TableHead>
+                <TableHead style={{ position: 'sticky', top: 0, background: '#f8fafc', zIndex: 20, borderBottom: '1px solid #e2e8f0' }} className="text-[10px] font-extrabold uppercase tracking-wider text-gray-500">Asset Type</TableHead>
+                <TableHead style={{ position: 'sticky', top: 0, background: '#f8fafc', zIndex: 20, borderBottom: '1px solid #e2e8f0' }} className="text-[10px] font-extrabold uppercase tracking-wider text-gray-500">Model</TableHead>
+                <TableHead style={{ position: 'sticky', top: 0, background: '#f8fafc', zIndex: 20, borderBottom: '1px solid #e2e8f0' }} className="text-[10px] font-extrabold uppercase tracking-wider text-gray-500">Configuration</TableHead>
+                <TableHead style={{ position: 'sticky', top: 0, background: '#f8fafc', zIndex: 20, borderBottom: '1px solid #e2e8f0' }} className="text-[10px] font-extrabold uppercase tracking-wider text-gray-500">Asset Status</TableHead>
+                <TableHead style={{ position: 'sticky', top: 0, background: '#f8fafc', zIndex: 20, borderBottom: '1px solid #e2e8f0' }} className="text-[10px] font-extrabold uppercase tracking-wider text-gray-500">Asset Group</TableHead>
+                <TableHead style={{ position: 'sticky', top: 0, background: '#f8fafc', zIndex: 20, borderBottom: '1px solid #e2e8f0' }} className="text-[10px] font-extrabold uppercase tracking-wider text-gray-500">Asset Condition</TableHead>
+                <TableHead style={{ position: 'sticky', top: 0, background: '#f8fafc', zIndex: 20, borderBottom: '1px solid #e2e8f0' }} className="text-[10px) font-extrabold uppercase tracking-wider text-gray-500">Status</TableHead>
+                <TableHead style={{ position: 'sticky', top: 0, background: '#f8fafc', zIndex: 20, borderBottom: '1px solid #e2e8f0' }} className="text-[10px] font-extrabold uppercase tracking-wider text-gray-500">Location</TableHead>
+                <TableHead style={{ position: 'sticky', top: 0, background: '#f8fafc', zIndex: 20, borderBottom: '1px solid #e2e8f0' }} className="text-[10px] font-extrabold uppercase tracking-wider text-gray-500">Updated By</TableHead>
+                <TableHead style={{ position: 'sticky', top: 0, background: '#f8fafc', zIndex: 20, borderBottom: '1px solid #e2e8f0' }} className="text-[10px] font-extrabold uppercase tracking-wider text-gray-500 pr-6">School Name</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {loading ? (
-                <TableRow><TableCell colSpan={11} className="text-center py-20 text-gray-400">Loading activity data...</TableCell></TableRow>
+                <TableRow><TableCell colSpan={13} className="text-center py-20 text-gray-400">Loading activity data...</TableCell></TableRow>
               ) : visible.length === 0 ? (
-                <TableRow><TableCell colSpan={11} className="text-center py-20 text-gray-400">No logs found</TableCell></TableRow>
-              ) : visible.map((g, i) => (
-                <TableRow key={i} className="hover:bg-gray-50/40 transition-colors border-b border-gray-100 last:border-0">
-                  <TableCell className="text-[11px] text-gray-500 whitespace-nowrap py-4 pl-6">{formatDate(g.timestamp)}</TableCell>
-                  <TableCell className="text-[12px] font-bold text-blue-700">
-                    {g.sales_order || deviceMap[g.record_id]?.sales_order || orderMap[g.record_id]?.sales_order || '—'}
-                  </TableCell>
-                  <TableCell className="text-[12px] font-bold text-blue-700">
-                    {g.serial_number || deviceMap[g.record_id]?.serial_number || '—'}
-                  </TableCell>
-                  <TableCell className="text-[11px]">{renderCell('asset_type', g)}</TableCell>
-                  <TableCell className="text-[11px]">{renderCell('model', g)}</TableCell>
-                  <TableCell className="text-[11px]">{renderCell('configuration', g)}</TableCell>
-                  <TableCell className="text-[11px]">{renderCell('asset_status', g)}</TableCell>
-                  <TableCell className="text-[11px]">{renderCell('status', g)}</TableCell>
-                  <TableCell className="text-[11px]">{renderCell('warehouse', g, '—')}</TableCell>
-                  <TableCell className="text-[11px] text-red-500 font-medium">{g.user}</TableCell>
-                  <TableCell className="text-[11px] text-red-500 font-medium pr-6">
-                    {deviceMap[g.record_id]?.school_name || orderMap[g.record_id]?.school_name || '—'}
-                  </TableCell>
-                </TableRow>
-              ))}
+                <TableRow><TableCell colSpan={13} className="text-center py-20 text-gray-400">No logs found</TableCell></TableRow>
+              ) : visible.map((g, i) => {
+                const so = g.sales_order || (deviceMap[g.record_id]?.sales_order) || (orderMap[g.record_id]?.sales_order);
+                const school = g.fields['school_name']?.new || soToSchoolMap[so || ''] || deviceMap[g.record_id]?.school_name || orderMap[g.record_id]?.school_name || '—';
+
+                return (
+                  <TableRow key={i} className="hover:bg-gray-50/40 transition-colors border-b border-gray-100 last:border-0">
+                    <TableCell className="text-[11px] text-gray-500 whitespace-nowrap py-4 pl-6">{formatDate(g.timestamp)}</TableCell>
+                    <TableCell className="text-[12px] font-bold text-blue-700">{so || '—'}</TableCell>
+                    <TableCell className="text-[12px] font-bold text-blue-700">{g.serial_number || (deviceMap[g.record_id]?.serial_number) || '—'}</TableCell>
+                    <TableCell className="text-[11px]">{renderCell('asset_type', g)}</TableCell>
+                    <TableCell className="text-[11px]">{renderCell('model', g)}</TableCell>
+                    <TableCell className="text-[11px]">{renderCell('configuration', g)}</TableCell>
+                    <TableCell className="text-[11px]">{renderCell('asset_status', g)}</TableCell>
+                    <TableCell className="text-[11px]">{renderCell('asset_group', g)}</TableCell>
+                    <TableCell className="text-[11px]">{renderCell('asset_condition', g)}</TableCell>
+                    <TableCell className="text-[11px]">{renderCell('status', g)}</TableCell>
+                    <TableCell className="text-[11px]">{renderCell('warehouse', g, '—')}</TableCell>
+                    <TableCell className="text-[11px] text-red-500 font-medium">{g.user}</TableCell>
+                    <TableCell className="text-[11px] text-red-500 font-medium pr-6">{school}</TableCell>
+                  </TableRow>
+                );
+              })}
             </TableBody>
           </Table>
         </div>
