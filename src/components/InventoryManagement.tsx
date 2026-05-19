@@ -47,6 +47,7 @@ const InventoryManagement = () => {
   const [agreementType, setAgreementType] = useState('');
   const [tablets, setTablets] = useState<TabletItem[]>([]);
   const [tvs, setTvs] = useState<TVItem[]>([]);
+  const [logoLoaded, setLogoLoaded] = useState(false);
   const { toast } = useToast();
   const [userEmail, setUserEmail] = useState<string | null>(null);
   const [userRole, setUserRole] = useState<string | null>(null);
@@ -671,7 +672,15 @@ const InventoryManagement = () => {
       <div className='w-full bg-card/80 backdrop-blur-sm border-b border-border/50 fixed top-0 left-0 right-0 z-50 shadow-sm'>
         <div className='container mx-auto px-4 py-3 flex justify-between items-center'>
           <div className='flex items-center space-x-4'>
-            <img src={`/logo.png?v=${Date.now()}`} alt='Logo' className='h-11 w-auto' />
+            <img
+              src={`${import.meta.env.BASE_URL}logo.png`}
+              alt='LEAD GROUP'
+              className={`h-11 w-auto transition-opacity duration-300 ${logoLoaded ? 'opacity-100' : 'opacity-0'}`}
+              onLoad={() => setLogoLoaded(true)}
+              onError={(e) => {
+                e.currentTarget.style.display = 'none';
+              }}
+            />
             <h1 className='text-2xl font-bold bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent'>Lead Inventory Management</h1>
           </div>
           <div className='flex items-center space-x-4'>

@@ -5,210 +5,252 @@ import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Badge } from '@/components/ui/badge';
-import { Clock, Search, Filter, RefreshCw } from 'lucide-react';
+import { Clock, Search, RefreshCw } from 'lucide-react';
 
 type HistoryRow = {
   id: string;
   table_name: string;
   record_id: string;
   operation: string;
+  field_name: string | null;
   old_data: any;
   new_data: any;
+  updated_by: string | null;
   changed_by: string | null;
   created_at: string;
   sales_order: string | null;
 };
 
-type DiffRow = {
-  id: string;
-  created_at: string;
-  table_name: string;
+type GroupedLog = {
+  timestamp: string;
   record_id: string;
-  operation: string;
-  changed_by: string | null;
-  field: string;
-  old_value: string;
-  new_value: string;
+  table_name: string;
   sales_order: string | null;
+  user: string;
+  serial_number: string;
+  fields: Record<string, { old: string; new: string }>;
 };
-
-const SKIP_FIELDS = new Set(['updated_at', 'created_at', 'updated_by', 'created_by']);
-
-function buildDiffs(row: HistoryRow): DiffRow[] {
-  const base = {
-    id: row.id, created_at: row.created_at, table_name: row.table_name,
-    record_id: row.record_id, operation: row.operation, changed_by: row.changed_by,
-    sales_order: row.sales_order || row.new_data?.sales_order || row.old_data?.sales_order || null,
-  };
-  if (row.operation === 'INSERT') {
-    return [{ ...base, field: '—', old_value: '—', new_value: 'Created', }];
-  }
-  if (row.operation === 'DELETE') {
-    return [{ ...base, field: '—', old_value: 'Existed', new_value: 'Deleted' }];
-  }
-  const out: DiffRow[] = [];
-  const oldD = row.old_data || {}; const newD = row.new_data || {};
-  const keys = new Set<string>([...Object.keys(oldD), ...Object.keys(newD)]);
-  keys.forEach(k => {
-    if (SKIP_FIELDS.has(k)) return;
-    const ov = oldD[k]; const nv = newD[k];
-    const os = ov == null ? '' : typeof ov === 'object' ? JSON.stringify(ov) : String(ov);
-    const ns = nv == null ? '' : typeof nv === 'object' ? JSON.stringify(nv) : String(nv);
-    if (os !== ns) out.push({ ...base, field: k, old_value: os, new_value: ns });
-  });
-  return out;
-}
 
 export const ActivityLogs: React.FC = () => {
   const [rows, setRows] = useState<HistoryRow[]>([]);
+  const [deviceMap, setDeviceMap] = useState<Record<string, any>>({});
+  const [orderMap, setOrderMap] = useState<Record<string, any>>({});
+  const [userMap, setUserMap] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(false);
-  const [view, setView] = useState<'grouped' | 'raw'>('grouped');
-  const [pageSize, setPageSize] = useState(50);
-  const [tableFilter, setTableFilter] = useState<string>('all');
-  const [opFilter, setOpFilter] = useState<string>('all');
   const [search, setSearch] = useState('');
+  const [pageSize, setPageSize] = useState(50);
 
   const load = async () => {
     setLoading(true);
-    const { data, error } = await supabase
-      .from('history').select('*')
-      .order('created_at', { ascending: false })
-      .limit(500);
-    if (!error) setRows((data as HistoryRow[]) || []);
-    setLoading(false);
+    try {
+      const { data, error } = await supabase
+        .from('history')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .limit(1000);
+
+      if (error) throw error;
+      const historyData = (data as HistoryRow[]) || [];
+      setRows(historyData);
+
+      // Fetch devices context
+      const deviceIds = Array.from(new Set(historyData.filter(r => r.table_name === 'devices').map(r => r.record_id)));
+      if (deviceIds.length > 0) {
+        const { data: devices } = await supabase.from('devices').select('*').in('id', deviceIds);
+        const map: Record<string, any> = {};
+        devices?.forEach(d => map[d.id] = d);
+        setDeviceMap(map);
+      }
+
+      // Fetch orders context
+      const orderIds = Array.from(new Set(historyData.filter(r => r.table_name === 'orders').map(r => r.record_id)));
+      if (orderIds.length > 0) {
+        const { data: orders } = await supabase.from('orders').select('*').in('id', orderIds);
+        const map: Record<string, any> = {};
+        orders?.forEach(o => map[o.id] = o);
+        setOrderMap(map);
+      }
+
+      // Fetch users context for email mapping
+      const { data: users } = await supabase.from('users').select('id, email');
+      const uMap: Record<string, string> = {};
+      users?.forEach(u => uMap[u.id] = u.email);
+      setUserMap(uMap);
+
+    } catch (err) {
+      console.error('Load logs error:', err);
+    } finally {
+      setLoading(false);
+    }
   };
 
   useEffect(() => { load(); }, []);
 
-  const diffs = useMemo(() => {
-    const all: DiffRow[] = [];
-    rows.forEach(r => all.push(...buildDiffs(r)));
-    return all;
-  }, [rows]);
+  const groupedLogs = useMemo(() => {
+    const groups: Record<string, GroupedLog> = {};
+
+    rows.forEach(row => {
+      const device = deviceMap[row.record_id];
+      const order = orderMap[row.record_id];
+      const time = new Date(row.created_at).getTime();
+      const roundedTime = Math.floor(time / 5000) * 5000;
+      const rawUser = row.changed_by || row.updated_by || 'system';
+      const displayUser = userMap[rawUser] || rawUser;
+
+      const key = `${row.record_id}-${roundedTime}-${rawUser}`;
+
+      if (!groups[key]) {
+        groups[key] = {
+          timestamp: row.created_at,
+          record_id: row.record_id,
+          table_name: row.table_name,
+          sales_order: row.sales_order || device?.sales_order || order?.sales_order || null,
+          user: displayUser,
+          serial_number: device?.serial_number || '',
+          fields: {}
+        };
+      }
+
+      const extractValue = (val: any): string => {
+        if (val === null || val === undefined) return '';
+        if (typeof val === 'object') return JSON.stringify(val);
+        return String(val);
+      };
+
+      if (!row.field_name && typeof row.new_data === 'object' && row.new_data !== null && !Array.isArray(row.new_data)) {
+        Object.entries(row.new_data).forEach(([k, v]) => {
+          groups[key].fields[k] = { old: extractValue(row.old_data?.[k]), new: extractValue(v) };
+          if (k === 'serial_number' && !groups[key].serial_number) groups[key].serial_number = extractValue(v);
+          if (k === 'sales_order' && !groups[key].sales_order) groups[key].sales_order = extractValue(v);
+        });
+      } else {
+        const field = row.field_name || 'details';
+        groups[key].fields[field] = { old: extractValue(row.old_data), new: extractValue(row.new_data) };
+        if (field === 'serial_number' && !groups[key].serial_number) groups[key].serial_number = extractValue(row.new_data);
+        if ((field === 'sales_order' || field === 'order_id') && !groups[key].sales_order) groups[key].sales_order = extractValue(row.new_data);
+      }
+    });
+
+    return Object.values(groups).sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+  }, [rows, deviceMap, orderMap, userMap]);
 
   const filtered = useMemo(() => {
-    return diffs.filter(d => {
-      if (tableFilter !== 'all' && d.table_name !== tableFilter) return false;
-      if (opFilter !== 'all' && d.operation !== opFilter) return false;
-      if (search) {
-        const q = search.toLowerCase();
-        const hay = `${d.field} ${d.old_value} ${d.new_value} ${d.changed_by || ''} ${d.sales_order || ''} ${d.record_id}`.toLowerCase();
-        if (!hay.includes(q)) return false;
-      }
-      return true;
-    });
-  }, [diffs, tableFilter, opFilter, search]);
+    if (!search) return groupedLogs;
+    const q = search.toLowerCase();
+    return groupedLogs.filter(g =>
+      g.serial_number.toLowerCase().includes(q) ||
+      g.sales_order?.toLowerCase().includes(q) ||
+      g.user.toLowerCase().includes(q)
+    );
+  }, [groupedLogs, search]);
 
   const visible = filtered.slice(0, pageSize);
 
-  const opColor = (op: string) =>
-    op === 'INSERT' ? 'bg-success text-success-foreground'
-    : op === 'DELETE' ? 'bg-destructive text-destructive-foreground'
-    : 'bg-info text-info-foreground';
+  const formatDate = (dateStr: string) => {
+    const d = new Date(dateStr);
+    return d.toLocaleString('en-GB', {
+      day: '2-digit', month: 'short', year: 'numeric',
+      hour: '2-digit', minute: '2-digit', hour12: true
+    }).replace(',', '');
+  };
+
+  const renderCell = (field: string, group: GroupedLog, defaultValue: string = '—') => {
+    const data = group.fields[field];
+    const source = group.table_name === 'devices' ? deviceMap[group.record_id] : orderMap[group.record_id];
+    const staticValue = source?.[field];
+
+    // If we have a change recorded in this log entry
+    if (data) {
+      const hasChange = data.old !== data.new && data.old !== '';
+      return (
+        <div className="flex flex-col min-h-[32px] justify-center">
+          <span className="text-emerald-600 font-bold">{data.new || staticValue || defaultValue}</span>
+          {hasChange && <span className="text-red-500 text-[10px] leading-tight font-medium mt-0.5">{data.old}</span>}
+        </div>
+      );
+    }
+
+    // Fallback to static data from context map
+    return <span className="text-gray-400 font-medium">{staticValue || defaultValue}</span>;
+  };
 
   return (
-    <Card className="border-border/50 shadow-sm overflow-hidden">
-      <CardHeader className="bg-gradient-to-br from-sky-50 via-blue-50 to-indigo-50 border-b pb-5">
-        <div className="flex items-center justify-between gap-4 flex-wrap mb-4">
-          <CardTitle className="flex items-center gap-2 text-lg">
-            <Clock className="w-5 h-5 text-primary" /> Activity Logs
+    <Card className="border-none shadow-none bg-transparent">
+      <CardHeader className="px-0 pb-6">
+        <div className="flex items-center justify-between gap-4 flex-wrap">
+          <CardTitle className="flex items-center gap-2 text-2xl font-bold text-gray-800">
+            <Clock className="w-6 h-6 text-blue-600" /> Activity Logs
           </CardTitle>
-          <div className="flex items-center gap-2">
-            <div className="flex rounded-full overflow-hidden border bg-card shadow-sm">
-              <button onClick={() => setView('grouped')}
-                className={`px-4 py-1.5 text-xs font-semibold transition ${view === 'grouped' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-muted'}`}>Grouped</button>
-              <button onClick={() => setView('raw')}
-                className={`px-4 py-1.5 text-xs font-semibold transition ${view === 'raw' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-muted'}`}>Raw</button>
+          <div className="flex items-center gap-3">
+            <div className="relative w-80">
+              <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+              <Input
+                placeholder="Search..."
+                className="pl-9 bg-white border-gray-200 h-10 rounded-lg"
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+              />
             </div>
-            <Select value={String(pageSize)} onValueChange={(v) => setPageSize(Number(v))}>
-              <SelectTrigger className="h-9 w-28 text-xs rounded-full bg-card shadow-sm"><SelectValue /></SelectTrigger>
+            <Select value={String(pageSize)} onValueChange={v => setPageSize(Number(v))}>
+              <SelectTrigger className="w-32 bg-white h-10"><SelectValue /></SelectTrigger>
               <SelectContent>
-                {[25, 50, 100, 200].map(n => <SelectItem key={n} value={String(n)}>{n} / page</SelectItem>)}
+                {[50, 100, 200, 500].map(n => <SelectItem key={n} value={String(n)}>{n} rows</SelectItem>)}
               </SelectContent>
             </Select>
-            <span className="text-xs px-3 py-1.5 rounded-full bg-card border shadow-sm font-medium">{filtered.length} entries</span>
-            <Button size="sm" variant="outline" className="rounded-full bg-card shadow-sm"
-              onClick={() => { setSearch(''); setTableFilter('all'); setOpFilter('all'); }}>
-              Clear all
-            </Button>
-            <Button size="sm" variant="outline" className="rounded-full bg-card shadow-sm" onClick={load} disabled={loading}>
-              <RefreshCw className={`w-3 h-3 mr-1 ${loading ? 'animate-spin' : ''}`} />
+            <Button variant="outline" onClick={load} disabled={loading} className="bg-white h-10">
+              <RefreshCw className={`w-4 h-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
               Refresh
             </Button>
           </div>
         </div>
-        <div className="flex items-center gap-3 flex-wrap">
-          <div className="relative flex-1 min-w-[260px]">
-            <Search className="w-4 h-4 absolute left-4 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
-            <Input
-              placeholder="Search by field, value, user, sales order…"
-              className="pl-11 h-12 rounded-full bg-card shadow-sm border-0 focus-visible:ring-2"
-              value={search} onChange={e => setSearch(e.target.value)}
-            />
-          </div>
-          <Select value={tableFilter} onValueChange={setTableFilter}>
-            <SelectTrigger className="h-12 w-40 rounded-full bg-card shadow-sm border-0"><Filter className="w-3.5 h-3.5 mr-1" /><SelectValue /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All tables</SelectItem>
-              <SelectItem value="devices">Devices</SelectItem>
-              <SelectItem value="orders">Orders</SelectItem>
-              <SelectItem value="users">Users</SelectItem>
-            </SelectContent>
-          </Select>
-          <Select value={opFilter} onValueChange={setOpFilter}>
-            <SelectTrigger className="h-12 w-36 rounded-full bg-card shadow-sm border-0"><SelectValue /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All actions</SelectItem>
-              <SelectItem value="INSERT">Created</SelectItem>
-              <SelectItem value="UPDATE">Updated</SelectItem>
-              <SelectItem value="DELETE">Deleted</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
       </CardHeader>
-      <CardContent className="pt-4 space-y-3">
-
-        {view === 'grouped' ? (
-          <div className="overflow-auto rounded-lg border">
-            <Table>
-              <TableHeader>
-                <TableRow className="bg-muted/40">
-                  <TableHead className="text-xs">Timestamp</TableHead>
-                  <TableHead className="text-xs">Table</TableHead>
-                  <TableHead className="text-xs">Action</TableHead>
-                  <TableHead className="text-xs">Field</TableHead>
-                  <TableHead className="text-xs">Old → New</TableHead>
-                  <TableHead className="text-xs">User</TableHead>
-                  <TableHead className="text-xs">Sales Order</TableHead>
+      <CardContent className="px-0">
+        <div className="rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden overflow-x-auto">
+          <Table>
+            <TableHeader className="bg-gray-50/80 border-b border-gray-200">
+              <TableRow>
+                <TableHead className="text-[10px] font-extrabold uppercase tracking-wider text-gray-500 py-4 pl-6">Timestamp</TableHead>
+                <TableHead className="text-[10px] font-extrabold uppercase tracking-wider text-gray-500">Sales Order</TableHead>
+                <TableHead className="text-[10px] font-extrabold uppercase tracking-wider text-gray-500">Serial Number</TableHead>
+                <TableHead className="text-[10px] font-extrabold uppercase tracking-wider text-gray-500">Asset Type</TableHead>
+                <TableHead className="text-[10px] font-extrabold uppercase tracking-wider text-gray-500">Model</TableHead>
+                <TableHead className="text-[10px] font-extrabold uppercase tracking-wider text-gray-500">Configuration</TableHead>
+                <TableHead className="text-[10px] font-extrabold uppercase tracking-wider text-gray-500">Asset Status</TableHead>
+                <TableHead className="text-[10px] font-extrabold uppercase tracking-wider text-gray-500">Status</TableHead>
+                <TableHead className="text-[10px] font-extrabold uppercase tracking-wider text-gray-500">Location</TableHead>
+                <TableHead className="text-[10px] font-extrabold uppercase tracking-wider text-gray-500">Updated By</TableHead>
+                <TableHead className="text-[10px] font-extrabold uppercase tracking-wider text-gray-500 pr-6">School Name</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {loading ? (
+                <TableRow><TableCell colSpan={11} className="text-center py-20 text-gray-400">Loading activity data...</TableCell></TableRow>
+              ) : visible.length === 0 ? (
+                <TableRow><TableCell colSpan={11} className="text-center py-20 text-gray-400">No logs found</TableCell></TableRow>
+              ) : visible.map((g, i) => (
+                <TableRow key={i} className="hover:bg-gray-50/40 transition-colors border-b border-gray-100 last:border-0">
+                  <TableCell className="text-[11px] text-gray-500 whitespace-nowrap py-4 pl-6">{formatDate(g.timestamp)}</TableCell>
+                  <TableCell className="text-[12px] font-bold text-blue-700">
+                    {g.sales_order || deviceMap[g.record_id]?.sales_order || orderMap[g.record_id]?.sales_order || '—'}
+                  </TableCell>
+                  <TableCell className="text-[12px] font-bold text-blue-700">
+                    {g.serial_number || deviceMap[g.record_id]?.serial_number || '—'}
+                  </TableCell>
+                  <TableCell className="text-[11px]">{renderCell('asset_type', g)}</TableCell>
+                  <TableCell className="text-[11px]">{renderCell('model', g)}</TableCell>
+                  <TableCell className="text-[11px]">{renderCell('configuration', g)}</TableCell>
+                  <TableCell className="text-[11px]">{renderCell('asset_status', g)}</TableCell>
+                  <TableCell className="text-[11px]">{renderCell('status', g)}</TableCell>
+                  <TableCell className="text-[11px]">{renderCell('warehouse', g, '—')}</TableCell>
+                  <TableCell className="text-[11px] text-red-500 font-medium">{g.user}</TableCell>
+                  <TableCell className="text-[11px] text-red-500 font-medium pr-6">
+                    {deviceMap[g.record_id]?.school_name || orderMap[g.record_id]?.school_name || '—'}
+                  </TableCell>
                 </TableRow>
-              </TableHeader>
-              <TableBody>
-                {visible.length === 0 ? (
-                  <TableRow><TableCell colSpan={7} className="text-center text-sm text-muted-foreground py-6">No activity</TableCell></TableRow>
-                ) : visible.map((d, i) => (
-                  <TableRow key={`${d.id}-${i}`} className="text-xs">
-                    <TableCell className="whitespace-nowrap">{new Date(d.created_at).toLocaleString()}</TableCell>
-                    <TableCell><Badge variant="outline" className="text-xs">{d.table_name}</Badge></TableCell>
-                    <TableCell><Badge className={opColor(d.operation)}>{d.operation}</Badge></TableCell>
-                    <TableCell className="font-medium text-primary">{d.field}</TableCell>
-                    <TableCell>
-                      <span className="text-destructive line-through mr-1 break-all">{d.old_value || '—'}</span>
-                      <span className="mx-1 text-muted-foreground">→</span>
-                      <span className="text-success font-medium break-all">{d.new_value || '—'}</span>
-                    </TableCell>
-                    <TableCell className="text-muted-foreground">{d.changed_by || '—'}</TableCell>
-                    <TableCell className="text-muted-foreground">{d.sales_order || '—'}</TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </div>
-        ) : (
-          <pre className="text-[11px] bg-muted/40 p-3 rounded-lg overflow-auto max-h-[500px]">
-            {JSON.stringify(rows.slice(0, pageSize), null, 2)}
-          </pre>
-        )}
+              ))}
+            </TableBody>
+          </Table>
+        </div>
       </CardContent>
     </Card>
   );
