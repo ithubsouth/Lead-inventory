@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Minus, Trash2, Camera, ChevronDown, ChevronUp, Search, Edit2, X, Settings2 } from 'lucide-react';
+import { Plus, Minus, Trash2, Camera, ChevronDown, ChevronUp, Search, Edit2, X, Settings2, FileText, Upload } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from '@/components/ui/use-toast';
 import { fetchOrderDetails } from '@/lib/oms-api';
 import { useCustomOptions } from '@/hooks/useCustomOptions';
+import AssetDocumentsDialog from './AssetDocumentsDialog';
 import {
   orderTypes,
   tabletModels,
@@ -110,6 +111,8 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
   const [searchTimeout, setSearchTimeout] = useState<NodeJS.Timeout | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [fetchingOrderDetails, setFetchingOrderDetails] = useState(false);
+  const [showDocs, setShowDocs] = useState(false);
+  const [docsOrderId, setDocsOrderId] = useState<string | null>(null);
   const { extras: customAssetTypes, addOption: addCustomAssetType, removeOption: removeCustomAssetType, updateOption: updateCustomAssetType } = useCustomOptions('asset_type');
 
 
@@ -936,6 +939,33 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
     }
   };
 
+  const handleOpenDocs = async () => {
+    let id = assets.find(a => a.orderId)?.orderId;
+    if (!id && salesOrder.trim()) {
+      const { data, error } = await supabase
+        .from('orders')
+        .select('id')
+        .eq('sales_order', salesOrder.trim())
+        .eq('is_deleted', false)
+        .limit(1);
+
+      if (!error && data && data.length > 0) {
+        id = data[0].id;
+      }
+    }
+
+    if (id) {
+      setDocsOrderId(id);
+      setShowDocs(true);
+    } else {
+      toast({
+        title: 'Order Not Found',
+        description: 'Please search for an existing sales order or create the order first to upload documents.',
+        variant: 'destructive',
+      });
+    }
+  };
+
   const renderSuggestions = () => {
     if (!showSuggestions || salesOrderSuggestions.length === 0) return null;
     return (
@@ -1488,7 +1518,30 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
 
       {/* Order Details */}
       <div className="section-card">
-        <h3 className="text-xl font-semibold mb-3">Order Details</h3>
+        <h3 className="text-xl font-semibold mb-3" style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          Order Details
+          <button
+            type="button"
+            onClick={handleOpenDocs}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px',
+              padding: '4px 10px',
+              borderRadius: '4px',
+              background: '#3b82f6',
+              color: '#fff',
+              border: 'none',
+              cursor: 'pointer',
+              fontSize: '13px',
+              fontWeight: '500'
+            }}
+            title="Upload/View Documents"
+          >
+            <Upload size={16} />
+            Upload
+          </button>
+        </h3>
         <div className="order-details-grid">
           <div>
             <label style={{ fontSize: '12px', display: 'block', marginBottom: '4px' }}>
@@ -2136,6 +2189,18 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
       >
         {loading ? 'Processing...' : (editMode ? 'Update Order' : 'Create Order')}
       </button>
+
+      {showDocs && docsOrderId && (
+        <AssetDocumentsDialog
+          open={showDocs}
+          onOpenChange={(v) => {
+            setShowDocs(v);
+            if (!v) setDocsOrderId(null);
+          }}
+          deviceId={docsOrderId}
+          serialNumber={salesOrder || 'N/A'}
+        />
+      )}
     </div>
   </div>
   );

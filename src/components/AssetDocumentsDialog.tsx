@@ -40,7 +40,7 @@ export const AssetDocumentsDialog: React.FC<Props> = ({ open, onOpenChange, devi
     const { data, error } = await supabase
       .from('asset_documents')
       .select('*')
-      .eq('device_id', deviceId)
+      .eq('serial_number', serialNumber)
       .order('uploaded_at', { ascending: false });
     if (error) toast({ title: 'Failed to load documents', description: error.message, variant: 'destructive' });
     setDocs((data as AssetDoc[]) || []);
