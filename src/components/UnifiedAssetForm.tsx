@@ -22,6 +22,7 @@ import {
   profileIds,
   agreementTypes,
 } from './constants';
+import ComboInput from './ComboInput';
 
 interface AssetItem {
   id: string;
