@@ -109,12 +109,13 @@ const DevicesTable: React.FC<DevicesTableProps> = ({
       }
     };
 
+    // register non-passive wheel listener so preventDefault() works
     container.addEventListener('keydown', handleKeyDown);
-    container.addEventListener('wheel', handleWheel);
+    container.addEventListener('wheel', handleWheel, { passive: false });
 
     return () => {
       container.removeEventListener('keydown', handleKeyDown);
-      container.removeEventListener('wheel', handleWheel);
+      container.removeEventListener('wheel', handleWheel, { passive: false });
     };
   }, []);
 
@@ -704,13 +705,17 @@ const DevicesTable: React.FC<DevicesTableProps> = ({
               style={{
                 overflowX: 'auto',
                 overflowY: 'auto',
+                height: '400px',
                 maxHeight: '400px',
                 position: 'relative',
+                overscrollBehavior: 'contain',
+                boxSizing: 'border-box',
+                width: '100%'
               }}
               ref={tableContainerRef}
               tabIndex={0}
             >
-              <Table style={{ minWidth: '2000px' }}>
+              <Table wrapperOverflow="visible" style={{ minWidth: '2000px' }}>
                 <TableHeader>
                   <TableRow>
                     <TableHead style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', textAlign: 'left', position: 'sticky', top: 0, background: '#fff', zIndex: 20, width: columnWidths.s_no }}>S.No.</TableHead>

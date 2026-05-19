@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Minus, Trash2, Camera, ChevronDown, ChevronUp, Search, Edit2, X } from 'lucide-react';
+import { Plus, Minus, Trash2, Camera, ChevronDown, ChevronUp, Search, Edit2, X, Settings2 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from '@/components/ui/use-toast';
 import { fetchOrderDetails } from '@/lib/oms-api';
+import { useCustomOptions } from '@/hooks/useCustomOptions';
 import {
   orderTypes,
   tabletModels,
@@ -109,6 +110,7 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
   const [searchTimeout, setSearchTimeout] = useState<NodeJS.Timeout | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [fetchingOrderDetails, setFetchingOrderDetails] = useState(false);
+  const { extras: customAssetTypes, addOption: addCustomAssetType, removeOption: removeCustomAssetType, updateOption: updateCustomAssetType } = useCustomOptions('asset_type');
 
 
   useEffect(() => {
@@ -1001,8 +1003,17 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
     };
     return (
       <div key={asset.id} style={{ border: '1px solid #e5e7eb', borderRadius: '8px', padding: '16px', marginBottom: '16px', background: '#f9fafb' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '12px' }}>
-          <h4 style={{ fontSize: '14px', fontWeight: 'bold' }}>{asset.assetType}</h4>
+        <div style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          marginBottom: '16px',
+          background: '#f1f5f9',
+          padding: '8px 12px',
+          borderRadius: '6px',
+          borderBottom: '1px solid #e2e8f0'
+        }}>
+          <h4 style={{ fontSize: '14px', fontWeight: 'bold', margin: 0, color: '#1e293b' }}>{asset.assetType}</h4>
           <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
             {!isMandatorySerial && (
               <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
@@ -1188,7 +1199,7 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
               </div>
             </>
           )}
-          {additionalAssetTypes.includes(asset.assetType) && (
+          {(additionalAssetTypes.includes(asset.assetType) || customAssetTypes.includes(asset.assetType)) && (
             <>
               <div>
                 <label style={{ fontSize: '12px', display: 'block', marginBottom: '4px' }}>Model *</label>
@@ -1614,27 +1625,99 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
           </button>
         </div>
         {showAdditional && (
-          <div style={{ marginTop: '8px', padding: '8px', background: '#f3f4f6', borderRadius: '4px', display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
-            {additionalAssetTypes.map(type => (
-              <button
-                key={type}
-                onClick={() => {
-                  addAsset(type);
-                  setShowAdditional(false);
-                }}
-                style={{
-                  padding: '6px 12px',
-                  border: '1px solid #6b7280',
-                  borderRadius: '4px',
-                  background: '#fff',
-                  color: '#374151',
-                  fontSize: '12px',
-                  cursor: 'pointer',
-                }}
-              >
-                + {type}
-              </button>
-            ))}
+          <div style={{ marginTop: '8px', padding: '12px', background: '#f3f4f6', borderRadius: '4px' }}>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginBottom: '12px' }}>
+              {additionalAssetTypes.map(type => (
+                <button
+                  key={type}
+                  onClick={() => {
+                    addAsset(type);
+                    setShowAdditional(false);
+                  }}
+                  style={{
+                    padding: '6px 12px',
+                    border: '1px solid #6b7280',
+                    borderRadius: '4px',
+                    background: '#fff',
+                    color: '#374151',
+                    fontSize: '12px',
+                    cursor: 'pointer',
+                  }}
+                >
+                  + {type}
+                </button>
+              ))}
+              {customAssetTypes.map(type => (
+                <div key={type} style={{ display: 'flex', alignItems: 'center', background: '#fff', border: '1px solid #3b82f6', borderRadius: '4px', overflow: 'hidden' }}>
+                  <button
+                    onClick={() => {
+                      addAsset(type);
+                      setShowAdditional(false);
+                    }}
+                    style={{
+                      padding: '6px 12px',
+                      border: 'none',
+                      background: 'transparent',
+                      color: '#2563eb',
+                      fontSize: '12px',
+                      cursor: 'pointer',
+                      fontWeight: 500
+                    }}
+                  >
+                    + {type}
+                  </button>
+                  <div style={{ display: 'flex', borderLeft: '1px solid #d1d5db', padding: '0 4px', background: '#f8fafc' }}>
+                    <button
+                      onClick={async (e) => {
+                        e.stopPropagation();
+                        const newValue = window.prompt('Edit asset type:', type);
+                        if (newValue && newValue.trim() && newValue.trim() !== type) {
+                          await updateCustomAssetType(type, newValue.trim());
+                        }
+                      }}
+                      style={{ padding: '4px', color: '#64748b', background: 'transparent', border: 'none', cursor: 'pointer' }}
+                    >
+                      <Edit2 size={12} />
+                    </button>
+                    <button
+                      onClick={async (e) => {
+                        e.stopPropagation();
+                        if (window.confirm(`Delete asset type "${type}"?`)) {
+                          await removeCustomAssetType(type);
+                        }
+                      }}
+                      style={{ padding: '4px', color: '#ef4444', background: 'transparent', border: 'none', cursor: 'pointer' }}
+                    >
+                      <Trash2 size={12} />
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div style={{ display: 'flex', gap: '8px', borderTop: '1px solid #d1d5db', paddingTop: '12px' }}>
+               <input
+                 id="new-asset-type-input"
+                 placeholder="Enter new asset type..."
+                 className="input-base"
+                 style={{ fontSize: '12px', padding: '4px 8px', height: '32px', flex: 1 }}
+               />
+               <button
+                 onClick={async () => {
+                   const input = document.getElementById('new-asset-type-input') as HTMLInputElement;
+                   const val = input?.value.trim();
+                   if (val) {
+                     await addCustomAssetType(val);
+                     addAsset(val);
+                     input.value = '';
+                     setShowAdditional(false);
+                   }
+                 }}
+                 className="btn-primary"
+                 style={{ padding: '4px 12px', fontSize: '12px', height: '32px' }}
+               >
+                 Add New Type
+               </button>
+            </div>
           </div>
         )}
       </div>

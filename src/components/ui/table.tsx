@@ -2,11 +2,15 @@ import * as React from "react"
 
 import { cn } from "@/lib/utils"
 
+type TableProps = React.HTMLAttributes<HTMLTableElement> & {
+  wrapperOverflow?: 'auto' | 'visible' | 'hidden' | 'scroll'
+}
+
 const Table = React.forwardRef<
   HTMLTableElement,
-  React.HTMLAttributes<HTMLTableElement>
->(({ className, ...props }, ref) => (
-  <div className="relative w-full overflow-auto">
+  TableProps
+>(({ className, wrapperOverflow = 'auto', ...props }, ref) => (
+  <div style={{ position: 'relative', width: '100%', overflow: wrapperOverflow }}>
     <table
       ref={ref}
       className={cn("w-full caption-bottom text-sm", className)}

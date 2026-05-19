@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { ChevronDown, Plus, X } from 'lucide-react';
+import { ChevronDown, Plus, X, Trash2, Edit2 } from 'lucide-react';
 import { useCustomOptions } from '@/hooks/useCustomOptions';
 
 interface ComboInputProps {
@@ -17,7 +17,7 @@ export const ComboInput: React.FC<ComboInputProps> = ({
   fieldKey, baseOptions, value, onChange,
   placeholder = 'Type or select', allowAdd = true, className, style,
 }) => {
-  const { extras, addOption } = useCustomOptions(fieldKey);
+  const { extras, addOption, removeOption, updateOption } = useCustomOptions(fieldKey);
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState(value || '');
   const ref = useRef<HTMLDivElement>(null);
@@ -51,6 +51,32 @@ export const ComboInput: React.FC<ComboInputProps> = ({
     commit(v);
   };
 
+  const handleEdit = async (e: React.MouseEvent, opt: string) => {
+    e.stopPropagation();
+    const newValue = window.prompt('Edit option:', opt);
+    if (newValue && newValue.trim() && newValue.trim() !== opt) {
+      const res = await updateOption(opt, newValue.trim());
+      if (res.ok && value === opt) {
+        onChange(newValue.trim());
+      } else if (!res.ok) {
+        alert(`Error: ${res.reason}`);
+      }
+    }
+  };
+
+  const handleDelete = async (e: React.MouseEvent, opt: string) => {
+    e.stopPropagation();
+    if (window.confirm(`Delete "${opt}"?`)) {
+      const res = await removeOption(opt);
+      if (res.ok && value === opt) {
+        onChange('');
+        setQuery('');
+      } else if (!res.ok) {
+        alert(`Error: ${res.reason}`);
+      }
+    }
+  };
+
   const handleKey = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter') {
       e.preventDefault();
@@ -64,6 +90,7 @@ export const ComboInput: React.FC<ComboInputProps> = ({
       <div style={{
         display: 'flex', alignItems: 'center',
         border: '1px solid #d1d5db', borderRadius: 4, background: '#fff',
+        overflow: 'hidden'
       }}>
         <input
           type="text"
@@ -72,16 +99,16 @@ export const ComboInput: React.FC<ComboInputProps> = ({
           onChange={(e) => { setQuery(e.target.value); onChange(e.target.value); setOpen(true); }}
           onFocus={() => setOpen(true)}
           onKeyDown={handleKey}
-          style={{ flex: 1, padding: '8px', border: 'none', outline: 'none', fontSize: 14, background: 'transparent', borderRadius: 4 }}
+          style={{ flex: 1, minWidth: 0, padding: '8px', border: 'none', outline: 'none', fontSize: 14, background: 'transparent', borderRadius: 4 }}
         />
         {query && (
           <button type="button" onClick={() => { setQuery(''); onChange(''); }}
-            style={{ padding: '0 6px', color: '#9ca3af' }} aria-label="Clear">
+            style={{ padding: '0 4px', color: '#9ca3af', background: 'transparent', border: 'none', cursor: 'pointer', flexShrink: 0 }} aria-label="Clear">
             <X size={14} />
           </button>
         )}
         <button type="button" onClick={() => setOpen(o => !o)}
-          style={{ padding: '0 8px', color: '#6b7280' }} aria-label="Toggle">
+          style={{ width: '32px', height: '32px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#6b7280', background: 'transparent', border: 'none', cursor: 'pointer', flexShrink: 0 }} aria-label="Toggle">
           <ChevronDown size={16} />
         </button>
       </div>
@@ -95,7 +122,7 @@ export const ComboInput: React.FC<ComboInputProps> = ({
             <button type="button" onClick={handleAdd}
               style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 6,
                 padding: '8px 10px', fontSize: 13, color: '#2563eb', fontWeight: 500,
-                borderBottom: '1px solid #f3f4f6', textAlign: 'left' }}>
+                borderBottom: '1px solid #f3f4f6', textAlign: 'left', cursor: 'pointer', background: 'none', border: 'none' }}>
               <Plus size={14} /> Add "{query.trim()}"
             </button>
           )}
@@ -107,14 +134,25 @@ export const ComboInput: React.FC<ComboInputProps> = ({
           {filtered.map(opt => {
             const isCustom = extras.includes(opt) && !baseOptions.includes(opt);
             return (
-              <button type="button" key={opt} onClick={() => commit(opt)}
-                style={{ width: '100%', display: 'flex', justifyContent: 'space-between',
-                  padding: '8px 10px', fontSize: 13, textAlign: 'left',
-                  background: opt === value ? '#eff6ff' : 'transparent',
-                  color: '#111827' }}>
-                <span>{opt}</span>
-                {isCustom && <span style={{ fontSize: 10, color: '#6b7280' }}>custom</span>}
-              </button>
+              <div key={opt} style={{ display: 'flex', alignItems: 'center', background: opt === value ? '#eff6ff' : 'transparent' }}>
+                <button type="button" onClick={() => commit(opt)}
+                  style={{ flex: 1, display: 'block', padding: '8px 10px', fontSize: 13, textAlign: 'left',
+                    color: '#111827', background: 'transparent', border: 'none', cursor: 'pointer' }}>
+                  {opt}
+                </button>
+                {isCustom && (
+                  <div style={{ display: 'flex', paddingRight: 4 }}>
+                    <button type="button" onClick={(e) => handleEdit(e, opt)}
+                      style={{ padding: '4px', color: '#6b7280', background: 'transparent', border: 'none', cursor: 'pointer' }} title="Edit">
+                      <Edit2 size={12} />
+                    </button>
+                    <button type="button" onClick={(e) => handleDelete(e, opt)}
+                      style={{ padding: '4px', color: '#ef4444', background: 'transparent', border: 'none', cursor: 'pointer' }} title="Delete">
+                      <Trash2 size={12} />
+                    </button>
+                  </div>
+                )}
+              </div>
             );
           })}
         </div>

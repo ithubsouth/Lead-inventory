@@ -594,11 +594,15 @@ const OrderSummaryTable: React.FC<OrderSummaryTableProps> = ({
               style={{
                 overflowX: 'auto',
                 overflowY: 'auto',
+                height: '400px',
                 maxHeight: '400px',
                 position: 'relative',
+                overscrollBehavior: 'contain',
+                boxSizing: 'border-box',
+                width: '100%'
               }}
             >
-              <Table style={{ minWidth: '800px' }}>
+              <Table wrapperOverflow="visible" style={{ minWidth: '800px' }}>
                 <TableHeader>
                   {summaryType === 'stock' ? (
                     <TableRow>
