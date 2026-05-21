@@ -691,12 +691,14 @@ const InventoryManagement = () => {
       </div>
       <div className='flex-1 overflow-y-auto pt-[50px]'>
         <div className='container mx-auto px-4 py-6 h-full'>
-          <Tabs defaultValue='create' className='w-full h-full flex flex-col'>
-            <TabsList className='grid w-full grid-cols-6 mb-6 bg-card/50 backdrop-blur-sm border border-border/50 flex-shrink-0'>
-              <TabsTrigger value='create' className='flex items-center gap-2 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground'>
-                <Package className='w-4 h-4' />
-                Create Order
-              </TabsTrigger>
+          <Tabs defaultValue={userRole === 'Reporter' ? 'view' : 'create'} className='w-full h-full flex flex-col'>
+            <TabsList className={`grid w-full ${userRole === 'Reporter' ? 'grid-cols-5' : 'grid-cols-6'} mb-6 bg-card/50 backdrop-blur-sm border border-border/50 flex-shrink-0`}>
+              {userRole !== 'Reporter' && (
+                <TabsTrigger value='create' className='flex items-center gap-2 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground'>
+                  <Package className='w-4 h-4' />
+                  Create Order
+                </TabsTrigger>
+              )}
               <TabsTrigger value='view' className='flex items-center gap-2 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground'>
                 <Archive className='w-4 h-4' />
                 View Orders
@@ -718,31 +720,33 @@ const InventoryManagement = () => {
                 Activity Logs
               </TabsTrigger>
             </TabsList>
-            <TabsContent value='create' className='space-y-6 flex-1 overflow-y-auto'>
-              <UnifiedAssetForm
-                orderType={orderType}
-                setOrderType={setOrderType}
-                salesOrder={salesOrder}
-                setSalesOrder={setSalesOrder}
-                dealId={dealId}
-                setDealId={setDealId}
-                nucleusId={nucleusId}
-                setNucleusId={setNucleusId}
-                schoolName={schoolName}
-                setSchoolName={setSchoolName}
-                agreementType={agreementType}
-                setAgreementType={setAgreementType}
-                loading={loading}
-                setLoading={setLoading}
-                loadOrders={loadOrders}
-                loadDevices={loadDevices}
-                loadOrderSummary={loadOrderSummary}
-                openScanner={(itemId, index, assetType) => {
-                  setCurrentSerialIndex({ itemId, index, type: assetType as 'tablet' | 'tv' });
-                  setShowScanner(true);
-                }}
-              />
-            </TabsContent>
+            {userRole !== 'Reporter' && (
+              <TabsContent value='create' className='space-y-6 flex-1 overflow-y-auto'>
+                <UnifiedAssetForm
+                  orderType={orderType}
+                  setOrderType={setOrderType}
+                  salesOrder={salesOrder}
+                  setSalesOrder={setSalesOrder}
+                  dealId={dealId}
+                  setDealId={setDealId}
+                  nucleusId={nucleusId}
+                  setNucleusId={setNucleusId}
+                  schoolName={schoolName}
+                  setSchoolName={setSchoolName}
+                  agreementType={agreementType}
+                  setAgreementType={setAgreementType}
+                  loading={loading}
+                  setLoading={setLoading}
+                  loadOrders={loadOrders}
+                  loadDevices={loadDevices}
+                  loadOrderSummary={loadOrderSummary}
+                  openScanner={(itemId, index, assetType) => {
+                    setCurrentSerialIndex({ itemId, index, type: assetType as 'tablet' | 'tv' });
+                    setShowScanner(true);
+                  }}
+                />
+              </TabsContent>
+            )}
             <TabsContent value='view' className='flex-1 overflow-y-auto'>
               <OrdersTable
                 orders={orders}
@@ -776,6 +780,7 @@ const InventoryManagement = () => {
                 loadOrders={loadOrders}
                 loadDevices={loadDevices}
                 loadOrderSummary={loadOrderSummary}
+                userRole={userRole}
               />
             </TabsContent>
             <TabsContent value='order' className='flex-1 overflow-y-auto'>

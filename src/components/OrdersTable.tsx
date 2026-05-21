@@ -45,6 +45,7 @@ interface OrdersTableProps {
   loadOrders: () => Promise<void>;
   loadDevices: () => Promise<void>;
   loadOrderSummary: () => Promise<void>;
+  userRole?: string | null;
 }
 
 const OrdersTable: React.FC<OrdersTableProps> = ({
@@ -79,7 +80,9 @@ const OrdersTable: React.FC<OrdersTableProps> = ({
   loadOrders,
   loadDevices,
   loadOrderSummary,
+  userRole,
 }) => {
+  const isReporter = userRole === 'Reporter';
   const [currentOrdersPage, setCurrentOrdersPage] = useState(1);
   const [rowsPerPage, setRowsPerPage] = useState(10);
   const [viewingOrder, setViewingOrder] = useState<Order | null>(null);
@@ -793,7 +796,7 @@ const OrdersTable: React.FC<OrdersTableProps> = ({
                             >
                               <FileText style={{ width: '12px', height: '12px' }} />
                             </Button>
-                            {!order.is_deleted && (
+                            {!order.is_deleted && !isReporter && (
                               <>
                                 <Button
                                   variant="outline"
@@ -816,7 +819,7 @@ const OrdersTable: React.FC<OrdersTableProps> = ({
                                 </Button>
                               </>
                             )}
-                            {order.is_deleted && (
+                            {order.is_deleted && !isReporter && (
                               <Button
                                 variant="outline"
                                 size="sm"
