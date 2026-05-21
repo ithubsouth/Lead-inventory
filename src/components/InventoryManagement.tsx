@@ -720,31 +720,33 @@ const InventoryManagement = () => {
                 Activity Logs
               </TabsTrigger>
             </TabsList>
-            <TabsContent value='create' className='space-y-6 flex-1 overflow-y-auto'>
-              <UnifiedAssetForm
-                orderType={orderType}
-                setOrderType={setOrderType}
-                salesOrder={salesOrder}
-                setSalesOrder={setSalesOrder}
-                dealId={dealId}
-                setDealId={setDealId}
-                nucleusId={nucleusId}
-                setNucleusId={setNucleusId}
-                schoolName={schoolName}
-                setSchoolName={setSchoolName}
-                agreementType={agreementType}
-                setAgreementType={setAgreementType}
-                loading={loading}
-                setLoading={setLoading}
-                loadOrders={loadOrders}
-                loadDevices={loadDevices}
-                loadOrderSummary={loadOrderSummary}
-                openScanner={(itemId, index, assetType) => {
-                  setCurrentSerialIndex({ itemId, index, type: assetType as 'tablet' | 'tv' });
-                  setShowScanner(true);
-                }}
-              />
-            </TabsContent>
+            {userRole !== 'Reporter' && (
+              <TabsContent value='create' className='space-y-6 flex-1 overflow-y-auto'>
+                <UnifiedAssetForm
+                  orderType={orderType}
+                  setOrderType={setOrderType}
+                  salesOrder={salesOrder}
+                  setSalesOrder={setSalesOrder}
+                  dealId={dealId}
+                  setDealId={setDealId}
+                  nucleusId={nucleusId}
+                  setNucleusId={setNucleusId}
+                  schoolName={schoolName}
+                  setSchoolName={setSchoolName}
+                  agreementType={agreementType}
+                  setAgreementType={setAgreementType}
+                  loading={loading}
+                  setLoading={setLoading}
+                  loadOrders={loadOrders}
+                  loadDevices={loadDevices}
+                  loadOrderSummary={loadOrderSummary}
+                  openScanner={(itemId, index, assetType) => {
+                    setCurrentSerialIndex({ itemId, index, type: assetType as 'tablet' | 'tv' });
+                    setShowScanner(true);
+                  }}
+                />
+              </TabsContent>
+            )}
             <TabsContent value='view' className='flex-1 overflow-y-auto'>
               <OrdersTable
                 orders={orders}
