@@ -796,7 +796,7 @@ const OrdersTable: React.FC<OrdersTableProps> = ({
                             >
                               <FileText style={{ width: '12px', height: '12px' }} />
                             </Button>
-                            {!order.is_deleted && (
+                            {!order.is_deleted && !isReporter && (
                               <>
                                 <Button
                                   variant="outline"
@@ -819,7 +819,7 @@ const OrdersTable: React.FC<OrdersTableProps> = ({
                                 </Button>
                               </>
                             )}
-                            {order.is_deleted && (
+                            {order.is_deleted && !isReporter && (
                               <Button
                                 variant="outline"
                                 size="sm"
