@@ -123,7 +123,7 @@ const OrdersTable: React.FC<OrdersTableProps> = ({
 
     return () => {
       container.removeEventListener('keydown', handleKeyDown);
-      container.removeEventListener('wheel', handleWheel, { passive: false });
+      container.removeEventListener('wheel', handleWheel);
     };
   }, []);
 
