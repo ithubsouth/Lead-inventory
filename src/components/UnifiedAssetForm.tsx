@@ -1887,7 +1887,7 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
                   i++;
                 }
                 values.push(current);
-                return values.map(v => v.replace(/^"|"$/g, '').replace(/""/g, '"').trim());
+                return values.map(v => v.trim());
               };
 
               const headers = parseLine(lines[0]);
