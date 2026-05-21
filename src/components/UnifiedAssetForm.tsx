@@ -2102,7 +2102,7 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
                   else cur += c;
                 }
                 vals.push(cur);
-                return vals.map(v => v.replace(/^"|"$/g, '').replace(/""/g, '"').trim());
+                return vals.map(v => v.trim());
               };
 
               const headers = parse(lines[0]);
