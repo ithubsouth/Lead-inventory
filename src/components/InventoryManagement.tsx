@@ -780,6 +780,7 @@ const InventoryManagement = () => {
                 loadOrders={loadOrders}
                 loadDevices={loadDevices}
                 loadOrderSummary={loadOrderSummary}
+                userRole={userRole}
               />
             </TabsContent>
             <TabsContent value='order' className='flex-1 overflow-y-auto'>
