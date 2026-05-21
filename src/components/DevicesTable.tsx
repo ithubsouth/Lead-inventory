@@ -115,7 +115,7 @@ const DevicesTable: React.FC<DevicesTableProps> = ({
 
     return () => {
       container.removeEventListener('keydown', handleKeyDown);
-      container.removeEventListener('wheel', handleWheel, { passive: false });
+      container.removeEventListener('wheel', handleWheel);
     };
   }, []);
 
