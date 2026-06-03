@@ -50,6 +50,7 @@ const InventoryManagement = () => {
   const [tablets, setTablets] = useState<TabletItem[]>([]);
   const [tvs, setTvs] = useState<TVItem[]>([]);
   const [logoLoaded, setLogoLoaded] = useState(false);
+  const [versionHistoryOpen, setVersionHistoryOpen] = useState(false);
   const { toast } = useToast();
   const [userEmail, setUserEmail] = useState<string | null>(null);
   const [userRole, setUserRole] = useState<string | null>(null);
