@@ -45,7 +45,10 @@ export const ActivityLogs: React.FC = () => {
   const [search, setSearch] = useState('');
   const [pageSize, setPageSize] = useState(10);
   const [currentPage, setCurrentPage] = useState(1);
+  const [restoringId, setRestoringId] = useState<string | null>(null);
   const tableContainerRef = useRef<HTMLDivElement>(null);
+  const { canMutate } = useUserRole();
+  const { toast } = useToast();
 
   useEffect(() => {
     const container = tableContainerRef.current;
