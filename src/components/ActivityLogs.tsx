@@ -5,7 +5,9 @@ import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Clock, Search, RefreshCw } from 'lucide-react';
+import { Clock, Search, RefreshCw, RotateCcw, Loader2 } from 'lucide-react';
+import { useUserRole } from '@/hooks/useUserRole';
+import { useToast } from '@/hooks/use-toast';
 
 type HistoryRow = {
   id: string;
@@ -43,7 +45,10 @@ export const ActivityLogs: React.FC = () => {
   const [search, setSearch] = useState('');
   const [pageSize, setPageSize] = useState(10);
   const [currentPage, setCurrentPage] = useState(1);
+  const [restoringId, setRestoringId] = useState<string | null>(null);
   const tableContainerRef = useRef<HTMLDivElement>(null);
+  const { canMutate } = useUserRole();
+  const { toast } = useToast();
 
   useEffect(() => {
     const container = tableContainerRef.current;
@@ -241,6 +246,36 @@ export const ActivityLogs: React.FC = () => {
     return range;
   };
 
+  const handleRestoreRow = async (entry: LogEntry) => {
+    if (!canMutate) return;
+    const tbl = entry.table_name;
+    if (tbl !== 'devices' && tbl !== 'orders') {
+      toast({ title: 'Cannot restore', description: `Restore is not supported for ${tbl}.`, variant: 'destructive' });
+      return;
+    }
+    const payload: Record<string, any> = {};
+    Object.entries(entry.fields).forEach(([k, v]) => {
+      if (['id', 'created_at', 'updated_at', 'deleted_at', 'is_deleted'].includes(k)) return;
+      payload[k] = v.old === '' ? null : v.old;
+    });
+    if (Object.keys(payload).length === 0) {
+      toast({ title: 'Nothing to restore', description: 'This entry has no previous values.', variant: 'destructive' });
+      return;
+    }
+    if (!confirm(`Restore ${Object.keys(payload).length} field(s) on ${entry.serial_number || entry.sales_order || 'record'} to previous values?`)) return;
+    setRestoringId(entry.id);
+    try {
+      const { error } = await supabase.from(tbl as any).update(payload).eq('id', entry.record_id);
+      if (error) throw error;
+      toast({ title: 'Restored', description: 'Previous values applied.' });
+      await load();
+    } catch (e: any) {
+      toast({ title: 'Restore failed', description: e.message, variant: 'destructive' });
+    } finally {
+      setRestoringId(null);
+    }
+  };
+
   return (
     <Card className="border-none shadow-none bg-transparent">
       <CardHeader className="px-0 pb-6">
@@ -283,11 +318,13 @@ export const ActivityLogs: React.FC = () => {
                 <TableHead style={{ position: 'sticky', top: 0, background: '#f8fafc', zIndex: 20, borderBottom: '1px solid #e2e8f0' }} className="text-[10px] font-extrabold uppercase tracking-wider text-gray-500">Location</TableHead>
                 <TableHead style={{ position: 'sticky', top: 0, background: '#f8fafc', zIndex: 20, borderBottom: '1px solid #e2e8f0' }} className="text-[10px] font-extrabold uppercase tracking-wider text-gray-500">Updated By</TableHead>
                 <TableHead style={{ position: 'sticky', top: 0, background: '#f8fafc', zIndex: 20, borderBottom: '1px solid #e2e8f0' }} className="text-[10px] font-extrabold uppercase tracking-wider text-gray-500 pr-6">School Name</TableHead>
+                {canMutate && <TableHead style={{ position: 'sticky', top: 0, background: '#f8fafc', zIndex: 20, borderBottom: '1px solid #e2e8f0' }} className="text-[10px] font-extrabold uppercase tracking-wider text-gray-500 pr-6 text-center">Action</TableHead>}
               </TableRow>
             </TableHeader>
             <TableBody>
-              {loading ? ( <TableRow><TableCell colSpan={13} className="text-center py-20 text-gray-400">Loading activity data...</TableCell></TableRow> ) : visible.length === 0 ? ( <TableRow><TableCell colSpan={13} className="text-center py-20 text-gray-400">No activity found</TableCell></TableRow> ) : visible.map((g, i) => {
+              {loading ? ( <TableRow><TableCell colSpan={canMutate ? 14 : 13} className="text-center py-20 text-gray-400">Loading activity data...</TableCell></TableRow> ) : visible.length === 0 ? ( <TableRow><TableCell colSpan={canMutate ? 14 : 13} className="text-center py-20 text-gray-400">No activity found</TableCell></TableRow> ) : visible.map((g, i) => {
                 const so = g.sales_order || deviceMap[g.record_id]?.sales_order || orderMap[g.record_id]?.sales_order;
+                const hasOld = Object.values(g.fields).some(f => f.old !== '');
                 return (
                   <TableRow key={i} className="hover:bg-gray-50/40 transition-colors border-b border-gray-100 last:border-0">
                     <TableCell className="text-[11px] text-gray-500 whitespace-nowrap py-4 pl-6">{formatDate(g.timestamp)}</TableCell>
@@ -309,6 +346,20 @@ export const ActivityLogs: React.FC = () => {
                     <TableCell className="p-0 pr-6">
                       {renderCell('school_name', g, false, true)}
                     </TableCell>
+                    {canMutate && (
+                      <TableCell className="p-0 pr-6 text-center">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          disabled={!hasOld || restoringId === g.id || (g.table_name !== 'devices' && g.table_name !== 'orders')}
+                          onClick={() => handleRestoreRow(g)}
+                          className="h-8 px-2 text-[11px] text-blue-600 hover:text-blue-700 hover:bg-blue-50 disabled:opacity-30"
+                          title={hasOld ? 'Restore previous values' : 'No previous values'}
+                        >
+                          {restoringId === g.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <><RotateCcw className="w-3.5 h-3.5 mr-1" />Restore</>}
+                        </Button>
+                      </TableCell>
+                    )}
                   </TableRow>
                 );
               })}

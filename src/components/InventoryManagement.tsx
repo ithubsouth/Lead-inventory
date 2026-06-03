@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
-import { Package, BarChart3, Archive, Clock } from 'lucide-react';
+import { Package, BarChart3, Archive, Clock, History } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import UnifiedAssetForm from './UnifiedAssetForm';
@@ -12,6 +13,7 @@ import ActivityLogs from './ActivityLogs';
 import { UserProfile } from './UserProfile';
 import { ActiveUsers } from '@/components/ActiveUsers';
 import EnhancedBarcodeScanner from './EnhancedBarcodeScanner';
+import VersionHistoryDialog from './VersionHistoryDialog';
 import { Order, Device, OrderSummary, TabletItem, TVItem } from './types';
 import { DateRange } from 'react-day-picker';
 
@@ -48,6 +50,7 @@ const InventoryManagement = () => {
   const [tablets, setTablets] = useState<TabletItem[]>([]);
   const [tvs, setTvs] = useState<TVItem[]>([]);
   const [logoLoaded, setLogoLoaded] = useState(false);
+  const [versionHistoryOpen, setVersionHistoryOpen] = useState(false);
   const { toast } = useToast();
   const [userEmail, setUserEmail] = useState<string | null>(null);
   const [userRole, setUserRole] = useState<string | null>(null);
@@ -684,11 +687,21 @@ const InventoryManagement = () => {
             <h1 className='text-2xl font-bold bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent'>Lead Inventory Management</h1>
           </div>
           <div className='flex items-center space-x-4'>
+            <Button
+              variant='ghost'
+              size='icon'
+              onClick={() => setVersionHistoryOpen(true)}
+              title='Version History'
+              className='relative h-9 w-9 rounded-full hover:bg-primary/10 hover:text-primary'
+            >
+              <History className='w-5 h-5' />
+            </Button>
             <ActiveUsers />
             <UserProfile />
           </div>
         </div>
       </div>
+      <VersionHistoryDialog open={versionHistoryOpen} onOpenChange={setVersionHistoryOpen} />
       <div className='flex-1 overflow-y-auto pt-[50px]'>
         <div className='container mx-auto px-4 py-6 h-full'>
           <Tabs defaultValue={userRole === 'Reporter' ? 'view' : 'create'} className='w-full h-full flex flex-col'>
