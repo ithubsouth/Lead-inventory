@@ -67,6 +67,7 @@ export const VersionHistoryDialog: React.FC<Props> = ({ open, onOpenChange }) =>
   const [selected, setSelected] = useState<RecordResult | null>(null);
   const [history, setHistory] = useState<HistoryEntry[]>([]);
   const [selectedVersionId, setSelectedVersionId] = useState<string | null>(null);
+  const [selectedGroupKey, setSelectedGroupKey] = useState<string | null>(null);
   const [loadingHist, setLoadingHist] = useState(false);
   const [restoring, setRestoring] = useState(false);
   const [userMap, setUserMap] = useState<Record<string, string>>({});
@@ -114,7 +115,7 @@ export const VersionHistoryDialog: React.FC<Props> = ({ open, onOpenChange }) =>
       (ord || []).forEach((o: any) =>
         list.push({
           id: o.id, table_name: 'orders',
-          label: `Order: ${o.sales_order}`,
+          label: `Order: ${o.sales_order} • ${o.asset_type || o.model || 'Order'}`,
           sublabel: `${o.asset_type || ''} • ${o.model || ''} • Qty: ${o.quantity ?? 0}`,
           primary: o.sales_order || '—',
         })
@@ -140,21 +141,43 @@ export const VersionHistoryDialog: React.FC<Props> = ({ open, onOpenChange }) =>
       const rows = (data as HistoryEntry[]) || [];
       const seen = new Set<string>();
       const uniqueRows = rows.filter(r => {
-        const key = `${r.table_name}|${r.record_id}|${r.operation}|${r.field_name || ''}|${stringify(r.old_data)}|${stringify(r.new_data)}|${r.created_at}|${r.changed_by || ''}|${r.updated_by || ''}`;
+        const key = `${r.table_name}|${r.record_id}|${r.operation}|${r.field_name || ''}|${stringify(r.old_data)}|${stringify(r.new_data)}|${r.created_at}`;
         if (seen.has(key)) return false;
         seen.add(key);
         return true;
       });
       setHistory(uniqueRows);
+      setSelectedGroupKey(null);
       if (uniqueRows.length) setSelectedVersionId(uniqueRows[0].id);
 
-      const ids = Array.from(new Set(uniqueRows.map(r => r.changed_by || r.updated_by).filter(Boolean))) as string[];
+      const ids = Array.from(new Set(uniqueRows
+        .map(r => r.changed_by)
+        .filter((value): value is string => Boolean(value) && value.includes('-')))) as string[];
+      const m: Record<string, string> = {};
       if (ids.length) {
         const { data: users } = await supabase.from('users').select('id,email,full_name').in('id', ids);
-        const m: Record<string, string> = {};
-        users?.forEach((u: any) => (m[u.id] = u.full_name || u.email || u.id));
-        setUserMap(m);
+        users?.forEach((u: any) => {
+          m[u.id] = u.full_name || u.email || u.id;
+        });
       }
+      const emailByGroup: Record<string, string> = {};
+      uniqueRows.forEach(r => {
+        if (r.updated_by && r.updated_by.includes('@')) {
+          const groupKey = `${r.record_id}|${r.operation}`;
+          emailByGroup[groupKey] = r.updated_by;
+        }
+      });
+      uniqueRows.forEach(r => {
+        if (r.changed_by) {
+          const groupKey = `${r.record_id}|${r.operation}`;
+          if (r.updated_by && r.updated_by.includes('@')) {
+            m[r.changed_by] = r.updated_by;
+          } else if (!m[r.changed_by] && emailByGroup[groupKey]) {
+            m[r.changed_by] = emailByGroup[groupKey];
+          }
+        }
+      });
+      setUserMap(m);
     } catch (e: any) {
       toast({ title: 'Failed to load history', description: e.message, variant: 'destructive' });
     } finally {
@@ -167,16 +190,99 @@ export const VersionHistoryDialog: React.FC<Props> = ({ open, onOpenChange }) =>
     return history.filter(h => h.operation === versionFilter);
   }, [history, versionFilter]);
 
-  const selectedVersion = useMemo(() => history.find(h => h.id === selectedVersionId) || null, [history, selectedVersionId]);
+  const grouped = useMemo(() => {
+    type TimelineGroup = {
+      key: string;
+      id: string;
+      created_at: string;
+      operation: string;
+      user: string;
+      count: number;
+      items: HistoryEntry[];
+    };
+
+    const buildUser = (h: HistoryEntry) => {
+      const changedBy = h.changed_by || '';
+      const updatedBy = h.updated_by || '';
+      if (updatedBy && updatedBy.includes('@')) return updatedBy;
+      if (changedBy && userMap[changedBy]) return userMap[changedBy];
+      if (updatedBy && userMap[updatedBy]) return userMap[updatedBy];
+      return userMap[changedBy || updatedBy] || changedBy || updatedBy || 'system';
+    };
+
+    const days: Record<string, TimelineGroup[]> = {};
+    filteredHistory.forEach(h => {
+      const day = fmtDay(h.created_at);
+      const timeKey = fmtShortTime(h.created_at);
+      const key = `${day}|${h.record_id}|${h.operation}|${timeKey}`;
+      const group = days[day] ||= [];
+      const existing = group.find(g => g.key === key);
+      if (existing) {
+        existing.count += 1;
+        existing.items.push(h);
+      } else {
+        group.push({
+          key,
+          id: h.id,
+          created_at: h.created_at,
+          operation: h.operation,
+          user: '',
+          count: 1,
+          items: [h],
+        });
+      }
+    });
+
+    const resolveUser = (items: HistoryEntry[]) => {
+      const email = items.find(item => item.updated_by && item.updated_by.includes('@'))?.updated_by;
+      if (email) return email;
+      const changedBy = items.find(item => item.changed_by && userMap[item.changed_by])?.changed_by;
+      if (changedBy) return userMap[changedBy];
+      const rawUpdated = items.find(item => item.updated_by)?.updated_by;
+      if (rawUpdated) return rawUpdated;
+      const rawChanged = items.find(item => item.changed_by)?.changed_by;
+      if (rawChanged) return rawChanged;
+      return 'system';
+    };
+
+    Object.values(days).forEach(groupList => {
+      groupList.forEach(group => {
+        group.user = resolveUser(group.items);
+      });
+    });
+
+    return days;
+  }, [filteredHistory, userMap]);
+
+  const selectedTimelineGroup = useMemo(() => {
+    if (!selectedGroupKey) return null;
+    for (const groupList of Object.values(grouped)) {
+      const match = groupList.find(g => g.key === selectedGroupKey);
+      if (match) return match;
+    }
+    return null;
+  }, [grouped, selectedGroupKey]);
+
+  const selectedVersion = useMemo(() => {
+    if (selectedTimelineGroup) return selectedTimelineGroup.items[0] || null;
+    return history.find(h => h.id === selectedVersionId) || null;
+  }, [history, selectedVersionId, selectedTimelineGroup]);
 
   const selectedVersionUser = useMemo(() => {
+    if (selectedTimelineGroup) return selectedTimelineGroup.user || 'system';
     if (!selectedVersion) return 'system';
-    const userId = selectedVersion.changed_by || selectedVersion.updated_by || '';
-    return userMap[userId] || userId || 'system';
-  }, [selectedVersion, userMap]);
+    const changedBy = selectedVersion.changed_by || '';
+    const updatedBy = selectedVersion.updated_by || '';
+    if (updatedBy && updatedBy.includes('@')) return updatedBy;
+    if (changedBy && userMap[changedBy]) return userMap[changedBy];
+    if (updatedBy && userMap[updatedBy]) return userMap[updatedBy];
+    const rawId = changedBy || updatedBy || '';
+    return userMap[rawId] || rawId || 'system';
+  }, [selectedTimelineGroup, selectedVersion, userMap]);
 
   const rows = useMemo(() => {
-    if (!selectedVersion) return [] as Array<{ field: string; prev: string; curr: string; changed: boolean }>;
+    const entries = selectedTimelineGroup ? selectedTimelineGroup.items : selectedVersion ? [selectedVersion] : [];
+    if (entries.length === 0) return [] as Array<{ field: string; prev: string; curr: string; changed: boolean }>;
 
     const makeRow = (field: string, prev: any, curr: any) => {
       const prevText = stringify(prev);
@@ -184,27 +290,42 @@ export const VersionHistoryDialog: React.FC<Props> = ({ open, onOpenChange }) =>
       return { field, prev: prevText, curr: currText, changed: prevText !== currText };
     };
 
-    const oldD = selectedVersion.old_data;
-    const newD = selectedVersion.new_data;
     const isObject = (val: any): val is Record<string, any> => typeof val === 'object' && val !== null && !Array.isArray(val);
+    const mergedOld: Record<string, any> = {};
+    const mergedNew: Record<string, any> = {};
+    const itemRows: Array<{ field: string; prev: any; curr: any }> = [];
 
-    let all: Array<{ field: string; prev: string; curr: string; changed: boolean }> = [];
+    entries.forEach(entry => {
+      if (entry.field_name) {
+        itemRows.push({ field: entry.field_name.replace(/_/g, ' '), prev: entry.old_data, curr: entry.new_data });
+      } else if (isObject(entry.old_data) || isObject(entry.new_data)) {
+        if (isObject(entry.old_data)) Object.assign(mergedOld, entry.old_data);
+        if (isObject(entry.new_data)) Object.assign(mergedNew, entry.new_data);
+      } else {
+        itemRows.push({ field: 'details', prev: entry.old_data, curr: entry.new_data });
+      }
+    });
 
-    if (isObject(oldD) || isObject(newD)) {
-      const oldObj = isObject(oldD) ? oldD : {};
-      const newObj = isObject(newD) ? newD : {};
-      const keys = new Set([...Object.keys(oldObj), ...Object.keys(newObj)]);
-      all = Array.from(keys)
-        .filter(k => !HIDDEN_FIELDS.has(k))
-        .map(k => makeRow(k.replace(/_/g, ' '), oldObj[k], newObj[k]));
-    } else if (selectedVersion.field_name) {
-      all = [makeRow(selectedVersion.field_name.replace(/_/g, ' '), oldD, newD)];
-    } else {
-      all = [makeRow('details', oldD, newD)];
-    }
+    const mergedRows: Array<{ field: string; prev: any; curr: any }> = [];
+    const mergedKeys = new Set([...Object.keys(mergedOld), ...Object.keys(mergedNew)]);
+    mergedKeys.forEach(key => {
+      if (!HIDDEN_FIELDS.has(key)) {
+        mergedRows.push({ field: key.replace(/_/g, ' '), prev: mergedOld[key], curr: mergedNew[key] });
+      }
+    });
 
-    return showUnmodified ? all : all.filter(r => r.changed);
-  }, [selectedVersion, showUnmodified]);
+    const allRows = [...itemRows, ...mergedRows];
+    const uniqueRows = allRows.reduce<Array<{ field: string; prev: any; curr: any }>>((acc, row) => {
+      const normalized = row.field.trim();
+      if (!acc.some(existing => existing.field === normalized)) {
+        acc.push({ ...row, field: normalized });
+      }
+      return acc;
+    }, []);
+
+    const result = uniqueRows.map(row => makeRow(row.field, row.prev, row.curr));
+    return showUnmodified ? result : result.filter(r => r.changed);
+  }, [selectedTimelineGroup, selectedVersion, showUnmodified]);
 
   const handleRestore = async () => {
     if (!selectedVersion || !selected) return;
@@ -236,16 +357,6 @@ export const VersionHistoryDialog: React.FC<Props> = ({ open, onOpenChange }) =>
       setRestoring(false);
     }
   };
-
-  // Group history by day for timeline
-  const grouped = useMemo(() => {
-    const g: Record<string, HistoryEntry[]> = {};
-    filteredHistory.forEach(h => {
-      const d = fmtDay(h.created_at);
-      (g[d] ||= []).push(h);
-    });
-    return g;
-  }, [filteredHistory]);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -416,26 +527,28 @@ export const VersionHistoryDialog: React.FC<Props> = ({ open, onOpenChange }) =>
                       <div key={day}>
                         <div className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground px-2 mb-2">{day}</div>
                         <div className="space-y-1">
-                          {items.map(h => {
-                            const active = h.id === selectedVersionId;
-                            const userId = h.changed_by || h.updated_by || '';
-                            const user = userMap[userId] || userId || 'system';
+                          {items.map(group => {
+                            const active = group.items.some(item => item.id === selectedVersionId);
                             return (
                               <button
-                                key={h.id}
-                                onClick={() => setSelectedVersionId(h.id)}
+                                key={group.key}
+                                onClick={() => {
+                                  setSelectedVersionId(group.id);
+                                  setSelectedGroupKey(group.key);
+                                }}
                                 className={`w-full text-left rounded-lg px-3 py-2.5 transition-colors border ${
                                   active ? 'bg-primary/10 border-primary/30' : 'bg-transparent border-transparent hover:bg-muted/50'
                                 }`}
                               >
                                 <div className="flex items-center justify-between">
-                                  <div className="text-sm font-bold">{fmtShortTime(h.created_at)}</div>
+                                  <div className="text-sm font-bold">{fmtShortTime(group.created_at)}</div>
                                   {active && <div className="w-2 h-2 rounded-full bg-primary" />}
                                 </div>
                                 <div className="flex flex-col gap-1 mt-1">
-                                  <div className="text-xs text-muted-foreground truncate">{user}</div>
+                                  <div className="text-xs text-muted-foreground truncate">{group.user}</div>
                                   <div className="text-[11px] uppercase tracking-wider font-semibold text-muted-foreground">
-                                    {h.operation === 'INSERT' ? 'Created' : h.operation === 'UPDATE' ? 'Updated' : h.operation === 'DELETE' ? 'Deleted' : h.operation}
+                                    {(group.operation === 'INSERT' && 'Created') || (group.operation === 'UPDATE' && 'Updated') || (group.operation === 'DELETE' && 'Deleted') || group.operation}
+                                    {group.count > 1 ? ` · ${group.count} entries` : ''}
                                   </div>
                                 </div>
                               </button>
