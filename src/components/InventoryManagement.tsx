@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
-import { Package, BarChart3, Archive, Clock } from 'lucide-react';
+import { Package, BarChart3, Archive, Clock, History } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import UnifiedAssetForm from './UnifiedAssetForm';
@@ -12,6 +13,7 @@ import ActivityLogs from './ActivityLogs';
 import { UserProfile } from './UserProfile';
 import { ActiveUsers } from '@/components/ActiveUsers';
 import EnhancedBarcodeScanner from './EnhancedBarcodeScanner';
+import VersionHistoryDialog from './VersionHistoryDialog';
 import { Order, Device, OrderSummary, TabletItem, TVItem } from './types';
 import { DateRange } from 'react-day-picker';
 
