@@ -318,11 +318,13 @@ export const ActivityLogs: React.FC = () => {
                 <TableHead style={{ position: 'sticky', top: 0, background: '#f8fafc', zIndex: 20, borderBottom: '1px solid #e2e8f0' }} className="text-[10px] font-extrabold uppercase tracking-wider text-gray-500">Location</TableHead>
                 <TableHead style={{ position: 'sticky', top: 0, background: '#f8fafc', zIndex: 20, borderBottom: '1px solid #e2e8f0' }} className="text-[10px] font-extrabold uppercase tracking-wider text-gray-500">Updated By</TableHead>
                 <TableHead style={{ position: 'sticky', top: 0, background: '#f8fafc', zIndex: 20, borderBottom: '1px solid #e2e8f0' }} className="text-[10px] font-extrabold uppercase tracking-wider text-gray-500 pr-6">School Name</TableHead>
+                {canMutate && <TableHead style={{ position: 'sticky', top: 0, background: '#f8fafc', zIndex: 20, borderBottom: '1px solid #e2e8f0' }} className="text-[10px] font-extrabold uppercase tracking-wider text-gray-500 pr-6 text-center">Action</TableHead>}
               </TableRow>
             </TableHeader>
             <TableBody>
-              {loading ? ( <TableRow><TableCell colSpan={13} className="text-center py-20 text-gray-400">Loading activity data...</TableCell></TableRow> ) : visible.length === 0 ? ( <TableRow><TableCell colSpan={13} className="text-center py-20 text-gray-400">No activity found</TableCell></TableRow> ) : visible.map((g, i) => {
+              {loading ? ( <TableRow><TableCell colSpan={canMutate ? 14 : 13} className="text-center py-20 text-gray-400">Loading activity data...</TableCell></TableRow> ) : visible.length === 0 ? ( <TableRow><TableCell colSpan={canMutate ? 14 : 13} className="text-center py-20 text-gray-400">No activity found</TableCell></TableRow> ) : visible.map((g, i) => {
                 const so = g.sales_order || deviceMap[g.record_id]?.sales_order || orderMap[g.record_id]?.sales_order;
+                const hasOld = Object.values(g.fields).some(f => f.old !== '');
                 return (
                   <TableRow key={i} className="hover:bg-gray-50/40 transition-colors border-b border-gray-100 last:border-0">
                     <TableCell className="text-[11px] text-gray-500 whitespace-nowrap py-4 pl-6">{formatDate(g.timestamp)}</TableCell>
@@ -344,6 +346,20 @@ export const ActivityLogs: React.FC = () => {
                     <TableCell className="p-0 pr-6">
                       {renderCell('school_name', g, false, true)}
                     </TableCell>
+                    {canMutate && (
+                      <TableCell className="p-0 pr-6 text-center">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          disabled={!hasOld || restoringId === g.id || (g.table_name !== 'devices' && g.table_name !== 'orders')}
+                          onClick={() => handleRestoreRow(g)}
+                          className="h-8 px-2 text-[11px] text-blue-600 hover:text-blue-700 hover:bg-blue-50 disabled:opacity-30"
+                          title={hasOld ? 'Restore previous values' : 'No previous values'}
+                        >
+                          {restoringId === g.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <><RotateCcw className="w-3.5 h-3.5 mr-1" />Restore</>}
+                        </Button>
+                      </TableCell>
+                    )}
                   </TableRow>
                 );
               })}
