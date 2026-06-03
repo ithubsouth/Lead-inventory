@@ -687,11 +687,21 @@ const InventoryManagement = () => {
             <h1 className='text-2xl font-bold bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent'>Lead Inventory Management</h1>
           </div>
           <div className='flex items-center space-x-4'>
+            <Button
+              variant='ghost'
+              size='icon'
+              onClick={() => setVersionHistoryOpen(true)}
+              title='Version History'
+              className='relative h-9 w-9 rounded-full hover:bg-primary/10 hover:text-primary'
+            >
+              <History className='w-5 h-5' />
+            </Button>
             <ActiveUsers />
             <UserProfile />
           </div>
         </div>
       </div>
+      <VersionHistoryDialog open={versionHistoryOpen} onOpenChange={setVersionHistoryOpen} />
       <div className='flex-1 overflow-y-auto pt-[50px]'>
         <div className='container mx-auto px-4 py-6 h-full'>
           <Tabs defaultValue={userRole === 'Reporter' ? 'view' : 'create'} className='w-full h-full flex flex-col'>
