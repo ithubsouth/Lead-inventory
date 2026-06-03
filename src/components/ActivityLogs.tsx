@@ -246,6 +246,36 @@ export const ActivityLogs: React.FC = () => {
     return range;
   };
 
+  const handleRestoreRow = async (entry: LogEntry) => {
+    if (!canMutate) return;
+    const tbl = entry.table_name;
+    if (tbl !== 'devices' && tbl !== 'orders') {
+      toast({ title: 'Cannot restore', description: `Restore is not supported for ${tbl}.`, variant: 'destructive' });
+      return;
+    }
+    const payload: Record<string, any> = {};
+    Object.entries(entry.fields).forEach(([k, v]) => {
+      if (['id', 'created_at', 'updated_at', 'deleted_at', 'is_deleted'].includes(k)) return;
+      payload[k] = v.old === '' ? null : v.old;
+    });
+    if (Object.keys(payload).length === 0) {
+      toast({ title: 'Nothing to restore', description: 'This entry has no previous values.', variant: 'destructive' });
+      return;
+    }
+    if (!confirm(`Restore ${Object.keys(payload).length} field(s) on ${entry.serial_number || entry.sales_order || 'record'} to previous values?`)) return;
+    setRestoringId(entry.id);
+    try {
+      const { error } = await supabase.from(tbl as any).update(payload).eq('id', entry.record_id);
+      if (error) throw error;
+      toast({ title: 'Restored', description: 'Previous values applied.' });
+      await load();
+    } catch (e: any) {
+      toast({ title: 'Restore failed', description: e.message, variant: 'destructive' });
+    } finally {
+      setRestoringId(null);
+    }
+  };
+
   return (
     <Card className="border-none shadow-none bg-transparent">
       <CardHeader className="px-0 pb-6">
