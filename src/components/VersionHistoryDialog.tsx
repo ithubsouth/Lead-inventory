@@ -24,6 +24,7 @@ interface HistoryEntry {
   table_name: string;
   record_id: string;
   operation: string;
+  field_name?: string | null;
   old_data: any;
   new_data: any;
   created_at: string;
@@ -80,20 +81,27 @@ export const VersionHistoryDialog: React.FC<Props> = ({ open, onOpenChange }) =>
       setSelected(null);
       setHistory([]);
       setSelectedVersionId(null);
+    } else {
+      runSearch(true);
     }
   }, [open]);
 
-  const runSearch = async () => {
-    if (!query.trim()) return;
+  const runSearch = async (forceAll = false) => {
+    const q = query.trim();
+    if (!q && !forceAll) return;
     setSearching(true);
     setSelected(null);
     setHistory([]);
     try {
-      const q = query.trim();
-      const [{ data: dev }, { data: ord }] = await Promise.all([
-        supabase.from('devices').select('id,serial_number,sales_order,model,asset_type').or(`serial_number.ilike.%${q}%,sales_order.ilike.%${q}%`).limit(25),
-        supabase.from('orders').select('id,sales_order,model,asset_type,quantity').ilike('sales_order', `%${q}%`).limit(25),
-      ]);
+      const deviceQuery = supabase.from('devices').select('id,serial_number,sales_order,model,asset_type').limit(25);
+      if (q) {
+        deviceQuery.or(`serial_number.ilike.%${q}%,sales_order.ilike.%${q}%`);
+      }
+      const orderQuery = supabase.from('orders').select('id,sales_order,model,asset_type,quantity').limit(25);
+      if (q) {
+        orderQuery.ilike('sales_order', `%${q}%`);
+      }
+      const [{ data: dev }, { data: ord }] = await Promise.all([deviceQuery, orderQuery]);
       const list: RecordResult[] = [];
       (dev || []).forEach((d: any) =>
         list.push({
@@ -130,10 +138,17 @@ export const VersionHistoryDialog: React.FC<Props> = ({ open, onOpenChange }) =>
         .limit(200);
       if (error) throw error;
       const rows = (data as HistoryEntry[]) || [];
-      setHistory(rows);
-      if (rows.length) setSelectedVersionId(rows[0].id);
+      const seen = new Set<string>();
+      const uniqueRows = rows.filter(r => {
+        const key = `${r.table_name}|${r.record_id}|${r.operation}|${r.field_name || ''}|${stringify(r.old_data)}|${stringify(r.new_data)}|${r.created_at}|${r.changed_by || ''}|${r.updated_by || ''}`;
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      });
+      setHistory(uniqueRows);
+      if (uniqueRows.length) setSelectedVersionId(uniqueRows[0].id);
 
-      const ids = Array.from(new Set(rows.map(r => r.changed_by || r.updated_by).filter(Boolean))) as string[];
+      const ids = Array.from(new Set(uniqueRows.map(r => r.changed_by || r.updated_by).filter(Boolean))) as string[];
       if (ids.length) {
         const { data: users } = await supabase.from('users').select('id,email,full_name').in('id', ids);
         const m: Record<string, string> = {};
@@ -154,18 +169,40 @@ export const VersionHistoryDialog: React.FC<Props> = ({ open, onOpenChange }) =>
 
   const selectedVersion = useMemo(() => history.find(h => h.id === selectedVersionId) || null, [history, selectedVersionId]);
 
+  const selectedVersionUser = useMemo(() => {
+    if (!selectedVersion) return 'system';
+    const userId = selectedVersion.changed_by || selectedVersion.updated_by || '';
+    return userMap[userId] || userId || 'system';
+  }, [selectedVersion, userMap]);
+
   const rows = useMemo(() => {
     if (!selectedVersion) return [] as Array<{ field: string; prev: string; curr: string; changed: boolean }>;
-    const oldD = selectedVersion.old_data || {};
-    const newD = selectedVersion.new_data || {};
-    const keys = new Set([...Object.keys(oldD), ...Object.keys(newD)]);
-    const all = Array.from(keys)
-      .filter(k => !HIDDEN_FIELDS.has(k))
-      .map(k => {
-        const prev = stringify(oldD[k]);
-        const curr = stringify(newD[k]);
-        return { field: k, prev, curr, changed: prev !== curr };
-      });
+
+    const makeRow = (field: string, prev: any, curr: any) => {
+      const prevText = stringify(prev);
+      const currText = stringify(curr);
+      return { field, prev: prevText, curr: currText, changed: prevText !== currText };
+    };
+
+    const oldD = selectedVersion.old_data;
+    const newD = selectedVersion.new_data;
+    const isObject = (val: any): val is Record<string, any> => typeof val === 'object' && val !== null && !Array.isArray(val);
+
+    let all: Array<{ field: string; prev: string; curr: string; changed: boolean }> = [];
+
+    if (isObject(oldD) || isObject(newD)) {
+      const oldObj = isObject(oldD) ? oldD : {};
+      const newObj = isObject(newD) ? newD : {};
+      const keys = new Set([...Object.keys(oldObj), ...Object.keys(newObj)]);
+      all = Array.from(keys)
+        .filter(k => !HIDDEN_FIELDS.has(k))
+        .map(k => makeRow(k.replace(/_/g, ' '), oldObj[k], newObj[k]));
+    } else if (selectedVersion.field_name) {
+      all = [makeRow(selectedVersion.field_name.replace(/_/g, ' '), oldD, newD)];
+    } else {
+      all = [makeRow('details', oldD, newD)];
+    }
+
     return showUnmodified ? all : all.filter(r => r.changed);
   }, [selectedVersion, showUnmodified]);
 
@@ -277,8 +314,21 @@ export const VersionHistoryDialog: React.FC<Props> = ({ open, onOpenChange }) =>
               >
                 <X className="w-4 h-4" />
               </button>
-              <div className="text-base font-semibold text-foreground">
-                {selectedVersion ? fmtHeaderDate(selectedVersion.created_at) : '—'}
+              <div className="flex flex-col gap-1">
+                <div className="text-base font-semibold text-foreground">
+                  {selected?.label ?? 'Version history'}
+                </div>
+                <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                  <span>{selected?.sublabel}</span>
+                  {selectedVersion && (
+                    <>
+                      <span className="h-4 w-px bg-border/80" />
+                      <span>{fmtHeaderDate(selectedVersion.created_at)}</span>
+                      <span className="h-4 w-px bg-border/80" />
+                      <span>{selectedVersionUser}</span>
+                    </>
+                  )}
+                </div>
               </div>
               {canMutate && selectedVersion && selectedVersion.old_data && (
                 <Button
@@ -382,9 +432,11 @@ export const VersionHistoryDialog: React.FC<Props> = ({ open, onOpenChange }) =>
                                   <div className="text-sm font-bold">{fmtShortTime(h.created_at)}</div>
                                   {active && <div className="w-2 h-2 rounded-full bg-primary" />}
                                 </div>
-                                <div className="flex items-center gap-1.5 mt-1">
-                                  <div className="w-2 h-2 rounded-full bg-emerald-500" />
+                                <div className="flex flex-col gap-1 mt-1">
                                   <div className="text-xs text-muted-foreground truncate">{user}</div>
+                                  <div className="text-[11px] uppercase tracking-wider font-semibold text-muted-foreground">
+                                    {h.operation === 'INSERT' ? 'Created' : h.operation === 'UPDATE' ? 'Updated' : h.operation === 'DELETE' ? 'Deleted' : h.operation}
+                                  </div>
                                 </div>
                               </button>
                             );

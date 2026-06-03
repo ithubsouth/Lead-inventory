@@ -361,36 +361,6 @@ const EditOrderForm: React.FC<EditOrderFormProps> = ({ order, onSave, onCancel }
     return true;
   };
 
-  const logHistory = async (
-    tableName: string,
-    recordId: string,
-    fieldName: string,
-    oldData: string,
-    newData: string,
-    userEmail: string,
-    salesOrder: string | null,
-    operation: string
-  ) => {
-    const { error } = await supabase
-      .from('history')
-      .insert({
-        record_id: recordId,
-        sales_order: salesOrder,
-        table_name: tableName,
-        field_name: fieldName,
-        old_data: oldData,
-        new_data: newData,
-        operation,
-        updated_by: userEmail,
-        updated_at: new Date().toISOString(),
-      });
-
-    if (error) {
-      console.error(`Failed to log history for ${tableName}.${fieldName}:`, error.message);
-      throw new Error(`History logging failed: ${error.message}`);
-    }
-  };
-
   const handleSave = async () => {
     if (!validateForm()) return;
 
@@ -448,37 +418,19 @@ const EditOrderForm: React.FC<EditOrderFormProps> = ({ order, onSave, onCancel }
           throw new Error(`Failed to update order: ${orderError.message}`);
         }
         orderUpdated = true;
-
-        // Log order changes
-        orderFields.forEach(field => {
-          if (formData[field as keyof Order] !== originalOrder[field as keyof Order]) {
-            logHistory('orders', formData.id, field, String(originalOrder[field as keyof Order] || ''), String(formData[field as keyof Order] || ''), userEmail, formData.sales_order, 'UPDATE');
-          }
-        });
-        if (newMaterialType !== originalOrder.material_type) {
-          logHistory('orders', formData.id, 'material_type', originalOrder.material_type || '', newMaterialType, userEmail, formData.sales_order, 'UPDATE');
-        }
-        if (orderChanges.quantity !== originalOrder.quantity) {
-          logHistory('orders', formData.id, 'quantity', String(originalOrder.quantity), String(orderChanges.quantity), userEmail, formData.sales_order, 'UPDATE');
-        }
-        // For serial_numbers, log if changed
-        if (JSON.stringify(orderChanges.serial_numbers) !== JSON.stringify(originalOrder.serial_numbers)) {
-          logHistory('orders', formData.id, 'serial_numbers', JSON.stringify(originalOrder.serial_numbers), JSON.stringify(orderChanges.serial_numbers), userEmail, formData.sales_order, 'UPDATE');
-        }
       }
 
-      // Identify deleted devices
-      devicesToDelete = originalDevices.filter(od => !devices.some(d => d.id === od.id));
-
+      // Mark devices removed by the user as deleted
+      devicesToDelete = originalDevices.filter(orig => !devices.some(d => d.id === orig.id));
       for (const device of devicesToDelete) {
         const { error } = await supabase
           .from('devices')
           .update({ is_deleted: true, updated_at: new Date().toISOString(), updated_by: userEmail })
           .eq('id', device.id);
+
         if (error) {
-          throw new Error(`Failed to mark device as deleted: ${error.message}`);
+          throw new Error(`Failed to delete device: ${error.message}`);
         }
-        await logHistory('devices', device.id, 'is_deleted', 'false', 'true', userEmail, formData.sales_order, 'DELETE');
       }
 
       // Update or insert devices only if changed
@@ -518,13 +470,6 @@ const EditOrderForm: React.FC<EditOrderFormProps> = ({ order, onSave, onCancel }
 
             if (error) {
               throw new Error(`Failed to update device: ${error.message}`);
-            }
-
-            // Log changes
-            for (const field in changes) {
-              if (field !== 'updated_at' && field !== 'updated_by') {
-                await logHistory('devices', device.id, field, String(originalDevice[field as keyof Device] || ''), String(changes[field as keyof Device] || ''), userEmail, formData.sales_order, 'UPDATE');
-              }
             }
           }
         } else {
@@ -568,32 +513,13 @@ const EditOrderForm: React.FC<EditOrderFormProps> = ({ order, onSave, onCancel }
 
           devices[i].id = newDevice.id;
 
-          // Log new device fields
-          await logHistory('devices', newDevice.id, 'serial_number', '', deviceData.serial_number, userEmail, formData.sales_order, 'INSERT');
-          await logHistory('devices', newDevice.id, 'asset_status', '', deviceData.asset_status, userEmail, formData.sales_order, 'INSERT');
-          await logHistory('devices', newDevice.id, 'asset_group', '', deviceData.asset_group, userEmail, formData.sales_order, 'INSERT');
-          if (deviceData.asset_condition) {
-            await logHistory('devices', newDevice.id, 'asset_condition', '', deviceData.asset_condition, userEmail, formData.sales_order, 'INSERT');
-          }
-          if (deviceData.far_code !== null && deviceData.far_code !== undefined) {
-            await logHistory('devices', newDevice.id, 'far_code', '', String(deviceData.far_code), userEmail, formData.sales_order, 'INSERT');
-          }
-          if (deviceData.sd_card_size) {
-            await logHistory('devices', newDevice.id, 'sd_card_size', '', deviceData.sd_card_size, userEmail, formData.sales_order, 'INSERT');
-          }
-          if (deviceData.profile_id) {
-            await logHistory('devices', newDevice.id, 'profile_id', '', deviceData.profile_id, userEmail, formData.sales_order, 'INSERT');
-          }
-          if (deviceData.configuration) {
-            await logHistory('devices', newDevice.id, 'configuration', '', deviceData.configuration, userEmail, formData.sales_order, 'INSERT');
-          }
         }
       }
       devicesUpdated = true;
 
       const updatedOrder = { ...formData, devices };
       onSave(updatedOrder);
-      toast({ title: 'Success', description: 'Order and devices updated successfully. Changes logged in history.' });
+      toast({ title: 'Success', description: 'Order and devices updated successfully.' });
     } catch (error) {
       console.error('Error during save:', error);
       try {

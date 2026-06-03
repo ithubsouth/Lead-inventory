@@ -653,19 +653,6 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
     return true;
   };
 
-  const logHistory = async (tableName: string, recordId: string, fieldName: string, oldData: string, newData: string, userEmail: string, salesOrder: string | null) => {
-    await supabase.from('history').insert({
-      record_id: recordId,
-      sales_order: salesOrder,
-      table_name: tableName,
-      field_name: fieldName,
-      old_data: oldData,
-      new_data: newData,
-      operation: editMode ? 'UPDATE' : 'INSERT',
-      updated_by: userEmail,
-    });
-  };
-
   const createOrder = async () => {
     if (!validateForm()) return;
     setLoading(true);
@@ -770,7 +757,6 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
             updated_by: userEmail,
           }]);
         }
-        await logHistory('orders', orderData.id, 'order_type', '', orderType, userEmail, salesOrderId);
       }
       toast({ title: 'Success', description: 'Orders created successfully' });
       setAssets([]);
@@ -859,7 +845,6 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
               updated_by: userEmail,
             }]);
           }
-          await logHistory('orders', asset.orderId, 'quantity', '', asset.quantity.toString(), userEmail, salesOrderId);
         } else {
           const { data: orderData, error: orderError } = await supabase
             .from('orders')
@@ -917,7 +902,6 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
               updated_by: userEmail,
             }]);
           }
-          await logHistory('orders', orderData.id, 'order_type', '', orderType, userEmail, salesOrderId);
         }
       }
       const action = editMode ? 'updated' : 'created';
