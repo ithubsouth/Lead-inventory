@@ -719,6 +719,26 @@ const AuditTable: React.FC<AuditTableProps> = ({
             >
               {isClearing ? 'Clearing...' : 'Clear All'}
             </Button>
+            {canEdit && onBulkAuditCheck && (
+              <Button
+                variant="outline"
+                size="sm"
+                style={{
+                  border: '1px solid #d1d5db',
+                  borderRadius: '4px',
+                  padding: '4px 6px',
+                  fontSize: '12px',
+                  height: '28px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                }}
+                onClick={() => { setUploadResult(null); setUploadOpen(true); }}
+                title="Verify audit by uploading CSV/Excel of serial numbers"
+              >
+                <Upload style={{ width: '12px', height: '12px' }} /> Upload Audit
+              </Button>
+            )}
           </div>
           <div style={{ marginTop: '4px', fontSize: '12px', color: '#6b7280', display: 'flex', gap: '8px', alignItems: 'center' }}>
             <span style={{ color: '#22c55e' }}>Matched: {matchedCount}</span>
