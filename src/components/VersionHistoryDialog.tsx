@@ -382,7 +382,7 @@ export const VersionHistoryDialog: React.FC<Props> = ({ open, onOpenChange }) =>
                   />
                   <Search className="w-4 h-4 absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
                 </div>
-                <Button onClick={runSearch} disabled={searching || !query.trim()} className="rounded-full h-11 px-6">
+                <Button onClick={() => runSearch()} disabled={searching || !query.trim()} className="rounded-full h-11 px-6">
                   {searching ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Search'}
                 </Button>
               </div>
