@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
-import { Filter, Search, ScanLine } from 'lucide-react';
+import { Filter, Search, ScanLine, Upload, Download } from 'lucide-react';
 import { DatePickerWithRange } from './DatePickerWithRange';
 import { DateRange } from 'react-day-picker';
 import { Device } from './types';
@@ -23,7 +23,10 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { EnhancedBarcodeScanner } from './EnhancedBarcodeScanner';
+import * as XLSX from 'xlsx';
+import { useToast } from '@/hooks/use-toast';
 
 interface AuditTableProps {
   devices: Device[];
