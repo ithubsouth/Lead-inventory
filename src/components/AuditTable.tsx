@@ -1197,6 +1197,82 @@ const AuditTable: React.FC<AuditTableProps> = ({
         onScan={handleBarcodeScan}
         existingSerials={filteredDevices.map((d) => d.serial_number || d.id)}
       />
+      <Dialog open={uploadOpen} onOpenChange={(o) => { setUploadOpen(o); if (!o) setUploadResult(null); }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Upload Audit File</DialogTitle>
+            <DialogDescription>
+              Upload a CSV or Excel file with serial numbers in the first column. Matching assets will be marked as <b>Matched</b> with audit timestamp.
+            </DialogDescription>
+          </DialogHeader>
+
+          {!uploadResult && (
+            <div className="space-y-3">
+              <input
+                ref={uploadInputRef}
+                type="file"
+                accept=".csv,.xlsx,.xls"
+                disabled={uploading}
+                onChange={(e) => {
+                  const f = e.target.files?.[0];
+                  if (f) handleAuditFile(f);
+                }}
+                style={{ fontSize: '12px' }}
+              />
+              <div style={{ fontSize: '11px', color: '#6b7280' }}>
+                Accepted: .csv, .xlsx, .xls. First column should be serial numbers (header row optional).
+              </div>
+              {uploading && <div style={{ fontSize: '12px', color: '#3b82f6' }}>Processing…</div>}
+            </div>
+          )}
+
+          {uploadResult && (
+            <div className="space-y-3" style={{ fontSize: '12px' }}>
+              <div><b>File:</b> {uploadResult.fileName}</div>
+              <div style={{ display: 'flex', gap: '12px' }}>
+                <span>Total serials: <b>{uploadResult.total}</b></span>
+                <span style={{ color: '#22c55e' }}>Matched: <b>{uploadResult.matched}</b></span>
+                <span style={{ color: '#ef4444' }}>Not found: <b>{uploadResult.notFound.length}</b></span>
+              </div>
+              {uploadResult.notFound.length > 0 && (
+                <>
+                  <div style={{ maxHeight: '140px', overflow: 'auto', border: '1px solid #e5e7eb', borderRadius: 4, padding: 6, background: '#fafafa' }}>
+                    {uploadResult.notFound.slice(0, 200).map((s) => (
+                      <div key={s} style={{ fontFamily: 'monospace', color: '#ef4444' }}>{s}</div>
+                    ))}
+                    {uploadResult.notFound.length > 200 && (
+                      <div style={{ color: '#6b7280' }}>+{uploadResult.notFound.length - 200} more…</div>
+                    )}
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => downloadNotFoundCSV(uploadResult.notFound, uploadResult.fileName)}
+                    style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '12px', height: '28px' }}
+                  >
+                    <Download style={{ width: '12px', height: '12px' }} /> Download Not-Found CSV
+                  </Button>
+                </>
+              )}
+            </div>
+          )}
+
+          <DialogFooter>
+            <Button variant="outline" size="sm" onClick={() => setUploadOpen(false)} style={{ fontSize: '12px', height: '28px' }}>
+              Close
+            </Button>
+            {uploadResult && (
+              <Button
+                size="sm"
+                onClick={() => { setUploadResult(null); uploadInputRef.current?.click(); }}
+                style={{ fontSize: '12px', height: '28px' }}
+              >
+                Upload Another
+              </Button>
+            )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </Card>
   );
 };
