@@ -1,21 +1,27 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, lazy, Suspense } from 'react';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Package, BarChart3, Archive, Clock, History } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/use-toast';
 import { supabase } from '@/integrations/supabase/client';
-import UnifiedAssetForm from './UnifiedAssetForm';
-import OrdersTable from './OrdersTable';
-import DevicesTable from './DevicesTable';
-import OrderSummaryTable from './OrderSummaryTable';
-import AuditTable from './AuditTable';
-import ActivityLogs from './ActivityLogs';
 import { UserProfile } from './UserProfile';
 import { ActiveUsers } from '@/components/ActiveUsers';
-import EnhancedBarcodeScanner from './EnhancedBarcodeScanner';
-import VersionHistoryDialog from './VersionHistoryDialog';
 import { Order, Device, OrderSummary, TabletItem, TVItem } from './types';
 import { DateRange } from 'react-day-picker';
+
+const UnifiedAssetForm = lazy(() => import('./UnifiedAssetForm'));
+const OrdersTable = lazy(() => import('./OrdersTable'));
+const DevicesTable = lazy(() => import('./DevicesTable'));
+const OrderSummaryTable = lazy(() => import('./OrderSummaryTable'));
+const AuditTable = lazy(() => import('./AuditTable'));
+const ActivityLogs = lazy(() => import('./ActivityLogs'));
+const EnhancedBarcodeScanner = lazy(() => import('./EnhancedBarcodeScanner'));
+const VersionHistoryDialog = lazy(() => import('./VersionHistoryDialog'));
+
+const TabFallback = () => (
+  <div className='flex items-center justify-center py-16 text-sm text-muted-foreground'>Loading…</div>
+);
+
 
 const InventoryManagement = () => {
   const [orders, setOrders] = useState<Order[]>([]);
@@ -701,7 +707,11 @@ const InventoryManagement = () => {
           </div>
         </div>
       </div>
-      <VersionHistoryDialog open={versionHistoryOpen} onOpenChange={setVersionHistoryOpen} />
+      {versionHistoryOpen && (
+        <Suspense fallback={null}>
+          <VersionHistoryDialog open={versionHistoryOpen} onOpenChange={setVersionHistoryOpen} />
+        </Suspense>
+      )}
       <div className='flex-1 overflow-y-auto pt-[50px]'>
         <div className='container mx-auto px-4 py-6 h-full'>
           <Tabs defaultValue={userRole === 'Reporter' ? 'view' : 'create'} className='w-full h-full flex flex-col'>
@@ -735,185 +745,201 @@ const InventoryManagement = () => {
             </TabsList>
             {userRole !== 'Reporter' && (
               <TabsContent value='create' className='space-y-6 flex-1 overflow-y-auto'>
-                <UnifiedAssetForm
-                  orderType={orderType}
-                  setOrderType={setOrderType}
-                  salesOrder={salesOrder}
-                  setSalesOrder={setSalesOrder}
-                  dealId={dealId}
-                  setDealId={setDealId}
-                  nucleusId={nucleusId}
-                  setNucleusId={setNucleusId}
-                  schoolName={schoolName}
-                  setSchoolName={setSchoolName}
-                  agreementType={agreementType}
-                  setAgreementType={setAgreementType}
+                <Suspense fallback={<TabFallback />}>
+                  <UnifiedAssetForm
+                    orderType={orderType}
+                    setOrderType={setOrderType}
+                    salesOrder={salesOrder}
+                    setSalesOrder={setSalesOrder}
+                    dealId={dealId}
+                    setDealId={setDealId}
+                    nucleusId={nucleusId}
+                    setNucleusId={setNucleusId}
+                    schoolName={schoolName}
+                    setSchoolName={setSchoolName}
+                    agreementType={agreementType}
+                    setAgreementType={setAgreementType}
+                    loading={loading}
+                    setLoading={setLoading}
+                    loadOrders={loadOrders}
+                    loadDevices={loadDevices}
+                    loadOrderSummary={loadOrderSummary}
+                    openScanner={(itemId, index, assetType) => {
+                      setCurrentSerialIndex({ itemId, index, type: assetType as 'tablet' | 'tv' });
+                      setShowScanner(true);
+                    }}
+                  />
+                </Suspense>
+              </TabsContent>
+            )}
+            <TabsContent value='view' className='flex-1 overflow-y-auto'>
+              <Suspense fallback={<TabFallback />}>
+                <OrdersTable
+                  orders={orders}
+                  setOrders={setOrders}
+                  selectedWarehouse={selectedWarehouse}
+                  setSelectedWarehouse={setSelectedWarehouse}
+                  selectedAssetType={selectedAssetType}
+                  setSelectedAssetType={setSelectedAssetType}
+                  selectedModel={selectedModel}
+                  setSelectedModel={setSelectedModel}
+                  selectedConfiguration={selectedConfiguration}
+                  setSelectedConfiguration={setSelectedConfiguration}
+                  selectedOrderType={selectedOrderType}
+                  setSelectedOrderType={setSelectedOrderType}
+                  selectedAgreementType={selectedAgreementType}
+                  setSelectedAgreementType={setSelectedAgreementType}
+                  selectedProduct={selectedProduct}
+                  setSelectedProduct={setSelectedProduct}
+                  selectedStatus={selectedStatus}
+                  setSelectedStatus={setSelectedStatus}
+                  selectedSdCardSize={selectedSdCardSize}
+                  setSelectedSdCardSize={setSelectedSdCardSize}      
+                  fromDate={devicesFromDate}
+                  setFromDate={setDevicesFromDate}
+                  showDeleted={showDeleted}
+                  setShowDeleted={setShowDeleted}
+                  searchQuery={searchQuery}
+                  setSearchQuery={setSearchQuery}
                   loading={loading}
                   setLoading={setLoading}
                   loadOrders={loadOrders}
                   loadDevices={loadDevices}
                   loadOrderSummary={loadOrderSummary}
-                  openScanner={(itemId, index, assetType) => {
-                    setCurrentSerialIndex({ itemId, index, type: assetType as 'tablet' | 'tv' });
-                    setShowScanner(true);
-                  }}
+                  userRole={userRole}
                 />
-              </TabsContent>
-            )}
-            <TabsContent value='view' className='flex-1 overflow-y-auto'>
-              <OrdersTable
-                orders={orders}
-                setOrders={setOrders}
-                selectedWarehouse={selectedWarehouse}
-                setSelectedWarehouse={setSelectedWarehouse}
-                selectedAssetType={selectedAssetType}
-                setSelectedAssetType={setSelectedAssetType}
-                selectedModel={selectedModel}
-                setSelectedModel={setSelectedModel}
-                selectedConfiguration={selectedConfiguration}
-                setSelectedConfiguration={setSelectedConfiguration}
-                selectedOrderType={selectedOrderType}
-                setSelectedOrderType={setSelectedOrderType}
-                selectedAgreementType={selectedAgreementType}
-                setSelectedAgreementType={setSelectedAgreementType}
-                selectedProduct={selectedProduct}
-                setSelectedProduct={setSelectedProduct}
-                selectedStatus={selectedStatus}
-                setSelectedStatus={setSelectedStatus}
-                selectedSdCardSize={selectedSdCardSize}
-                setSelectedSdCardSize={setSelectedSdCardSize}      
-                fromDate={devicesFromDate}
-                setFromDate={setDevicesFromDate}
-                showDeleted={showDeleted}
-                setShowDeleted={setShowDeleted}
-                searchQuery={searchQuery}
-                setSearchQuery={setSearchQuery}
-                loading={loading}
-                setLoading={setLoading}
-                loadOrders={loadOrders}
-                loadDevices={loadDevices}
-                loadOrderSummary={loadOrderSummary}
-                userRole={userRole}
-              />
+              </Suspense>
             </TabsContent>
             <TabsContent value='order' className='flex-1 overflow-y-auto'>
-              <OrderSummaryTable
-                devices={devices}
-                selectedWarehouse={selectedWarehouse}
-                setSelectedWarehouse={(value) => {
-                  setSelectedWarehouse(Array.isArray(value) ? value : [value]);
-                  setSelectedAssetType([]);
-                  setSelectedModel([]);
-                  setSelectedProduct([]);
-                  setSelectedAssetStatus([]);
-                  setSelectedAssetGroup([]);
-                }}
-                selectedAssetType={selectedAssetType}
-                setSelectedAssetType={(value) => {
-                  setSelectedAssetType(Array.isArray(value) ? value : [value]);
-                  setSelectedModel([]);
-                }}
-                selectedModel={selectedModel}
-                setSelectedModel={setSelectedModel}
-                selectedAssetStatus={selectedAssetStatus}
-                setSelectedAssetStatus={setSelectedAssetStatus}
-                selectedAssetGroup={selectedAssetGroup}
-                setSelectedAssetGroup={setSelectedAssetGroup}
-                selectedProduct={selectedProduct}
-                setSelectedProduct={setSelectedProduct}
-                selectedAssetCondition={selectedAssetCondition}
-                setSelectedAssetCondition={setSelectedAssetCondition}
-                selectedAgreementType={selectedAgreementType}
-                setSelectedAgreementType={setSelectedAgreementType}
-                selectedSdCardSize={selectedSdCardSize}
-                setSelectedSdCardSize={setSelectedSdCardSize}
-                fromDate={fromDate}
-                setFromDate={setFromDate}
-                showDeleted={showDeleted}
-                setShowDeleted={setShowDeleted}
-                searchQuery={searchQuery}
-                setSearchQuery={setSearchQuery}
-              />
+              <Suspense fallback={<TabFallback />}>
+                <OrderSummaryTable
+                  devices={devices}
+                  selectedWarehouse={selectedWarehouse}
+                  setSelectedWarehouse={(value) => {
+                    setSelectedWarehouse(Array.isArray(value) ? value : [value]);
+                    setSelectedAssetType([]);
+                    setSelectedModel([]);
+                    setSelectedProduct([]);
+                    setSelectedAssetStatus([]);
+                    setSelectedAssetGroup([]);
+                  }}
+                  selectedAssetType={selectedAssetType}
+                  setSelectedAssetType={(value) => {
+                    setSelectedAssetType(Array.isArray(value) ? value : [value]);
+                    setSelectedModel([]);
+                  }}
+                  selectedModel={selectedModel}
+                  setSelectedModel={setSelectedModel}
+                  selectedAssetStatus={selectedAssetStatus}
+                  setSelectedAssetStatus={setSelectedAssetStatus}
+                  selectedAssetGroup={selectedAssetGroup}
+                  setSelectedAssetGroup={setSelectedAssetGroup}
+                  selectedProduct={selectedProduct}
+                  setSelectedProduct={setSelectedProduct}
+                  selectedAssetCondition={selectedAssetCondition}
+                  setSelectedAssetCondition={setSelectedAssetCondition}
+                  selectedAgreementType={selectedAgreementType}
+                  setSelectedAgreementType={setSelectedAgreementType}
+                  selectedSdCardSize={selectedSdCardSize}
+                  setSelectedSdCardSize={setSelectedSdCardSize}
+                  fromDate={fromDate}
+                  setFromDate={setFromDate}
+                  showDeleted={showDeleted}
+                  setShowDeleted={setShowDeleted}
+                  searchQuery={searchQuery}
+                  setSearchQuery={setSearchQuery}
+                />
+              </Suspense>
             </TabsContent>
             <TabsContent value='devices' className='flex-1 overflow-y-auto'>
-              <DevicesTable
-                devices={devices}
-                selectedWarehouse={selectedWarehouse}
-                setSelectedWarehouse={setSelectedWarehouse}
-                selectedAssetType={selectedAssetType}
-                setSelectedAssetType={setSelectedAssetType}
-                selectedModel={selectedModel}
-                setSelectedModel={setSelectedModel}
-                selectedAssetStatus={selectedAssetStatus}
-                setSelectedAssetStatus={setSelectedAssetStatus}
-                selectedConfiguration={selectedConfiguration}
-                setSelectedConfiguration={setSelectedConfiguration}
-                selectedProduct={selectedProduct}
-                setSelectedProduct={setSelectedProduct}
-                selectedStatus={selectedStatus}
-                setSelectedStatus={setSelectedStatus}
-                selectedSdCardSize={selectedSdCardSize}
-                setSelectedSdCardSize={setSelectedSdCardSize}
-                selectedOrderType={selectedOrderType}
-                setSelectedOrderType={setSelectedOrderType}
-                selectedAgreementType={selectedAgreementType}
-                setSelectedAgreementType={setSelectedAgreementType}
-                selectedAssetGroup={selectedAssetGroup}
-                setSelectedAssetGroup={setSelectedAssetGroup}
-                selectedAssetCondition={selectedAssetCondition}
-                setSelectedAssetCondition={setSelectedAssetCondition}
-                fromDate={devicesFromDate}
-                setFromDate={setDevicesFromDate}
-                showDeleted={showDeleted}
-                setShowDeleted={setShowDeleted}
-                searchQuery={searchQuery}
-                setSearchQuery={setSearchQuery}
-              />
+              <Suspense fallback={<TabFallback />}>
+                <DevicesTable
+                  devices={devices}
+                  selectedWarehouse={selectedWarehouse}
+                  setSelectedWarehouse={setSelectedWarehouse}
+                  selectedAssetType={selectedAssetType}
+                  setSelectedAssetType={setSelectedAssetType}
+                  selectedModel={selectedModel}
+                  setSelectedModel={setSelectedModel}
+                  selectedAssetStatus={selectedAssetStatus}
+                  setSelectedAssetStatus={setSelectedAssetStatus}
+                  selectedConfiguration={selectedConfiguration}
+                  setSelectedConfiguration={setSelectedConfiguration}
+                  selectedProduct={selectedProduct}
+                  setSelectedProduct={setSelectedProduct}
+                  selectedStatus={selectedStatus}
+                  setSelectedStatus={setSelectedStatus}
+                  selectedSdCardSize={selectedSdCardSize}
+                  setSelectedSdCardSize={setSelectedSdCardSize}
+                  selectedOrderType={selectedOrderType}
+                  setSelectedOrderType={setSelectedOrderType}
+                  selectedAgreementType={selectedAgreementType}
+                  setSelectedAgreementType={setSelectedAgreementType}
+                  selectedAssetGroup={selectedAssetGroup}
+                  setSelectedAssetGroup={setSelectedAssetGroup}
+                  selectedAssetCondition={selectedAssetCondition}
+                  setSelectedAssetCondition={setSelectedAssetCondition}
+                  fromDate={devicesFromDate}
+                  setFromDate={setDevicesFromDate}
+                  showDeleted={showDeleted}
+                  setShowDeleted={setShowDeleted}
+                  searchQuery={searchQuery}
+                  setSearchQuery={setSearchQuery}
+                />
+              </Suspense>
             </TabsContent>
             <TabsContent value='audit' className='flex-1 overflow-y-auto'>
-              <AuditTable
-                devices={devices}
-                selectedWarehouse={selectedWarehouse}
-                setSelectedWarehouse={setSelectedWarehouse}
-                selectedAssetType={selectedAssetType}
-                setSelectedAssetType={setSelectedAssetType}
-                selectedModel={selectedModel}
-                setSelectedModel={setSelectedModel}
-                selectedAssetStatus={selectedAssetStatus}
-                setSelectedAssetStatus={setSelectedAssetStatus}
-                selectedConfiguration={selectedConfiguration}
-                setSelectedConfiguration={setSelectedConfiguration}
-                selectedProduct={selectedProduct}
-                setSelectedProduct={setSelectedProduct}
-                selectedOrderType={selectedOrderType}
-                setSelectedOrderType={setSelectedOrderType}
-                selectedAssetGroup={selectedAssetGroup}
-                setSelectedAssetGroup={setSelectedAssetGroup}
-                selectedAssetCondition={selectedAssetCondition}
-                setSelectedAssetCondition={setSelectedAssetCondition}
-                fromDate={fromDate}
-                setFromDate={setFromDate}
-                searchQuery={searchQuery}
-                setSearchQuery={setSearchQuery}
-                onUpdateAssetCheck={handleUpdateAssetCheck}
-                onClearAllChecks={handleClearAllChecks}
-                userRole={userRole || 'unknown'}
-              />
+              <Suspense fallback={<TabFallback />}>
+                <AuditTable
+                  devices={devices}
+                  selectedWarehouse={selectedWarehouse}
+                  setSelectedWarehouse={setSelectedWarehouse}
+                  selectedAssetType={selectedAssetType}
+                  setSelectedAssetType={setSelectedAssetType}
+                  selectedModel={selectedModel}
+                  setSelectedModel={setSelectedModel}
+                  selectedAssetStatus={selectedAssetStatus}
+                  setSelectedAssetStatus={setSelectedAssetStatus}
+                  selectedConfiguration={selectedConfiguration}
+                  setSelectedConfiguration={setSelectedConfiguration}
+                  selectedProduct={selectedProduct}
+                  setSelectedProduct={setSelectedProduct}
+                  selectedOrderType={selectedOrderType}
+                  setSelectedOrderType={setSelectedOrderType}
+                  selectedAssetGroup={selectedAssetGroup}
+                  setSelectedAssetGroup={setSelectedAssetGroup}
+                  selectedAssetCondition={selectedAssetCondition}
+                  setSelectedAssetCondition={setSelectedAssetCondition}
+                  fromDate={fromDate}
+                  setFromDate={setFromDate}
+                  searchQuery={searchQuery}
+                  setSearchQuery={setSearchQuery}
+                  onUpdateAssetCheck={handleUpdateAssetCheck}
+                  onClearAllChecks={handleClearAllChecks}
+                  userRole={userRole || 'unknown'}
+                />
+              </Suspense>
             </TabsContent>
             <TabsContent value='activity' className='flex-1 overflow-y-auto'>
-              <ActivityLogs />
+              <Suspense fallback={<TabFallback />}>
+                <ActivityLogs />
+              </Suspense>
             </TabsContent>
           </Tabs>
         </div>
       </div>
-      <EnhancedBarcodeScanner
-        isOpen={showScanner}
-        onClose={() => {
-          setShowScanner(false);
-          setCurrentSerialIndex(null);
-        }}
-        onScan={handleScanResult}
-      />
+      {showScanner && (
+        <Suspense fallback={null}>
+          <EnhancedBarcodeScanner
+            isOpen={showScanner}
+            onClose={() => {
+              setShowScanner(false);
+              setCurrentSerialIndex(null);
+            }}
+            onScan={handleScanResult}
+          />
+        </Suspense>
+      )}
     </div>
   );
 };
