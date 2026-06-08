@@ -657,9 +657,9 @@ const AuditTable: React.FC<AuditTableProps> = ({
 
   return (
     <Card style={{ border: '1px solid #e2e8f0', borderRadius: '8px', background: '#fff', padding: '8px', minHeight: '200px' }}>
-      <CardHeader style={{ paddingBottom: '2px' }}>
+      <CardHeader style={{ padding: '10px 10px 4px' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <CardTitle style={{ display: 'flex', alignItems: 'center', gap: '1px', fontSize: '12px' }}>
+          <CardTitle style={{ display: 'flex', alignItems: 'center', gap: '1px', fontSize: '12px', marginBottom: 0 }}>
             <Filter style={{ width: '12px', height: '12px', color: '#3b82f6' }} /> Audit Filters
           </CardTitle>
           <Button
@@ -673,7 +673,7 @@ const AuditTable: React.FC<AuditTableProps> = ({
         </div>
       </CardHeader>
       <CardContent style={{ paddingTop: '2px' }}>
-        <div style={{ marginBottom: '8px' }}>
+        <div style={{ marginBottom: '4px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '4px', flexWrap: 'wrap' }}>
             <div style={{ flex: 1, minWidth: 0, position: 'relative' }}>
               <Search
@@ -794,12 +794,12 @@ const AuditTable: React.FC<AuditTableProps> = ({
               </Button>
             )}
           </div>
-          <div style={{ marginTop: '4px', fontSize: '12px', color: '#6b7280', display: 'flex', gap: '8px', alignItems: 'center' }}>
+          <div style={{ marginTop: '2px', fontSize: '12px', color: '#6b7280', display: 'flex', gap: '8px', alignItems: 'center' }}>
             <span style={{ color: '#22c55e' }}>Matched: {matchedCount}</span>
             <span>|</span>
             <span style={{ color: '#ef4444' }}>Unmatched: {unmatchedCount}</span>
           </div>
-          <div style={{ display: 'flex', gap: '4px', marginTop: '4px', maxWidth: '1200px', overflowX: 'auto', whiteSpace: 'nowrap' }}>
+          <div style={{ display: 'flex', gap: '4px', marginTop: '2px', maxWidth: '1200px', overflowX: 'auto', whiteSpace: 'nowrap' }}>
             <MultiSelect
               id="warehouseFilter"
               label="Warehouse"

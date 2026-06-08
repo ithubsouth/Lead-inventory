@@ -520,10 +520,16 @@ const OrdersTable: React.FC<OrdersTableProps> = ({
   };
 
   const handleEditSave = (updatedOrder: Order) => {
+    setLoading(true);
     setOrders(orders.map(o => (o.id === updatedOrder.id ? updatedOrder : o)));
     setShowEditDialog(false);
     setEditingOrder(null);
-    Promise.all([loadOrders(), loadDevices(), loadOrderSummary()]);
+    Promise.all([loadOrders(), loadDevices(), loadOrderSummary()])
+      .catch(error => {
+        console.error('Error refreshing after save:', error);
+        toast({ title: 'Error', description: 'Failed to refresh data after saving. Please reload.', variant: 'destructive' });
+      })
+      .finally(() => setLoading(false));
   };
 
   const clearFilters = () => {

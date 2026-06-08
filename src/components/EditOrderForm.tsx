@@ -380,45 +380,42 @@ const EditOrderForm: React.FC<EditOrderFormProps> = ({ order, onSave, onCancel }
       const newStatus = newMaterialType === 'Inward' ? 'Available' : 'Assigned';
 
       // Update order if changed
-      const orderChanges: Partial<Order> = {};
-      const orderFields = [
-        'order_type',
-        'asset_type',
-        'model',
-        'warehouse',
-        'sales_order',
-        'deal_id',
-        'school_name',
-        'nucleus_id',
-        'configuration',
-        'product',
-        'sd_card_size',
-        'profile_id',
-      ];
+      const orderChanges = {
+        order_type: formData.order_type,
+        asset_type: formData.asset_type,
+        model: formData.model,
+        warehouse: formData.warehouse,
+        sales_order: formData.sales_order,
+        deal_id: formData.deal_id,
+        school_name: formData.school_name,
+        nucleus_id: formData.nucleus_id,
+        configuration: formData.configuration,
+        product: formData.product,
+        sd_card_size: formData.sd_card_size,
+        profile_id: formData.profile_id,
+        quantity: devices.length,
+        serial_numbers: devices.map(d => d.serial_number || ''),
+        material_type: newMaterialType,
+        updated_at: new Date().toISOString(),
+        updated_by: userEmail,
+      } as Partial<Order>;
 
-      orderFields.forEach(field => {
-        if (formData[field as keyof Order] !== originalOrder[field as keyof Order]) {
-          (orderChanges as any)[field] = formData[field as keyof Order];
-        }
-      });
+      const { data: updatedOrderData, error: orderError } = await supabase
+        .from('orders')
+        .update(orderChanges)
+        .eq('id', formData.id)
+        .select()
+        .single();
 
-      orderChanges.quantity = devices.length;
-      orderChanges.serial_numbers = devices.map(d => d.serial_number || '');
-      orderChanges.material_type = newMaterialType;
-      orderChanges.updated_at = new Date().toISOString();
-      orderChanges.updated_by = userEmail;
-
-      if (Object.keys(orderChanges).length > 2 || orderChanges.quantity !== originalOrder.quantity || JSON.stringify(orderChanges.serial_numbers) !== JSON.stringify(originalOrder.serial_numbers)) { // >2 for updated_at and updated_by
-        const { error: orderError } = await supabase
-          .from('orders')
-          .update(orderChanges)
-          .eq('id', formData.id);
-
-        if (orderError) {
-          throw new Error(`Failed to update order: ${orderError.message}`);
-        }
-        orderUpdated = true;
+      if (orderError) {
+        throw new Error(`Failed to update order: ${orderError.message}`);
       }
+
+      if (!updatedOrderData) {
+        throw new Error('Order update succeeded but no order row was returned.');
+      }
+
+      orderUpdated = true;
 
       // Mark devices removed by the user as deleted
       devicesToDelete = originalDevices.filter(orig => !devices.some(d => d.id === orig.id));
@@ -517,7 +514,7 @@ const EditOrderForm: React.FC<EditOrderFormProps> = ({ order, onSave, onCancel }
       }
       devicesUpdated = true;
 
-      const updatedOrder = { ...formData, devices };
+      const updatedOrder = { ...updatedOrderData, devices } as Order & { devices: Device[] };
       onSave(updatedOrder);
       toast({ title: 'Success', description: 'Order and devices updated successfully.' });
     } catch (error) {

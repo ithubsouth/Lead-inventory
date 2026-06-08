@@ -89,10 +89,11 @@ const InventoryManagement = () => {
         toast({ title: 'Error', description: 'Failed to fetch user information.', variant: 'destructive' });
       }
     };
-    fetchUser();
-    loadOrders();
-    loadDevices();
-    loadOrderSummary();
+    const fetchUserAndData = async () => {
+      await fetchUser();
+      await Promise.all([loadOrders(), loadDevices(), loadOrderSummary()]);
+    };
+    fetchUserAndData();
   }, []);
 
   const loadOrders = async () => {
@@ -106,7 +107,7 @@ const InventoryManagement = () => {
       while (hasMoreOrders) {
         const { data, error } = await supabase
           .from('orders')
-          .select('*')
+          .select('id, order_type, asset_type, model, warehouse, sales_order, deal_id, nucleus_id, school_name, configuration, product, sd_card_size, profile_id, serial_numbers, quantity, order_date, created_at, updated_at, updated_by, is_deleted, material_type')
           .order('created_at', { ascending: false })
           .range(page * batchSize, (page + 1) * batchSize - 1);
         if (error) throw error;
@@ -131,14 +132,22 @@ const InventoryManagement = () => {
         page += 1;
       }
 
+      // Build map of device serial numbers AND count actual device rows per order
       const devicesByOrderId = new Map<string, string[]>();
+      const deviceCountByOrderId = new Map<string, number>();
       allDevices.forEach((device: { order_id: string; serial_number: string }) => {
-        if (device.order_id && device.serial_number) {
-          const normalizedSerial = device.serial_number.trim().toUpperCase();
-          if (!devicesByOrderId.has(device.order_id)) {
-            devicesByOrderId.set(device.order_id, []);
+        if (device.order_id) {
+          // Count all devices, even those without serial numbers
+          deviceCountByOrderId.set(device.order_id, (deviceCountByOrderId.get(device.order_id) || 0) + 1);
+
+          // Track serial numbers only for devices that have them
+          if (device.serial_number) {
+            const normalizedSerial = device.serial_number.trim().toUpperCase();
+            if (!devicesByOrderId.has(device.order_id)) {
+              devicesByOrderId.set(device.order_id, []);
+            }
+            devicesByOrderId.get(device.order_id)!.push(normalizedSerial);
           }
-          devicesByOrderId.get(device.order_id)!.push(normalizedSerial);
         }
       });
 
@@ -162,8 +171,15 @@ const InventoryManagement = () => {
         const salesOrder = order.sales_order || '';
         const groupKey = `${salesOrder}-${order.asset_type}-${order.model}-${order.warehouse}`;
         const groupOrders = orderGroups.get(groupKey) || [];
-        const orderSerials = (order.serial_numbers || []).map((sn: string) => sn.trim().toUpperCase()).filter((sn: string) => sn);
-        const orderDeviceCount = devicesByOrderId.get(order.id)?.length || 0;
+        
+        // Filter out blank serials from order.serial_numbers
+        const orderSerials = (order.serial_numbers || [])
+          .map((sn: string) => (sn ? sn.trim().toUpperCase() : null))
+          .filter((sn: string | null): sn is string => sn !== null && sn !== '');
+        
+        // Use actual device row count, not just serial number count
+        const actualDeviceCount = deviceCountByOrderId.get(order.id) || 0;
+        const deviceSerialCount = devicesByOrderId.get(order.id)?.length || 0;
 
         const orderSerialSet = new Set<string>();
         const duplicateSerialsInOrder = new Set<string>();
@@ -178,6 +194,11 @@ const InventoryManagement = () => {
         let status: 'Success' | 'Failed' | 'Pending' = 'Pending';
         let statusDetails = '';
 
+        // Debug log for problematic orders
+        if (order.id === 'ddb73f93-ee13-4d88-b1a6-aa07cd3a41d5' || actualDeviceCount !== order.quantity) {
+          console.debug(`Order ${order.id} (${order.sales_order}): quantity=${order.quantity}, actualDeviceCount=${actualDeviceCount}, serialCount=${deviceSerialCount}, orderSerialsLength=${orderSerials.length}, rawSerialArrayLength=${(order.serial_numbers || []).length}`);
+        }
+
         if (orderSerials.length === 0) {
           status = 'Pending';
           statusDetails = 'No serial numbers provided';
@@ -191,9 +212,9 @@ const InventoryManagement = () => {
             .map(p => p + 1);
           status = 'Failed';
           statusDetails = `Missing ${missingCount} serial number${missingCount > 1 ? 's' : ''} at position${missingCount > 1 ? 's' : ''} ${missingPositions.join(', ')} (Expected ${order.quantity}, got ${orderSerials.length})`;
-        } else if (orderDeviceCount !== order.quantity) {
+        } else if (actualDeviceCount !== order.quantity) {
           status = 'Failed';
-          statusDetails = `Device count mismatch: Expected ${order.quantity}, got ${orderDeviceCount}`;
+          statusDetails = `Device count mismatch: Expected ${order.quantity}, got ${actualDeviceCount} (with serials: ${deviceSerialCount})`;
         } else {
           const deviceSerials = devicesByOrderId.get(order.id) || [];
           const mismatchedSerials = orderSerials.filter(sn => !deviceSerials.includes(sn));
@@ -780,9 +801,9 @@ const InventoryManagement = () => {
         </Suspense>
       )}
       <div className='flex-1 overflow-y-auto pt-[50px]'>
-        <div className='container mx-auto px-4 py-6 h-full'>
+        <div className='container mx-auto px-4 py-4 h-full'>
           <Tabs defaultValue={userRole === 'Reporter' ? 'view' : 'create'} className='w-full h-full flex flex-col'>
-            <TabsList className={`grid w-full ${userRole === 'Reporter' ? 'grid-cols-5' : 'grid-cols-6'} mb-6 bg-card/50 backdrop-blur-sm border border-border/50 flex-shrink-0`}>
+            <TabsList className={`grid w-full ${userRole === 'Reporter' ? 'grid-cols-5' : 'grid-cols-6'} mb-4 bg-card/50 backdrop-blur-sm border border-border/50 flex-shrink-0`}>
               {userRole !== 'Reporter' && (
                 <TabsTrigger value='create' className='flex items-center gap-2 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground'>
                   <Package className='w-4 h-4' />
