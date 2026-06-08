@@ -86,8 +86,10 @@ const AuditTable: React.FC<AuditTableProps> = ({
   setSearchQuery,
   onUpdateAssetCheck,
   onClearAllChecks,
+  onBulkAuditCheck,
   userRole,
 }) => {
+  const { toast } = useToast();
   const [scannerInput, setScannerInput] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const [selectedAssetChecks, setSelectedAssetChecks] = useState<string[]>([]);
