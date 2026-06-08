@@ -984,6 +984,7 @@ const InventoryManagement = () => {
                   setSearchQuery={setSearchQuery}
                   onUpdateAssetCheck={handleUpdateAssetCheck}
                   onClearAllChecks={handleClearAllChecks}
+                  onBulkAuditCheck={handleBulkAuditCheck}
                   userRole={userRole || 'unknown'}
                 />
               </Suspense>
