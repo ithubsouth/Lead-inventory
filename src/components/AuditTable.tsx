@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
-import { Filter, Search, ScanLine } from 'lucide-react';
+import { Filter, Search, ScanLine, Upload, Download } from 'lucide-react';
 import { DatePickerWithRange } from './DatePickerWithRange';
 import { DateRange } from 'react-day-picker';
 import { Device } from './types';
@@ -23,7 +23,10 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { EnhancedBarcodeScanner } from './EnhancedBarcodeScanner';
+import * as XLSX from 'xlsx';
+import { useToast } from '@/hooks/use-toast';
 
 interface AuditTableProps {
   devices: Device[];
@@ -51,6 +54,9 @@ interface AuditTableProps {
   setSearchQuery: (value: string) => void;
   onUpdateAssetCheck: (deviceId: string, checkStatus: string) => Promise<void>;
   onClearAllChecks: (ids: string[]) => Promise<void>;
+  onBulkAuditCheck?: (
+    serials: string[]
+  ) => Promise<{ matchedCount: number; notFound: string[]; updatedSerials: string[] }>;
   userRole: string;
 }
 
@@ -80,8 +86,10 @@ const AuditTable: React.FC<AuditTableProps> = ({
   setSearchQuery,
   onUpdateAssetCheck,
   onClearAllChecks,
+  onBulkAuditCheck,
   userRole,
 }) => {
+  const { toast } = useToast();
   const [scannerInput, setScannerInput] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const [selectedAssetChecks, setSelectedAssetChecks] = useState<string[]>([]);
@@ -93,7 +101,86 @@ const AuditTable: React.FC<AuditTableProps> = ({
   const [rowsPerPage, setRowsPerPage] = useState(10);
   const [clearConfirmOpen, setClearConfirmOpen] = useState(false);
   const [isScannerOpen, setIsScannerOpen] = useState(false);
+  const [uploadOpen, setUploadOpen] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [uploadResult, setUploadResult] = useState<{
+    total: number;
+    matched: number;
+    notFound: string[];
+    fileName: string;
+  } | null>(null);
+  const uploadInputRef = useRef<HTMLInputElement>(null);
   const inputRef = useRef<HTMLInputElement>(null); // Ref for focusing input after scan
+
+  const formatAuditDateTime = (iso?: string | null) => {
+    if (!iso) return '';
+    const d = new Date(iso);
+    if (isNaN(d.getTime())) return '';
+    return d.toLocaleString('en-US', {
+      year: 'numeric', month: 'short', day: 'numeric',
+      hour: '2-digit', minute: '2-digit', hour12: true,
+    });
+  };
+
+  const downloadNotFoundCSV = (serials: string[], srcName: string) => {
+    const csv = ['Serial Number', ...serials.map((s) => `"${String(s).replace(/"/g, '""')}"`)].join('\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `not_found_serials_${srcName.replace(/\.[^.]+$/, '')}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
+  const handleAuditFile = async (file: File) => {
+    if (!onBulkAuditCheck) return;
+    setUploading(true);
+    setUploadResult(null);
+    try {
+      const buf = await file.arrayBuffer();
+      const wb = XLSX.read(buf, { type: 'array' });
+      const sheet = wb.Sheets[wb.SheetNames[0]];
+      const rows: any[][] = XLSX.utils.sheet_to_json(sheet, { header: 1, blankrows: false, defval: '' });
+      if (!rows.length) throw new Error('File is empty.');
+
+      let startIdx = 0;
+      const firstCell = String(rows[0]?.[0] ?? '').toLowerCase().trim();
+      if (firstCell.includes('serial') || firstCell === 'sn' || firstCell === 's.no' || firstCell === 's.no.') {
+        startIdx = 1;
+      }
+
+      const serials: string[] = [];
+      for (let i = startIdx; i < rows.length; i++) {
+        const v = String(rows[i]?.[0] ?? '').trim();
+        if (v) serials.push(v);
+      }
+      if (serials.length === 0) throw new Error('No serial numbers found in the file.');
+
+      const res = await onBulkAuditCheck(serials);
+      setUploadResult({
+        total: serials.length,
+        matched: res.matchedCount,
+        notFound: res.notFound,
+        fileName: file.name,
+      });
+      toast({
+        title: 'Audit upload complete',
+        description: `${res.matchedCount} matched, ${res.notFound.length} not found.`,
+      });
+    } catch (err: any) {
+      toast({
+        title: 'Upload failed',
+        description: err?.message || 'Could not process file.',
+        variant: 'destructive',
+      });
+    } finally {
+      setUploading(false);
+      if (uploadInputRef.current) uploadInputRef.current.value = '';
+    }
+  };
 
   // Clear scan result and error messages after a timeout
   React.useEffect(() => {
@@ -632,6 +719,26 @@ const AuditTable: React.FC<AuditTableProps> = ({
             >
               {isClearing ? 'Clearing...' : 'Clear All'}
             </Button>
+            {canEdit && onBulkAuditCheck && (
+              <Button
+                variant="outline"
+                size="sm"
+                style={{
+                  border: '1px solid #d1d5db',
+                  borderRadius: '4px',
+                  padding: '4px 6px',
+                  fontSize: '12px',
+                  height: '28px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                }}
+                onClick={() => { setUploadResult(null); setUploadOpen(true); }}
+                title="Verify audit by uploading CSV/Excel of serial numbers"
+              >
+                <Upload style={{ width: '12px', height: '12px' }} /> Upload Audit
+              </Button>
+            )}
           </div>
           <div style={{ marginTop: '4px', fontSize: '12px', color: '#6b7280', display: 'flex', gap: '8px', alignItems: 'center' }}>
             <span style={{ color: '#22c55e' }}>Matched: {matchedCount}</span>
@@ -798,12 +905,22 @@ const AuditTable: React.FC<AuditTableProps> = ({
                 >
                   Asset Check
                 </TableHead>
+                <TableHead
+                  style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', textAlign: 'left', position: 'sticky', top: 0, background: '#fff', zIndex: 20, whiteSpace: 'nowrap' }}
+                >
+                  Last Audited By
+                </TableHead>
+                <TableHead
+                  style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', textAlign: 'left', position: 'sticky', top: 0, background: '#fff', zIndex: 20, whiteSpace: 'nowrap' }}
+                >
+                  Last Audited At
+                </TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {paginatedDevices.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={12} style={{ textAlign: 'center', fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db' }}>
+                  <TableCell colSpan={14} style={{ textAlign: 'center', fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db' }}>
                     No devices found with current filters.
                   </TableCell>
                 </TableRow>
@@ -847,6 +964,12 @@ const AuditTable: React.FC<AuditTableProps> = ({
                             {updatingDeviceId === d.id ? 'Updating...' : checkText}
                           </Label>
                         </div>
+                      </TableCell>
+                      <TableCell style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', whiteSpace: 'nowrap' }}>
+                        {d.audited_by || ''}
+                      </TableCell>
+                      <TableCell style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', whiteSpace: 'nowrap' }}>
+                        {formatAuditDateTime(d.audited_at)}
                       </TableCell>
                     </TableRow>
                   );
@@ -1074,6 +1197,82 @@ const AuditTable: React.FC<AuditTableProps> = ({
         onScan={handleBarcodeScan}
         existingSerials={filteredDevices.map((d) => d.serial_number || d.id)}
       />
+      <Dialog open={uploadOpen} onOpenChange={(o) => { setUploadOpen(o); if (!o) setUploadResult(null); }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Upload Audit File</DialogTitle>
+            <DialogDescription>
+              Upload a CSV or Excel file with serial numbers in the first column. Matching assets will be marked as <b>Matched</b> with audit timestamp.
+            </DialogDescription>
+          </DialogHeader>
+
+          {!uploadResult && (
+            <div className="space-y-3">
+              <input
+                ref={uploadInputRef}
+                type="file"
+                accept=".csv,.xlsx,.xls"
+                disabled={uploading}
+                onChange={(e) => {
+                  const f = e.target.files?.[0];
+                  if (f) handleAuditFile(f);
+                }}
+                style={{ fontSize: '12px' }}
+              />
+              <div style={{ fontSize: '11px', color: '#6b7280' }}>
+                Accepted: .csv, .xlsx, .xls. First column should be serial numbers (header row optional).
+              </div>
+              {uploading && <div style={{ fontSize: '12px', color: '#3b82f6' }}>Processing…</div>}
+            </div>
+          )}
+
+          {uploadResult && (
+            <div className="space-y-3" style={{ fontSize: '12px' }}>
+              <div><b>File:</b> {uploadResult.fileName}</div>
+              <div style={{ display: 'flex', gap: '12px' }}>
+                <span>Total serials: <b>{uploadResult.total}</b></span>
+                <span style={{ color: '#22c55e' }}>Matched: <b>{uploadResult.matched}</b></span>
+                <span style={{ color: '#ef4444' }}>Not found: <b>{uploadResult.notFound.length}</b></span>
+              </div>
+              {uploadResult.notFound.length > 0 && (
+                <>
+                  <div style={{ maxHeight: '140px', overflow: 'auto', border: '1px solid #e5e7eb', borderRadius: 4, padding: 6, background: '#fafafa' }}>
+                    {uploadResult.notFound.slice(0, 200).map((s) => (
+                      <div key={s} style={{ fontFamily: 'monospace', color: '#ef4444' }}>{s}</div>
+                    ))}
+                    {uploadResult.notFound.length > 200 && (
+                      <div style={{ color: '#6b7280' }}>+{uploadResult.notFound.length - 200} more…</div>
+                    )}
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => downloadNotFoundCSV(uploadResult.notFound, uploadResult.fileName)}
+                    style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '12px', height: '28px' }}
+                  >
+                    <Download style={{ width: '12px', height: '12px' }} /> Download Not-Found CSV
+                  </Button>
+                </>
+              )}
+            </div>
+          )}
+
+          <DialogFooter>
+            <Button variant="outline" size="sm" onClick={() => setUploadOpen(false)} style={{ fontSize: '12px', height: '28px' }}>
+              Close
+            </Button>
+            {uploadResult && (
+              <Button
+                size="sm"
+                onClick={() => { setUploadResult(null); uploadInputRef.current?.click(); }}
+                style={{ fontSize: '12px', height: '28px' }}
+              >
+                Upload Another
+              </Button>
+            )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </Card>
   );
 };

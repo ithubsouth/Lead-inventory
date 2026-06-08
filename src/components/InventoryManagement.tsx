@@ -573,6 +573,74 @@ const InventoryManagement = () => {
     return { updatedIds: [], error: new Error('Max retries exceeded') };
   };
 
+  const handleBulkAuditCheck = async (
+    serials: string[]
+  ): Promise<{ matchedCount: number; notFound: string[]; updatedSerials: string[] }> => {
+    if (!userEmail) throw new Error('No authenticated user found. Please log in.');
+    if (!['Super Admin', 'Admin', 'Operator'].includes(userRole || '')) {
+      throw new Error('Insufficient permissions. Super Admin, Admin, or Operator role required.');
+    }
+
+    const cleaned = Array.from(
+      new Set(serials.map((s) => String(s ?? '').trim()).filter(Boolean))
+    );
+    if (cleaned.length === 0) {
+      return { matchedCount: 0, notFound: [], updatedSerials: [] };
+    }
+
+    // Find which serials exist as eligible audit devices (Stock, not deleted)
+    const { data: existing, error: fetchErr } = await supabase
+      .from('devices')
+      .select('id, serial_number, is_deleted, material_type')
+      .in('serial_number', cleaned);
+    if (fetchErr) throw fetchErr;
+
+    const eligible = (existing || []).filter(
+      (d: any) => !d.is_deleted && d.material_type !== 'Outward'
+    );
+    const foundSerials = new Set(eligible.map((d: any) => d.serial_number));
+    const notFound = cleaned.filter((s) => !foundSerials.has(s));
+    const ids = eligible.map((d: any) => d.id);
+
+    const nowIso = new Date().toISOString();
+    const updates = {
+      asset_check: 'Matched',
+      audited_at: nowIso,
+      audited_by: userEmail,
+      updated_at: nowIso,
+      updated_by: userEmail,
+    };
+
+    const updatedIds: string[] = [];
+    const BATCH_SIZE = 100;
+    for (let i = 0; i < ids.length; i += BATCH_SIZE) {
+      const batch = ids.slice(i, i + BATCH_SIZE);
+      const { data, error } = await supabase
+        .from('devices')
+        .update(updates)
+        .in('id', batch)
+        .select('id');
+      if (error) throw error;
+      updatedIds.push(...(data?.map((r: any) => r.id) || []));
+    }
+
+    setDevices((prev) =>
+      prev.map((d) =>
+        updatedIds.includes(d.id)
+          ? { ...d, asset_check: 'Matched', audited_at: nowIso, audited_by: userEmail, updated_at: nowIso, updated_by: userEmail }
+          : d
+      )
+    );
+
+    return {
+      matchedCount: updatedIds.length,
+      notFound,
+      updatedSerials: eligible
+        .filter((d: any) => updatedIds.includes(d.id))
+        .map((d: any) => d.serial_number),
+    };
+  };
+
   const handleClearAllChecks = async (ids: string[]) => {
     try {
       setIsClearing(true);
@@ -916,6 +984,7 @@ const InventoryManagement = () => {
                   setSearchQuery={setSearchQuery}
                   onUpdateAssetCheck={handleUpdateAssetCheck}
                   onClearAllChecks={handleClearAllChecks}
+                  onBulkAuditCheck={handleBulkAuditCheck}
                   userRole={userRole || 'unknown'}
                 />
               </Suspense>
