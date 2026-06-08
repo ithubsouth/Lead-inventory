@@ -25,7 +25,7 @@ import {
 } from '@/components/ui/alert-dialog';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { EnhancedBarcodeScanner } from './EnhancedBarcodeScanner';
-import * as XLSX from 'xlsx';
+import * as XLSX from 'xlsx/dist/xlsx.full.min.js';
 import { useToast } from '@/hooks/use-toast';
 
 interface AuditTableProps {
@@ -58,6 +58,7 @@ interface AuditTableProps {
     serials: string[]
   ) => Promise<{ matchedCount: number; notFound: string[]; updatedSerials: string[] }>;
   userRole: string;
+  currentUser?: string | null;
 }
 
 const AuditTable: React.FC<AuditTableProps> = ({
@@ -88,6 +89,7 @@ const AuditTable: React.FC<AuditTableProps> = ({
   onClearAllChecks,
   onBulkAuditCheck,
   userRole,
+  currentUser,
 }) => {
   const { toast } = useToast();
   const [scannerInput, setScannerInput] = useState('');
@@ -109,8 +111,10 @@ const AuditTable: React.FC<AuditTableProps> = ({
     notFound: string[];
     fileName: string;
   } | null>(null);
+  const [auditOverrides, setAuditOverrides] = useState<Record<string, { asset_check?: string; audited_by?: string; audited_at?: string }>>({});
   const uploadInputRef = useRef<HTMLInputElement>(null);
   const inputRef = useRef<HTMLInputElement>(null); // Ref for focusing input after scan
+  const tableContainerRef = useRef<HTMLDivElement>(null);
 
   const formatAuditDateTime = (iso?: string | null) => {
     if (!iso) return '';
@@ -129,6 +133,19 @@ const AuditTable: React.FC<AuditTableProps> = ({
     const a = document.createElement('a');
     a.href = url;
     a.download = `not_found_serials_${srcName.replace(/\.[^.]+$/, '')}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
+  const downloadTemplate = () => {
+    const csv = ['Serial Number', 'EXAMPLE_SN_12345'].join('\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'audit_template.csv';
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
@@ -196,6 +213,34 @@ const AuditTable: React.FC<AuditTableProps> = ({
       return () => clearTimeout(timer);
     }
   }, [error]);
+
+  React.useEffect(() => {
+    const container = tableContainerRef.current;
+    if (!container) return;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'ArrowLeft') {
+        container.scrollBy({ left: -50, behavior: 'smooth' });
+      } else if (e.key === 'ArrowRight') {
+        container.scrollBy({ left: 50, behavior: 'smooth' });
+      }
+    };
+
+    const handleWheel = (e: WheelEvent) => {
+      if (e.deltaY !== 0) {
+        container.scrollBy({ top: e.deltaY * 2, behavior: 'smooth' });
+        e.preventDefault();
+      }
+    };
+
+    container.addEventListener('keydown', handleKeyDown);
+    container.addEventListener('wheel', handleWheel, { passive: false });
+
+    return () => {
+      container.removeEventListener('keydown', handleKeyDown);
+      container.removeEventListener('wheel', handleWheel as EventListener);
+    };
+  }, []);
 
   const propertyMap = {
     warehouse: 'warehouse',
@@ -498,6 +543,15 @@ const AuditTable: React.FC<AuditTableProps> = ({
       onUpdateAssetCheck(matchedDevice.id, checkStatus)
         .then(() => {
           setScanResult(checkStatus);
+          setAuditOverrides((prev) => ({
+            ...prev,
+            [matchedDevice.id]: {
+              ...(prev[matchedDevice.id] || {}),
+              asset_check: checkStatus,
+              audited_by: currentUser || 'You',
+              audited_at: new Date().toISOString(),
+            },
+          }));
           inputRef.current?.focus();
         })
         .catch((err) => {
@@ -841,8 +895,21 @@ const AuditTable: React.FC<AuditTableProps> = ({
             </div>
           </div>
         </div>
-        <div style={{ overflowY: 'auto', maxHeight: '400px' }}>
-          <Table>
+        <div
+          style={{
+            overflowX: 'auto',
+            overflowY: 'auto',
+            height: '400px',
+            maxHeight: '400px',
+            position: 'relative',
+            overscrollBehavior: 'contain',
+            boxSizing: 'border-box',
+            width: '100%'
+          }}
+          ref={tableContainerRef}
+          tabIndex={0}
+        >
+          <Table wrapperOverflow="visible" style={{ minWidth: '1200px' }}>
             <TableHeader>
               <TableRow>
                 <TableHead
@@ -951,6 +1018,17 @@ const AuditTable: React.FC<AuditTableProps> = ({
                             onCheckedChange={(checked) => {
                               setUpdatingDeviceId(d.id);
                               onUpdateAssetCheck(d.id, checked ? 'Matched' : 'Unmatched')
+                                .then(() => {
+                                  setAuditOverrides((prev) => ({
+                                    ...prev,
+                                    [d.id]: {
+                                      ...(prev[d.id] || {}),
+                                      asset_check: checked ? 'Matched' : 'Unmatched',
+                                      audited_by: currentUser || 'You',
+                                      audited_at: new Date().toISOString(),
+                                    },
+                                  }));
+                                })
                                 .catch((err) => {
                                   setError(`Failed to update asset check: ${err.message}`);
                                 })
@@ -965,12 +1043,12 @@ const AuditTable: React.FC<AuditTableProps> = ({
                           </Label>
                         </div>
                       </TableCell>
-                      <TableCell style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', whiteSpace: 'nowrap' }}>
-                        {d.audited_by || ''}
-                      </TableCell>
-                      <TableCell style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', whiteSpace: 'nowrap' }}>
-                        {formatAuditDateTime(d.audited_at)}
-                      </TableCell>
+                        <TableCell style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', whiteSpace: 'nowrap' }}>
+                          {(auditOverrides[d.id]?.audited_by ?? d.audited_by) || ''}
+                        </TableCell>
+                        <TableCell style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', whiteSpace: 'nowrap' }}>
+                          {formatAuditDateTime(auditOverrides[d.id]?.audited_at ?? d.audited_at)}
+                        </TableCell>
                     </TableRow>
                   );
                 })
@@ -1219,6 +1297,11 @@ const AuditTable: React.FC<AuditTableProps> = ({
                 }}
                 style={{ fontSize: '12px' }}
               />
+              <div style={{ marginTop: 6 }}>
+                <Button variant="ghost" size="sm" onClick={downloadTemplate} style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                  <Download style={{ width: '12px', height: '12px' }} /> Download Template
+                </Button>
+              </div>
               <div style={{ fontSize: '11px', color: '#6b7280' }}>
                 Accepted: .csv, .xlsx, .xls. First column should be serial numbers (header row optional).
               </div>

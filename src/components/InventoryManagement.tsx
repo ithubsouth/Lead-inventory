@@ -99,7 +99,7 @@ const InventoryManagement = () => {
     try {
       setLoading(true);
       let allOrders: any[] = [];
-      const batchSize = 1000;
+      const batchSize = 500;
       let page = 0;
       let hasMoreOrders = true;
 
@@ -239,12 +239,9 @@ const InventoryManagement = () => {
       while (hasMore) {
         const { data, error } = await supabase
           .from('devices')
-          .select(`
-            *,
-            orders (
-              material_type
-            )
-          `)
+          .select(
+            `id, sales_order, order_type, warehouse, deal_id, nucleus_id, school_name, asset_type, model, configuration, serial_number, sd_card_size, profile_id, product, asset_status, asset_group, asset_condition, audited_at, audited_by, created_at, updated_at, updated_by, is_deleted, order_id, orders ( material_type )`
+          )
           .order('created_at', { ascending: false })
           .range(page * batchSize, (page + 1) * batchSize - 1);
         if (error) throw error;
@@ -290,6 +287,8 @@ const InventoryManagement = () => {
           created_at: device.created_at || '',
           updated_at: device.updated_at ? new Date(device.updated_at).toISOString() : '',
           updated_by: device.updated_by?.trim() || '',
+          audited_at: device.audited_at ? new Date(device.audited_at).toISOString() : '',
+          audited_by: device.audited_by?.trim() || '',
           is_deleted: device.is_deleted || false,
           order_id: device.order_id || null,
           material_type: materialType,
@@ -986,6 +985,7 @@ const InventoryManagement = () => {
                   onClearAllChecks={handleClearAllChecks}
                   onBulkAuditCheck={handleBulkAuditCheck}
                   userRole={userRole || 'unknown'}
+                  currentUser={userEmail}
                 />
               </Suspense>
             </TabsContent>
