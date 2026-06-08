@@ -773,40 +773,42 @@ const InventoryManagement = () => {
               </TabsContent>
             )}
             <TabsContent value='view' className='flex-1 overflow-y-auto'>
-              <OrdersTable
-                orders={orders}
-                setOrders={setOrders}
-                selectedWarehouse={selectedWarehouse}
-                setSelectedWarehouse={setSelectedWarehouse}
-                selectedAssetType={selectedAssetType}
-                setSelectedAssetType={setSelectedAssetType}
-                selectedModel={selectedModel}
-                setSelectedModel={setSelectedModel}
-                selectedConfiguration={selectedConfiguration}
-                setSelectedConfiguration={setSelectedConfiguration}
-                selectedOrderType={selectedOrderType}
-                setSelectedOrderType={setSelectedOrderType}
-                selectedAgreementType={selectedAgreementType}
-                setSelectedAgreementType={setSelectedAgreementType}
-                selectedProduct={selectedProduct}
-                setSelectedProduct={setSelectedProduct}
-                selectedStatus={selectedStatus}
-                setSelectedStatus={setSelectedStatus}
-                selectedSdCardSize={selectedSdCardSize}
-                setSelectedSdCardSize={setSelectedSdCardSize}      
-                fromDate={devicesFromDate}
-                setFromDate={setDevicesFromDate}
-                showDeleted={showDeleted}
-                setShowDeleted={setShowDeleted}
-                searchQuery={searchQuery}
-                setSearchQuery={setSearchQuery}
-                loading={loading}
-                setLoading={setLoading}
-                loadOrders={loadOrders}
-                loadDevices={loadDevices}
-                loadOrderSummary={loadOrderSummary}
-                userRole={userRole}
-              />
+              <Suspense fallback={<TabFallback />}>
+                <OrdersTable
+                  orders={orders}
+                  setOrders={setOrders}
+                  selectedWarehouse={selectedWarehouse}
+                  setSelectedWarehouse={setSelectedWarehouse}
+                  selectedAssetType={selectedAssetType}
+                  setSelectedAssetType={setSelectedAssetType}
+                  selectedModel={selectedModel}
+                  setSelectedModel={setSelectedModel}
+                  selectedConfiguration={selectedConfiguration}
+                  setSelectedConfiguration={setSelectedConfiguration}
+                  selectedOrderType={selectedOrderType}
+                  setSelectedOrderType={setSelectedOrderType}
+                  selectedAgreementType={selectedAgreementType}
+                  setSelectedAgreementType={setSelectedAgreementType}
+                  selectedProduct={selectedProduct}
+                  setSelectedProduct={setSelectedProduct}
+                  selectedStatus={selectedStatus}
+                  setSelectedStatus={setSelectedStatus}
+                  selectedSdCardSize={selectedSdCardSize}
+                  setSelectedSdCardSize={setSelectedSdCardSize}      
+                  fromDate={devicesFromDate}
+                  setFromDate={setDevicesFromDate}
+                  showDeleted={showDeleted}
+                  setShowDeleted={setShowDeleted}
+                  searchQuery={searchQuery}
+                  setSearchQuery={setSearchQuery}
+                  loading={loading}
+                  setLoading={setLoading}
+                  loadOrders={loadOrders}
+                  loadDevices={loadDevices}
+                  loadOrderSummary={loadOrderSummary}
+                  userRole={userRole}
+                />
+              </Suspense>
             </TabsContent>
             <TabsContent value='order' className='flex-1 overflow-y-auto'>
               <OrderSummaryTable
