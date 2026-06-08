@@ -1,21 +1,27 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, lazy, Suspense } from 'react';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Package, BarChart3, Archive, Clock, History } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/use-toast';
 import { supabase } from '@/integrations/supabase/client';
-import UnifiedAssetForm from './UnifiedAssetForm';
-import OrdersTable from './OrdersTable';
-import DevicesTable from './DevicesTable';
-import OrderSummaryTable from './OrderSummaryTable';
-import AuditTable from './AuditTable';
-import ActivityLogs from './ActivityLogs';
 import { UserProfile } from './UserProfile';
 import { ActiveUsers } from '@/components/ActiveUsers';
-import EnhancedBarcodeScanner from './EnhancedBarcodeScanner';
-import VersionHistoryDialog from './VersionHistoryDialog';
 import { Order, Device, OrderSummary, TabletItem, TVItem } from './types';
 import { DateRange } from 'react-day-picker';
+
+const UnifiedAssetForm = lazy(() => import('./UnifiedAssetForm'));
+const OrdersTable = lazy(() => import('./OrdersTable'));
+const DevicesTable = lazy(() => import('./DevicesTable'));
+const OrderSummaryTable = lazy(() => import('./OrderSummaryTable'));
+const AuditTable = lazy(() => import('./AuditTable'));
+const ActivityLogs = lazy(() => import('./ActivityLogs'));
+const EnhancedBarcodeScanner = lazy(() => import('./EnhancedBarcodeScanner'));
+const VersionHistoryDialog = lazy(() => import('./VersionHistoryDialog'));
+
+const TabFallback = () => (
+  <div className='flex items-center justify-center py-16 text-sm text-muted-foreground'>Loading…</div>
+);
+
 
 const InventoryManagement = () => {
   const [orders, setOrders] = useState<Order[]>([]);
