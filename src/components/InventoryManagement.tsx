@@ -707,7 +707,11 @@ const InventoryManagement = () => {
           </div>
         </div>
       </div>
-      <VersionHistoryDialog open={versionHistoryOpen} onOpenChange={setVersionHistoryOpen} />
+      {versionHistoryOpen && (
+        <Suspense fallback={null}>
+          <VersionHistoryDialog open={versionHistoryOpen} onOpenChange={setVersionHistoryOpen} />
+        </Suspense>
+      )}
       <div className='flex-1 overflow-y-auto pt-[50px]'>
         <div className='container mx-auto px-4 py-6 h-full'>
           <Tabs defaultValue={userRole === 'Reporter' ? 'view' : 'create'} className='w-full h-full flex flex-col'>
