@@ -916,14 +916,18 @@ const InventoryManagement = () => {
           </Tabs>
         </div>
       </div>
-      <EnhancedBarcodeScanner
-        isOpen={showScanner}
-        onClose={() => {
-          setShowScanner(false);
-          setCurrentSerialIndex(null);
-        }}
-        onScan={handleScanResult}
-      />
+      {showScanner && (
+        <Suspense fallback={null}>
+          <EnhancedBarcodeScanner
+            isOpen={showScanner}
+            onClose={() => {
+              setShowScanner(false);
+              setCurrentSerialIndex(null);
+            }}
+            onScan={handleScanResult}
+          />
+        </Suspense>
+      )}
     </div>
   );
 };
