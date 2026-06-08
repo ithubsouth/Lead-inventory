@@ -101,7 +101,86 @@ const AuditTable: React.FC<AuditTableProps> = ({
   const [rowsPerPage, setRowsPerPage] = useState(10);
   const [clearConfirmOpen, setClearConfirmOpen] = useState(false);
   const [isScannerOpen, setIsScannerOpen] = useState(false);
+  const [uploadOpen, setUploadOpen] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [uploadResult, setUploadResult] = useState<{
+    total: number;
+    matched: number;
+    notFound: string[];
+    fileName: string;
+  } | null>(null);
+  const uploadInputRef = useRef<HTMLInputElement>(null);
   const inputRef = useRef<HTMLInputElement>(null); // Ref for focusing input after scan
+
+  const formatAuditDateTime = (iso?: string | null) => {
+    if (!iso) return '';
+    const d = new Date(iso);
+    if (isNaN(d.getTime())) return '';
+    return d.toLocaleString('en-US', {
+      year: 'numeric', month: 'short', day: 'numeric',
+      hour: '2-digit', minute: '2-digit', hour12: true,
+    });
+  };
+
+  const downloadNotFoundCSV = (serials: string[], srcName: string) => {
+    const csv = ['Serial Number', ...serials.map((s) => `"${String(s).replace(/"/g, '""')}"`)].join('\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `not_found_serials_${srcName.replace(/\.[^.]+$/, '')}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
+  const handleAuditFile = async (file: File) => {
+    if (!onBulkAuditCheck) return;
+    setUploading(true);
+    setUploadResult(null);
+    try {
+      const buf = await file.arrayBuffer();
+      const wb = XLSX.read(buf, { type: 'array' });
+      const sheet = wb.Sheets[wb.SheetNames[0]];
+      const rows: any[][] = XLSX.utils.sheet_to_json(sheet, { header: 1, blankrows: false, defval: '' });
+      if (!rows.length) throw new Error('File is empty.');
+
+      let startIdx = 0;
+      const firstCell = String(rows[0]?.[0] ?? '').toLowerCase().trim();
+      if (firstCell.includes('serial') || firstCell === 'sn' || firstCell === 's.no' || firstCell === 's.no.') {
+        startIdx = 1;
+      }
+
+      const serials: string[] = [];
+      for (let i = startIdx; i < rows.length; i++) {
+        const v = String(rows[i]?.[0] ?? '').trim();
+        if (v) serials.push(v);
+      }
+      if (serials.length === 0) throw new Error('No serial numbers found in the file.');
+
+      const res = await onBulkAuditCheck(serials);
+      setUploadResult({
+        total: serials.length,
+        matched: res.matchedCount,
+        notFound: res.notFound,
+        fileName: file.name,
+      });
+      toast({
+        title: 'Audit upload complete',
+        description: `${res.matchedCount} matched, ${res.notFound.length} not found.`,
+      });
+    } catch (err: any) {
+      toast({
+        title: 'Upload failed',
+        description: err?.message || 'Could not process file.',
+        variant: 'destructive',
+      });
+    } finally {
+      setUploading(false);
+      if (uploadInputRef.current) uploadInputRef.current.value = '';
+    }
+  };
 
   // Clear scan result and error messages after a timeout
   React.useEffect(() => {
