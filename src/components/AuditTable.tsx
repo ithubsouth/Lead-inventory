@@ -54,6 +54,9 @@ interface AuditTableProps {
   setSearchQuery: (value: string) => void;
   onUpdateAssetCheck: (deviceId: string, checkStatus: string) => Promise<void>;
   onClearAllChecks: (ids: string[]) => Promise<void>;
+  onBulkAuditCheck?: (
+    serials: string[]
+  ) => Promise<{ matchedCount: number; notFound: string[]; updatedSerials: string[] }>;
   userRole: string;
 }
 
