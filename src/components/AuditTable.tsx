@@ -965,6 +965,12 @@ const AuditTable: React.FC<AuditTableProps> = ({
                           </Label>
                         </div>
                       </TableCell>
+                      <TableCell style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', whiteSpace: 'nowrap' }}>
+                        {d.audited_by || ''}
+                      </TableCell>
+                      <TableCell style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', whiteSpace: 'nowrap' }}>
+                        {formatAuditDateTime(d.audited_at)}
+                      </TableCell>
                     </TableRow>
                   );
                 })
