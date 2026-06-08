@@ -905,6 +905,16 @@ const AuditTable: React.FC<AuditTableProps> = ({
                 >
                   Asset Check
                 </TableHead>
+                <TableHead
+                  style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', textAlign: 'left', position: 'sticky', top: 0, background: '#fff', zIndex: 20, whiteSpace: 'nowrap' }}
+                >
+                  Last Audited By
+                </TableHead>
+                <TableHead
+                  style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', textAlign: 'left', position: 'sticky', top: 0, background: '#fff', zIndex: 20, whiteSpace: 'nowrap' }}
+                >
+                  Last Audited At
+                </TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
