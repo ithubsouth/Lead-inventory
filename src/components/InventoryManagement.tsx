@@ -811,111 +811,119 @@ const InventoryManagement = () => {
               </Suspense>
             </TabsContent>
             <TabsContent value='order' className='flex-1 overflow-y-auto'>
-              <OrderSummaryTable
-                devices={devices}
-                selectedWarehouse={selectedWarehouse}
-                setSelectedWarehouse={(value) => {
-                  setSelectedWarehouse(Array.isArray(value) ? value : [value]);
-                  setSelectedAssetType([]);
-                  setSelectedModel([]);
-                  setSelectedProduct([]);
-                  setSelectedAssetStatus([]);
-                  setSelectedAssetGroup([]);
-                }}
-                selectedAssetType={selectedAssetType}
-                setSelectedAssetType={(value) => {
-                  setSelectedAssetType(Array.isArray(value) ? value : [value]);
-                  setSelectedModel([]);
-                }}
-                selectedModel={selectedModel}
-                setSelectedModel={setSelectedModel}
-                selectedAssetStatus={selectedAssetStatus}
-                setSelectedAssetStatus={setSelectedAssetStatus}
-                selectedAssetGroup={selectedAssetGroup}
-                setSelectedAssetGroup={setSelectedAssetGroup}
-                selectedProduct={selectedProduct}
-                setSelectedProduct={setSelectedProduct}
-                selectedAssetCondition={selectedAssetCondition}
-                setSelectedAssetCondition={setSelectedAssetCondition}
-                selectedAgreementType={selectedAgreementType}
-                setSelectedAgreementType={setSelectedAgreementType}
-                selectedSdCardSize={selectedSdCardSize}
-                setSelectedSdCardSize={setSelectedSdCardSize}
-                fromDate={fromDate}
-                setFromDate={setFromDate}
-                showDeleted={showDeleted}
-                setShowDeleted={setShowDeleted}
-                searchQuery={searchQuery}
-                setSearchQuery={setSearchQuery}
-              />
+              <Suspense fallback={<TabFallback />}>
+                <OrderSummaryTable
+                  devices={devices}
+                  selectedWarehouse={selectedWarehouse}
+                  setSelectedWarehouse={(value) => {
+                    setSelectedWarehouse(Array.isArray(value) ? value : [value]);
+                    setSelectedAssetType([]);
+                    setSelectedModel([]);
+                    setSelectedProduct([]);
+                    setSelectedAssetStatus([]);
+                    setSelectedAssetGroup([]);
+                  }}
+                  selectedAssetType={selectedAssetType}
+                  setSelectedAssetType={(value) => {
+                    setSelectedAssetType(Array.isArray(value) ? value : [value]);
+                    setSelectedModel([]);
+                  }}
+                  selectedModel={selectedModel}
+                  setSelectedModel={setSelectedModel}
+                  selectedAssetStatus={selectedAssetStatus}
+                  setSelectedAssetStatus={setSelectedAssetStatus}
+                  selectedAssetGroup={selectedAssetGroup}
+                  setSelectedAssetGroup={setSelectedAssetGroup}
+                  selectedProduct={selectedProduct}
+                  setSelectedProduct={setSelectedProduct}
+                  selectedAssetCondition={selectedAssetCondition}
+                  setSelectedAssetCondition={setSelectedAssetCondition}
+                  selectedAgreementType={selectedAgreementType}
+                  setSelectedAgreementType={setSelectedAgreementType}
+                  selectedSdCardSize={selectedSdCardSize}
+                  setSelectedSdCardSize={setSelectedSdCardSize}
+                  fromDate={fromDate}
+                  setFromDate={setFromDate}
+                  showDeleted={showDeleted}
+                  setShowDeleted={setShowDeleted}
+                  searchQuery={searchQuery}
+                  setSearchQuery={setSearchQuery}
+                />
+              </Suspense>
             </TabsContent>
             <TabsContent value='devices' className='flex-1 overflow-y-auto'>
-              <DevicesTable
-                devices={devices}
-                selectedWarehouse={selectedWarehouse}
-                setSelectedWarehouse={setSelectedWarehouse}
-                selectedAssetType={selectedAssetType}
-                setSelectedAssetType={setSelectedAssetType}
-                selectedModel={selectedModel}
-                setSelectedModel={setSelectedModel}
-                selectedAssetStatus={selectedAssetStatus}
-                setSelectedAssetStatus={setSelectedAssetStatus}
-                selectedConfiguration={selectedConfiguration}
-                setSelectedConfiguration={setSelectedConfiguration}
-                selectedProduct={selectedProduct}
-                setSelectedProduct={setSelectedProduct}
-                selectedStatus={selectedStatus}
-                setSelectedStatus={setSelectedStatus}
-                selectedSdCardSize={selectedSdCardSize}
-                setSelectedSdCardSize={setSelectedSdCardSize}
-                selectedOrderType={selectedOrderType}
-                setSelectedOrderType={setSelectedOrderType}
-                selectedAgreementType={selectedAgreementType}
-                setSelectedAgreementType={setSelectedAgreementType}
-                selectedAssetGroup={selectedAssetGroup}
-                setSelectedAssetGroup={setSelectedAssetGroup}
-                selectedAssetCondition={selectedAssetCondition}
-                setSelectedAssetCondition={setSelectedAssetCondition}
-                fromDate={devicesFromDate}
-                setFromDate={setDevicesFromDate}
-                showDeleted={showDeleted}
-                setShowDeleted={setShowDeleted}
-                searchQuery={searchQuery}
-                setSearchQuery={setSearchQuery}
-              />
+              <Suspense fallback={<TabFallback />}>
+                <DevicesTable
+                  devices={devices}
+                  selectedWarehouse={selectedWarehouse}
+                  setSelectedWarehouse={setSelectedWarehouse}
+                  selectedAssetType={selectedAssetType}
+                  setSelectedAssetType={setSelectedAssetType}
+                  selectedModel={selectedModel}
+                  setSelectedModel={setSelectedModel}
+                  selectedAssetStatus={selectedAssetStatus}
+                  setSelectedAssetStatus={setSelectedAssetStatus}
+                  selectedConfiguration={selectedConfiguration}
+                  setSelectedConfiguration={setSelectedConfiguration}
+                  selectedProduct={selectedProduct}
+                  setSelectedProduct={setSelectedProduct}
+                  selectedStatus={selectedStatus}
+                  setSelectedStatus={setSelectedStatus}
+                  selectedSdCardSize={selectedSdCardSize}
+                  setSelectedSdCardSize={setSelectedSdCardSize}
+                  selectedOrderType={selectedOrderType}
+                  setSelectedOrderType={setSelectedOrderType}
+                  selectedAgreementType={selectedAgreementType}
+                  setSelectedAgreementType={setSelectedAgreementType}
+                  selectedAssetGroup={selectedAssetGroup}
+                  setSelectedAssetGroup={setSelectedAssetGroup}
+                  selectedAssetCondition={selectedAssetCondition}
+                  setSelectedAssetCondition={setSelectedAssetCondition}
+                  fromDate={devicesFromDate}
+                  setFromDate={setDevicesFromDate}
+                  showDeleted={showDeleted}
+                  setShowDeleted={setShowDeleted}
+                  searchQuery={searchQuery}
+                  setSearchQuery={setSearchQuery}
+                />
+              </Suspense>
             </TabsContent>
             <TabsContent value='audit' className='flex-1 overflow-y-auto'>
-              <AuditTable
-                devices={devices}
-                selectedWarehouse={selectedWarehouse}
-                setSelectedWarehouse={setSelectedWarehouse}
-                selectedAssetType={selectedAssetType}
-                setSelectedAssetType={setSelectedAssetType}
-                selectedModel={selectedModel}
-                setSelectedModel={setSelectedModel}
-                selectedAssetStatus={selectedAssetStatus}
-                setSelectedAssetStatus={setSelectedAssetStatus}
-                selectedConfiguration={selectedConfiguration}
-                setSelectedConfiguration={setSelectedConfiguration}
-                selectedProduct={selectedProduct}
-                setSelectedProduct={setSelectedProduct}
-                selectedOrderType={selectedOrderType}
-                setSelectedOrderType={setSelectedOrderType}
-                selectedAssetGroup={selectedAssetGroup}
-                setSelectedAssetGroup={setSelectedAssetGroup}
-                selectedAssetCondition={selectedAssetCondition}
-                setSelectedAssetCondition={setSelectedAssetCondition}
-                fromDate={fromDate}
-                setFromDate={setFromDate}
-                searchQuery={searchQuery}
-                setSearchQuery={setSearchQuery}
-                onUpdateAssetCheck={handleUpdateAssetCheck}
-                onClearAllChecks={handleClearAllChecks}
-                userRole={userRole || 'unknown'}
-              />
+              <Suspense fallback={<TabFallback />}>
+                <AuditTable
+                  devices={devices}
+                  selectedWarehouse={selectedWarehouse}
+                  setSelectedWarehouse={setSelectedWarehouse}
+                  selectedAssetType={selectedAssetType}
+                  setSelectedAssetType={setSelectedAssetType}
+                  selectedModel={selectedModel}
+                  setSelectedModel={setSelectedModel}
+                  selectedAssetStatus={selectedAssetStatus}
+                  setSelectedAssetStatus={setSelectedAssetStatus}
+                  selectedConfiguration={selectedConfiguration}
+                  setSelectedConfiguration={setSelectedConfiguration}
+                  selectedProduct={selectedProduct}
+                  setSelectedProduct={setSelectedProduct}
+                  selectedOrderType={selectedOrderType}
+                  setSelectedOrderType={setSelectedOrderType}
+                  selectedAssetGroup={selectedAssetGroup}
+                  setSelectedAssetGroup={setSelectedAssetGroup}
+                  selectedAssetCondition={selectedAssetCondition}
+                  setSelectedAssetCondition={setSelectedAssetCondition}
+                  fromDate={fromDate}
+                  setFromDate={setFromDate}
+                  searchQuery={searchQuery}
+                  setSearchQuery={setSearchQuery}
+                  onUpdateAssetCheck={handleUpdateAssetCheck}
+                  onClearAllChecks={handleClearAllChecks}
+                  userRole={userRole || 'unknown'}
+                />
+              </Suspense>
             </TabsContent>
             <TabsContent value='activity' className='flex-1 overflow-y-auto'>
-              <ActivityLogs />
+              <Suspense fallback={<TabFallback />}>
+                <ActivityLogs />
+              </Suspense>
             </TabsContent>
           </Tabs>
         </div>
