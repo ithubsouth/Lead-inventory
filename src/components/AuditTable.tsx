@@ -920,7 +920,7 @@ const AuditTable: React.FC<AuditTableProps> = ({
             <TableBody>
               {paginatedDevices.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={12} style={{ textAlign: 'center', fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db' }}>
+                  <TableCell colSpan={14} style={{ textAlign: 'center', fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db' }}>
                     No devices found with current filters.
                   </TableCell>
                 </TableRow>
