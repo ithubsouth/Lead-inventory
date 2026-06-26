@@ -71,6 +71,7 @@ export interface Order {
   warehouse: string;
   sales_order: string | null;
   deal_id: string | null;
+  brand?: string | null;
   school_name: string;
   nucleus_id: string | null;
   serial_numbers: string[];
@@ -95,6 +96,7 @@ export interface Device {
   order_type: string;
   warehouse: string;
   deal_id: string | null;
+  brand?: string | null;
   nucleus_id: string | null;
   school_name: string;
   asset_type: ASSET_TYPES;

@@ -6,6 +6,7 @@ export interface OMSOrderDetails {
   nucleusId: string;
   schoolName: string;
   agreementType: string;
+  brand: string;
 }
 
 export const fetchOrderDetails = async (soNo: string): Promise<OMSOrderDetails | null> => {
@@ -36,6 +37,7 @@ export const fetchOrderDetails = async (soNo: string): Promise<OMSOrderDetails |
       nucleusId: firstDevice?.nucleusId?.toString() || '',
       schoolName: firstDevice?.schoolName || '',
       agreementType: data.agreementType || '',
+      brand: data.brand || '',
     };
   } catch (error: any) {
     console.error('Error fetching OMS order details:', error);

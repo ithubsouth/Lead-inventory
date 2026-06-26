@@ -12,6 +12,7 @@ import {
   configurations,
   tvConfigurations,
   products,
+  brands,
   sdCardSizes,
   coverModels,
   pendriveSizes,
@@ -50,6 +51,8 @@ interface SalesOrderSuggestion {
   schoolName: string;
   dealId?: string;
   nucleusId?: string;
+  brand?: string;
+  agreementType?: string;
   orderType: string;
   location: string;
   assetType: string;
@@ -69,6 +72,8 @@ interface UnifiedAssetFormProps {
   setNucleusId: (value: string) => void;
   schoolName: string;
   setSchoolName: (value: string) => void;
+  brand: string;
+  setBrand: (value: string) => void;
   agreementType: string;
   setAgreementType: (value: string) => void;
   loading: boolean;
@@ -90,6 +95,8 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
   setNucleusId,
   schoolName,
   setSchoolName,
+  brand,
+  setBrand,
   agreementType,
   setAgreementType,
   loading,
@@ -146,6 +153,8 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
           schoolName: order.school_name || '',
           dealId: order.deal_id,
           nucleusId: order.nucleus_id,
+          brand: order.brand,
+          agreementType: order.agreement_type,
           orderType: order.order_type,
           location: order.warehouse,
           assetType: order.asset_type,
@@ -325,6 +334,8 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
       setSchoolName(firstOrder.school_name || '');
       setDealId(firstOrder.deal_id || '');
       setNucleusId(firstOrder.nucleus_id || '');
+      setBrand(firstOrder.brand || '');
+      setAgreementType(firstOrder.agreement_type || '');
       setSalesOrder(selectedSalesOrder);
       setSearchQuery(selectedSalesOrder);
       const groupedAssets = new Map<string, AssetItem>();
@@ -418,6 +429,7 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
     setSchoolName('');
     setDealId('');
     setNucleusId('');
+    setBrand('');
     setAgreementType('');
   };
 
@@ -439,6 +451,7 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
         setDealId(orderDetails.dealId);
         setNucleusId(orderDetails.nucleusId);
         setSchoolName(orderDetails.schoolName);
+        setBrand(orderDetails.brand);
         setAgreementType(orderDetails.agreementType);
         
         toast({
@@ -712,6 +725,7 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
             warehouse: asset.location,
             sales_order: salesOrderId,
             deal_id: dealId || null,
+            brand: brand || null,
             school_name: schoolName,
             nucleus_id: nucleusId || null,
             agreement_type: agreementType || null,
@@ -740,6 +754,7 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
             warehouse: asset.location,
             sales_order: salesOrderId,
             deal_id: dealId || null,
+            brand: brand || null,
             school_name: schoolName,
             nucleus_id: nucleusId || null,
             status: materialType === 'Inward' ? 'Available' : 'Assigned',
@@ -807,6 +822,11 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
           const { error: updateError } = await supabase
             .from('orders')
             .update({
+              deal_id: dealId || null,
+              brand: brand || null,
+              school_name: schoolName,
+              nucleus_id: nucleusId || null,
+              agreement_type: agreementType || null,
               quantity: asset.quantity,
               serial_numbers: assetSerials,
               updated_by: userEmail,
@@ -826,11 +846,12 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
               model: asset.model,
               serial_number: serialNumber,
               warehouse: asset.location,
-              sales_order: salesOrderId,
-              deal_id: dealId || null,
-              school_name: schoolName,
-              nucleus_id: nucleusId || null,
-              status: materialType === 'Inward' ? 'Available' : 'Assigned',
+            sales_order: salesOrderId,
+            deal_id: dealId || null,
+            brand: brand || null,
+            school_name: schoolName,
+            nucleus_id: nucleusId || null,
+            status: materialType === 'Inward' ? 'Available' : 'Assigned',
               material_type: materialType,
               order_id: asset.orderId,
               configuration: asset.configuration || null,
@@ -856,10 +877,11 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
               quantity: asset.quantity,
               warehouse: asset.location,
               sales_order: salesOrderId,
-              deal_id: dealId || null,
-              school_name: schoolName,
-              nucleus_id: nucleusId || null,
-              agreement_type: agreementType || null,
+            deal_id: dealId || null,
+            brand: brand || null,
+            school_name: schoolName,
+            nucleus_id: nucleusId || null,
+            agreement_type: agreementType || null,
               serial_numbers: assetSerials,
               order_date: new Date().toISOString(),
               configuration: asset.configuration || null,
@@ -883,11 +905,12 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
               model: asset.model,
               serial_number: serialNumber,
               warehouse: asset.location,
-              sales_order: salesOrderId,
-              deal_id: dealId || null,
-              school_name: schoolName,
-              nucleus_id: nucleusId || null,
-              status: materialType === 'Inward' ? 'Available' : 'Assigned',
+            sales_order: salesOrderId,
+            deal_id: dealId || null,
+            brand: brand || null,
+            school_name: schoolName,
+            nucleus_id: nucleusId || null,
+            status: materialType === 'Inward' ? 'Available' : 'Assigned',
               material_type: materialType,
               order_id: orderData.id,
               configuration: asset.configuration || null,
@@ -1531,14 +1554,13 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
             <label style={{ fontSize: '12px', display: 'block', marginBottom: '4px' }}>
               Order Type <span style={{ color: '#ef4444' }}>*</span>
             </label>
-            <select
+            <ComboInput
+              fieldKey="order_type"
+              baseOptions={orderTypes}
               value={orderType}
-              onChange={(e) => setOrderType(e.target.value)}
-              className="select-base"
-            >
-              <option value="">Select Order Type</option>
-              {orderTypes.map(t => <option key={t} value={t}>{t}</option>)}
-            </select>
+              onChange={setOrderType}
+              placeholder="Select Order Type"
+            />
           </div>
           <div>
             <label style={{ fontSize: '12px', display: 'block', marginBottom: '4px' }}>Sales Order</label>
@@ -1607,17 +1629,26 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
             />
           </div>
           <div>
+            <label style={{ fontSize: '12px', display: 'block', marginBottom: '4px' }}>Brand</label>
+            <ComboInput
+              fieldKey="brand"
+              baseOptions={brands}
+              value={brand}
+              onChange={setBrand}
+              placeholder="Select Brand"
+              showArrow={false}
+            />
+          </div>
+          <div>
             <label style={{ fontSize: '12px', display: 'block', marginBottom: '4px' }}>Agreement Type</label>
-            <select
+            <ComboInput
+              fieldKey="agreement_type"
+              baseOptions={Array.from(agreementTypes)}
               value={agreementType}
-              onChange={(e) => setAgreementType(e.target.value)}
-              className="select-base"
-            >
-              <option value="">Select Agreement Type</option>
-              {agreementTypes.map(type => (
-                <option key={type} value={type}>{type}</option>
-              ))}
-            </select>
+              onChange={setAgreementType}
+              placeholder="Select Agreement Type"
+              showArrow={false}
+            />
           </div>
         </div>
       </div>
@@ -1793,15 +1824,15 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
         <button
           onClick={() => {
             const headers = [
-              'Sales Order', 'Deal ID', 'School Name', 'Nucleus ID', 'Agreement Type',
+              'Sales Order', 'Deal ID', 'Brand', 'School Name', 'Nucleus ID', 'Agreement Type',
               'Order Type', 'Asset Type', 'Model', 'Configuration', 'Product',
               'SD Card Size', 'Profile ID', 'Location', 'Quantity', 'Serial Number',
               'Asset Status', 'Asset Group'
             ];
             const sampleRows = [
-              ['SO-1-abcde', 'DEAL123', 'School A', 'NUC001', 'PX', 'Hardware', 'Tablet', 'Lenovo TB301XU', '4G+64 GB (Android-13)', 'Lead', '128 GB', '', 'Trichy', '3', 'SN001', '', ''],
-              ['SO-1-abcde', 'DEAL123', 'School A', 'NUC001', 'PX', 'Hardware', 'Tablet', 'Lenovo TB301XU', '4G+64 GB (Android-13)', 'Lead', '128 GB', '', 'Trichy', '3', 'SN002', '', ''],
-              ['SO-1-abcde', 'DEAL123', 'School A', 'NUC001', 'PX', 'Hardware', 'Tablet', 'Lenovo TB301XU', '4G+64 GB (Android-13)', 'Lead', '128 GB', '', 'Trichy', '3', 'SN003', '', ''],
+              ['SO-1-abcde', 'DEAL123', 'BrandX', 'School A', 'NUC001', 'PX', 'Hardware', 'Tablet', 'Lenovo TB301XU', '4G+64 GB (Android-13)', 'Lead', '128 GB', '', 'Trichy', '3', 'SN001', '', ''],
+              ['SO-1-abcde', 'DEAL123', 'BrandX', 'School A', 'NUC001', 'PX', 'Hardware', 'Tablet', 'Lenovo TB301XU', '4G+64 GB (Android-13)', 'Lead', '128 GB', '', 'Trichy', '3', 'SN002', '', ''],
+              ['SO-1-abcde', 'DEAL123', 'BrandX', 'School A', 'NUC001', 'PX', 'Hardware', 'Tablet', 'Lenovo TB301XU', '4G+64 GB (Android-13)', 'Lead', '128 GB', '', 'Trichy', '3', 'SN003', '', ''],
             ];
 
             const quote = (v: any) => {
@@ -1876,7 +1907,7 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
 
               const headers = parseLine(lines[0]);
               const expectedHeaders = [
-                'Sales Order', 'Deal ID', 'School Name', 'Nucleus ID', 'Agreement Type',
+                'Sales Order', 'Deal ID', 'Brand', 'School Name', 'Nucleus ID', 'Agreement Type',
                 'Order Type', 'Asset Type', 'Model', 'Configuration', 'Product',
                 'SD Card Size', 'Profile ID', 'Location', 'Quantity', 'Serial Number',
                 'Asset Status', 'Asset Group'
@@ -1909,6 +1940,7 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
 
                 const csvSalesOrder = get('Sales Order');
                 const dealIdVal = get('Deal ID');
+                const brandVal = get('Brand');
                 const schoolNameVal = get('School Name');
                 const nucleusIdVal = get('Nucleus ID');
                 const agreementTypeVal = get('Agreement Type');
@@ -1928,6 +1960,7 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
                 // Global form values
                 if (csvSalesOrder && !salesOrder) setSalesOrder(csvSalesOrder);
                 if (dealIdVal && !dealId) setDealId(dealIdVal);
+                if (brandVal && !brand) setBrand(brandVal);
                 if (schoolNameVal && !schoolName) setSchoolName(schoolNameVal);
                 if (nucleusIdVal && !nucleusId) setNucleusId(nucleusIdVal);
                 if (agreementTypeVal && !agreementType) {

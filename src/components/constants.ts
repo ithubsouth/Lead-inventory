@@ -64,6 +64,16 @@ export const products = [
   'Pinnacle',
   'Techbook',
   'BoardAce',
+  'Fluento',
+];
+
+export const brands = [
+  'Lead Active',
+  'Lead Techbook',
+  'Propel',
+  'Pinnacle',
+  'Boardace',
+  'Fluento',
 ];
 
 export const coverModels = [
@@ -122,7 +132,7 @@ export const locations = [
 ];
 
 export const agreementTypes = [
-  'PX', 'PY', 'PZ', 'PAA', 'PB', 'PC', 'PD', 'PE', 'PF',
+  'PX', 'PY', 'PZ', 'PAA', 'PB', 'PC', 'PD', 'PE', 'PF', 'PG',
 ] as const;
 
 export const assetStatuses = [

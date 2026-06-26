@@ -19,6 +19,7 @@ import {
   configurations,
   tvConfigurations,
   products,
+  brands,
   sdCardSizes,
   locations,
   assetStatuses,
@@ -29,7 +30,9 @@ import {
   assetTypes,
   additionalAssetTypes,
   assetModels,
+  agreementTypes,
 } from './constants';
+import ComboInput from './ComboInput';
 
 interface EditOrderFormProps {
   order: Order;
@@ -267,63 +270,23 @@ const EditOrderForm: React.FC<EditOrderFormProps> = ({ order, onSave, onCancel }
   };
 
   const validateForm = () => {
-    if (!orderTypes.includes(formData.order_type)) {
-      toast({ title: 'Error', description: `Order type must be one of: ${orderTypes.join(', ')}`, variant: 'destructive' });
+    if (!formData.order_type) {
+      toast({ title: 'Error', description: 'Order type is required', variant: 'destructive' });
       return false;
     }
     if (!formData.school_name?.trim()) {
       toast({ title: 'Error', description: 'School Name is required', variant: 'destructive' });
       return false;
     }
-    if (!locations.includes(formData.warehouse)) {
-      toast({ title: 'Error', description: `Warehouse must be one of: ${locations.join(', ')}`, variant: 'destructive' });
+    if (!formData.warehouse) {
+      toast({ title: 'Error', description: 'Warehouse is required', variant: 'destructive' });
       return false;
     }
-    if (!allAssetTypes.includes(formData.asset_type as any)) {
-      toast({ title: 'Error', description: `Asset type must be one of: ${allAssetTypes.join(', ')}`, variant: 'destructive' });
+    if (!formData.asset_type) {
+      toast({ title: 'Error', description: 'Asset type is required', variant: 'destructive' });
       return false;
     }
-    // Validate model based on asset type
-    if (formData.asset_type === 'Tablet' && formData.model && !tabletModels.includes(formData.model)) {
-      toast({ title: 'Error', description: `Tablet model must be one of: ${tabletModels.join(', ')}`, variant: 'destructive' });
-      return false;
-    }
-    if (formData.asset_type === 'TV' && formData.model && !tvModels.includes(formData.model)) {
-      toast({ title: 'Error', description: `TV model must be one of: ${tvModels.join(', ')}`, variant: 'destructive' });
-      return false;
-    }
-    if (formData.asset_type === 'Cover' && formData.model && !coverModels.includes(formData.model)) {
-      toast({ title: 'Error', description: `Cover model must be one of: ${coverModels.join(', ')}`, variant: 'destructive' });
-      return false;
-    }
-    if (formData.asset_type === 'Pendrive' && formData.model && !pendriveSizes.includes(formData.model)) {
-      toast({ title: 'Error', description: `Pendrive model must be one of: ${pendriveSizes.join(', ')}`, variant: 'destructive' });
-      return false;
-    }
-    if (formData.asset_type === 'SD Card' && formData.model && !sdCardSizes.includes(formData.model)) {
-      toast({ title: 'Error', description: `SD Card model must be one of: ${sdCardSizes.join(', ')}`, variant: 'destructive' });
-      return false;
-    }
-    if (additionalAssetTypes.includes(formData.asset_type) && hasModelsForType(formData.asset_type) && formData.model && !assetModels[formData.asset_type].includes(formData.model)) {
-      toast({ title: 'Error', description: `${formData.asset_type} model must be one of: ${assetModels[formData.asset_type].join(', ')}`, variant: 'destructive' });
-      return false;
-    }
-    if (formData.configuration && formData.asset_type === 'Tablet' && !configurations.includes(formData.configuration)) {
-      toast({ title: 'Error', description: `Tablet configuration must be one of: ${configurations.join(', ')}`, variant: 'destructive' });
-      return false;
-    }
-    if (formData.configuration && formData.asset_type === 'TV' && !tvConfigurations.includes(formData.configuration)) {
-      toast({ title: 'Error', description: `TV configuration must be one of: ${tvConfigurations.join(', ')}`, variant: 'destructive' });
-      return false;
-    }
-    if (formData.product && !products.includes(formData.product)) {
-      toast({ title: 'Error', description: `Product must be one of: ${products.join(', ')}`, variant: 'destructive' });
-      return false;
-    }
-    if (formData.sd_card_size && !sdCardSizes.includes(formData.sd_card_size)) {
-      toast({ title: 'Error', description: `SD Card Size must be one of: ${sdCardSizes.join(', ')}`, variant: 'destructive' });
-      return false;
-    }
+
     const invalidStatuses = devices.some(device => !assetStatuses.includes(device.asset_status));
     if (invalidStatuses) {
       toast({
@@ -387,8 +350,10 @@ const EditOrderForm: React.FC<EditOrderFormProps> = ({ order, onSave, onCancel }
         warehouse: formData.warehouse,
         sales_order: formData.sales_order,
         deal_id: formData.deal_id,
+        brand: formData.brand,
         school_name: formData.school_name,
         nucleus_id: formData.nucleus_id,
+        agreement_type: formData.agreement_type,
         configuration: formData.configuration,
         product: formData.product,
         sd_card_size: formData.sd_card_size,
@@ -451,6 +416,7 @@ const EditOrderForm: React.FC<EditOrderFormProps> = ({ order, onSave, onCancel }
           if (formData.warehouse !== originalDevice.warehouse) changes.warehouse = formData.warehouse;
           if (formData.sales_order !== originalDevice.sales_order) changes.sales_order = formData.sales_order;
           if (formData.deal_id !== originalDevice.deal_id) changes.deal_id = formData.deal_id;
+          if (formData.brand !== originalDevice.brand) changes.brand = formData.brand;
           if (formData.school_name !== originalDevice.school_name) changes.school_name = formData.school_name;
           if (formData.nucleus_id !== originalDevice.nucleus_id) changes.nucleus_id = formData.nucleus_id;
           if (newMaterialType !== originalDevice.material_type) changes.material_type = newMaterialType;
@@ -478,6 +444,7 @@ const EditOrderForm: React.FC<EditOrderFormProps> = ({ order, onSave, onCancel }
             warehouse: formData.warehouse,
             sales_order: formData.sales_order || null,
             deal_id: formData.deal_id || null,
+            brand: formData.brand || null,
             school_name: formData.school_name,
             nucleus_id: formData.nucleus_id || null,
             status: newStatus,
@@ -591,22 +558,16 @@ const EditOrderForm: React.FC<EditOrderFormProps> = ({ order, onSave, onCancel }
             <h2 className='text-lg font-semibold text-gray-800'>Order Details</h2>
           </CardHeader>
           <CardContent className='space-y-4 bg-white'>
-            <div className='grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4'>
+            <div className='grid grid-cols-1 md:grid-cols-3 lg:grid-cols-7 gap-4'>
               <div>
                 <Label className='text-xs font-medium text-gray-700'>Order Type *</Label>
-                <Select
+                <ComboInput
+                  fieldKey="order_type"
+                  baseOptions={orderTypes}
                   value={formData.order_type || ''}
-                  onValueChange={(value) => setFormData(prev => ({ ...prev, order_type: value }))}
-                >
-                  <SelectTrigger className='text-xs bg-white border-gray-300'>
-                    <SelectValue placeholder='Select order type' />
-                  </SelectTrigger>
-                  <SelectContent className='z-[1000] bg-white shadow-lg border min-w-[150px]'>
-                    {orderTypes.map(type => (
-                      <SelectItem key={type} value={type} className='text-xs'>{type}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                  onChange={(value) => setFormData(prev => ({ ...prev, order_type: value }))}
+                  placeholder='Select order type'
+                />
               </div>
               <div>
                 <Label className='text-xs font-medium text-gray-700'>Sales Order</Label>
@@ -639,6 +600,28 @@ const EditOrderForm: React.FC<EditOrderFormProps> = ({ order, onSave, onCancel }
                   value={formData.nucleus_id || ''}
                   onChange={(e) => setFormData(prev => ({ ...prev, nucleus_id: e.target.value }))}
                   className='text-xs bg-white border-gray-300'
+                />
+              </div>
+              <div>
+                <Label className='text-xs font-medium text-gray-700'>Brand</Label>
+                <ComboInput
+                  fieldKey="brand"
+                  baseOptions={brands}
+                  value={formData.brand || ''}
+                  onChange={(value) => setFormData(prev => ({ ...prev, brand: value }))}
+                  placeholder='Select brand'
+                  showArrow={false}
+                />
+              </div>
+              <div>
+                <Label className='text-xs font-medium text-gray-700'>Agreement Type</Label>
+                <ComboInput
+                  fieldKey="agreement_type"
+                  baseOptions={Array.from(agreementTypes)}
+                  value={formData.agreement_type || ''}
+                  onChange={(value) => setFormData(prev => ({ ...prev, agreement_type: value }))}
+                  placeholder='Select type'
+                  showArrow={false}
                 />
               </div>
             </div>

@@ -9,13 +9,14 @@ interface ComboInputProps {
   onChange: (v: string) => void;
   placeholder?: string;
   allowAdd?: boolean;                // default true
+  showArrow?: boolean;               // NEW: default true
   className?: string;
   style?: React.CSSProperties;
 }
 
 export const ComboInput: React.FC<ComboInputProps> = ({
   fieldKey, baseOptions, value, onChange,
-  placeholder = 'Type or select', allowAdd = true, className, style,
+  placeholder = 'Type or select', allowAdd = true, showArrow = true, className, style,
 }) => {
   const { extras, addOption, removeOption, updateOption } = useCustomOptions(fieldKey);
   const [open, setOpen] = useState(false);
@@ -86,12 +87,9 @@ export const ComboInput: React.FC<ComboInputProps> = ({
   };
 
   return (
-    <div ref={ref} className={className} style={{ position: 'relative', ...style }}>
-      <div style={{
-        display: 'flex', alignItems: 'center',
-        border: '1px solid #d1d5db', borderRadius: 4, background: '#fff',
-        overflow: 'hidden'
-      }}>
+    <div ref={ref} className={`relative w-full ${className || ''}`} style={style}>
+      <div className="flex items-center w-full rounded-md border border-input bg-background text-sm ring-offset-background focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2 overflow-hidden"
+           style={{ height: '40px', minHeight: '40px' }}>
         <input
           type="text"
           value={query}
@@ -99,18 +97,21 @@ export const ComboInput: React.FC<ComboInputProps> = ({
           onChange={(e) => { setQuery(e.target.value); onChange(e.target.value); setOpen(true); }}
           onFocus={() => setOpen(true)}
           onKeyDown={handleKey}
-          style={{ flex: 1, minWidth: 0, padding: '8px', border: 'none', outline: 'none', fontSize: 14, background: 'transparent', borderRadius: 4 }}
+          className="flex-1 w-full px-3 py-2 bg-transparent border-none outline-none text-sm placeholder:text-muted-foreground"
+          style={{ height: '100%' }}
         />
         {query && (
           <button type="button" onClick={() => { setQuery(''); onChange(''); }}
-            style={{ padding: '0 4px', color: '#9ca3af', background: 'transparent', border: 'none', cursor: 'pointer', flexShrink: 0 }} aria-label="Clear">
+            className="px-1 text-muted-foreground hover:text-foreground bg-transparent border-none cursor-pointer flex-shrink-0" aria-label="Clear">
             <X size={14} />
           </button>
         )}
-        <button type="button" onClick={() => setOpen(o => !o)}
-          style={{ width: '32px', height: '32px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#6b7280', background: 'transparent', border: 'none', cursor: 'pointer', flexShrink: 0 }} aria-label="Toggle">
-          <ChevronDown size={16} />
-        </button>
+        {showArrow && (
+          <button type="button" onClick={() => setOpen(o => !o)}
+            className="w-8 h-full flex items-center justify-center text-muted-foreground hover:text-foreground bg-transparent border-none cursor-pointer flex-shrink-0 border-l border-input" aria-label="Toggle">
+            <ChevronDown size={16} />
+          </button>
+        )}
       </div>
       {open && (
         <div style={{

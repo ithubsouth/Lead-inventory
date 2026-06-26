@@ -330,6 +330,7 @@ const AuditTable: React.FC<AuditTableProps> = ({
             d.order_type,
             d.sales_order,
             d.deal_id,
+            d.brand,
             d.nucleus_id,
             d.school_name,
             d.asset_check || '',

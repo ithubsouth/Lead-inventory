@@ -52,6 +52,7 @@ const InventoryManagement = () => {
   const [dealId, setDealId] = useState('');
   const [nucleusId, setNucleusId] = useState('');
   const [schoolName, setSchoolName] = useState('');
+  const [brand, setBrand] = useState('');
   const [agreementType, setAgreementType] = useState('');
   const [tablets, setTablets] = useState<TabletItem[]>([]);
   const [tvs, setTvs] = useState<TVItem[]>([]);
@@ -60,7 +61,39 @@ const InventoryManagement = () => {
   const { toast } = useToast();
   const [userEmail, setUserEmail] = useState<string | null>(null);
   const [userRole, setUserRole] = useState<string | null>(null);
-  
+  const [activeTab, setActiveTab] = useState<string>('');
+  const [loadedTabs, setLoadedTabs] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    if (userRole) {
+      const initialTab = userRole === 'Reporter' ? 'view' : 'create';
+      setActiveTab(initialTab);
+    }
+  }, [userRole]);
+
+  useEffect(() => {
+    if (!activeTab) return;
+
+    const loadDataForTab = async () => {
+      if (loadedTabs.has(activeTab)) return;
+
+      if (activeTab === 'view' || activeTab === 'create') {
+        // 'create' needs some data for suggestions/validation sometimes, but mostly 'view' needs orders
+        await loadOrders();
+      }
+      if (activeTab === 'devices' || activeTab === 'audit') {
+        await loadDevices();
+      }
+      if (activeTab === 'order') {
+        await loadOrderSummary();
+      }
+
+      setLoadedTabs(prev => new Set(prev).add(activeTab));
+    };
+
+    loadDataForTab();
+  }, [activeTab, userRole]);
+
   useEffect(() => {
     const fetchUser = async () => {
       try {
@@ -80,20 +113,60 @@ const InventoryManagement = () => {
           .single();
         if (roleError) throw roleError;
         setUserRole(userData?.role || null);
-        if (!userData?.role) {
-          console.warn('No role found for user.');
-          toast({ title: 'Warning', description: 'No role assigned to user. Updates may fail.', variant: 'destructive' });
-        }
       } catch (error) {
         console.error('Error fetching user:', error);
-        toast({ title: 'Error', description: 'Failed to fetch user information.', variant: 'destructive' });
       }
     };
-    const fetchUserAndData = async () => {
-      await fetchUser();
-      await Promise.all([loadOrders(), loadDevices(), loadOrderSummary()]);
+    fetchUser();
+
+    // Set up Realtime subscriptions
+    const ordersChannel = supabase
+      .channel('orders-realtime')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'orders' },
+        () => {
+          console.log('Realtime update: orders table changed');
+          // Only refresh if the user has already loaded this data
+          setLoadedTabs(prev => {
+            const next = new Set(prev);
+            next.delete('view');
+            next.delete('order');
+            return next;
+          });
+          if (activeTab === 'view' || activeTab === 'order') {
+             activeTab === 'view' ? loadOrders() : loadOrderSummary();
+          }
+        }
+      )
+      .subscribe();
+
+    const devicesChannel = supabase
+      .channel('devices-realtime')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'devices' },
+        () => {
+          console.log('Realtime update: devices table changed');
+          setLoadedTabs(prev => {
+            const next = new Set(prev);
+            next.delete('devices');
+            next.delete('audit');
+            next.delete('order');
+            return next;
+          });
+          if (activeTab === 'devices' || activeTab === 'audit' || activeTab === 'order') {
+            if (activeTab === 'order') loadOrderSummary();
+            else loadDevices();
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(ordersChannel);
+      supabase.removeChannel(devicesChannel);
     };
-    fetchUserAndData();
   }, []);
 
   const loadOrders = async () => {
@@ -171,12 +244,12 @@ const InventoryManagement = () => {
         const salesOrder = order.sales_order || '';
         const groupKey = `${salesOrder}-${order.asset_type}-${order.model}-${order.warehouse}`;
         const groupOrders = orderGroups.get(groupKey) || [];
-        
+
         // Filter out blank serials from order.serial_numbers
         const orderSerials = (order.serial_numbers || [])
           .map((sn: string) => (sn ? sn.trim().toUpperCase() : null))
           .filter((sn: string | null): sn is string => sn !== null && sn !== '');
-        
+
         // Use actual device row count, not just serial number count
         const actualDeviceCount = deviceCountByOrderId.get(order.id) || 0;
         const deviceSerialCount = devicesByOrderId.get(order.id)?.length || 0;
@@ -377,17 +450,17 @@ const InventoryManagement = () => {
           else if (asset_type === 'TV') models = tvModels;
           else if (asset_type === 'SD Card') models = sdCardSizes;
           else if (asset_type === 'Pendrive') models = ['Pendrive'];
-          
+
           models.forEach(model => {
             const key = `${warehouse}-${asset_type}-${model}`;
             if (!summaryMap.has(key)) {
-              summaryMap.set(key, { 
-                warehouse, 
-                asset_type: asset_type as 'Tablet' | 'TV' | 'SD Card' | 'Pendrive', 
-                model, 
-                inward: 0, 
-                outward: 0, 
-                stock: 0 
+              summaryMap.set(key, {
+                warehouse,
+                asset_type: asset_type as 'Tablet' | 'TV' | 'SD Card' | 'Pendrive',
+                model,
+                inward: 0,
+                outward: 0,
+                stock: 0
               });
             }
           });
@@ -397,13 +470,13 @@ const InventoryManagement = () => {
       ordersData?.forEach((order: any) => {
         const key = `${order.warehouse}-${order.asset_type}-${order.model}`;
         if (!summaryMap.has(key)) {
-          summaryMap.set(key, { 
-            warehouse: order.warehouse, 
-            asset_type: order.asset_type as 'Tablet' | 'TV' | 'SD Card' | 'Pendrive', 
-            model: order.model, 
-            inward: 0, 
-            outward: 0, 
-            stock: 0 
+          summaryMap.set(key, {
+            warehouse: order.warehouse,
+            asset_type: order.asset_type as 'Tablet' | 'TV' | 'SD Card' | 'Pendrive',
+            model: order.model,
+            inward: 0,
+            outward: 0,
+            stock: 0
           });
         }
         const summary = summaryMap.get(key)!;
@@ -430,7 +503,7 @@ const InventoryManagement = () => {
         }
       });
 
-      const summaries = Array.from(summaryMap.values()).sort((a, b) => 
+      const summaries = Array.from(summaryMap.values()).sort((a, b) =>
         a.warehouse.localeCompare(b.warehouse) ||
         a.asset_type.localeCompare(b.asset_type) ||
         a.model.localeCompare(b.model)
@@ -496,7 +569,7 @@ const InventoryManagement = () => {
         )
       );
 
-      const updates = { 
+      const updates = {
         asset_check: validStatus,
         audited_at: new Date().toISOString(),
         audited_by: userEmail,
@@ -523,8 +596,8 @@ const InventoryManagement = () => {
 
       if (data && data.length > 0) {
         console.log(`Successfully updated device ${deviceId}:`, data);
-        toast({ 
-          title: 'Success', 
+        toast({
+          title: 'Success',
           description: `Asset check set to ${validStatus} for device ${deviceId}.`,
         });
       } else {
@@ -534,10 +607,10 @@ const InventoryManagement = () => {
           )
         );
         console.warn(`No device found with ID ${deviceId}`);
-        toast({ 
-          title: 'Warning', 
-          description: `No device found with ID ${deviceId}.`, 
-          variant: 'destructive' 
+        toast({
+          title: 'Warning',
+          description: `No device found with ID ${deviceId}.`,
+          variant: 'destructive'
         });
       }
     } catch (error: any) {
@@ -545,10 +618,10 @@ const InventoryManagement = () => {
       const errorMessage = error.message?.includes('Failed to fetch')
         ? 'Network error: Failed to connect to Supabase. Check CORS or network settings.'
         : error.message || 'Unknown error';
-      toast({ 
-        title: 'Error', 
-        description: `Failed to set asset check to ${checkStatus}: ${errorMessage}`, 
-        variant: 'destructive' 
+      toast({
+        title: 'Error',
+        description: `Failed to set asset check to ${checkStatus}: ${errorMessage}`,
+        variant: 'destructive'
       });
     }
   };
@@ -744,8 +817,8 @@ const InventoryManagement = () => {
       }
     } catch (error: any) {
       console.error('Error in handleClearAllChecks:', error);
-      const message = error.message?.includes('Failed to fetch') 
-        ? 'Network error (CORS/fetch failed). Check browser console/Network tab and Supabase CORS settings.' 
+      const message = error.message?.includes('Failed to fetch')
+        ? 'Network error (CORS/fetch failed). Check browser console/Network tab and Supabase CORS settings.'
         : error.message || 'Unknown error';
       toast({
         title: 'Error',
@@ -843,6 +916,8 @@ const InventoryManagement = () => {
                     setDealId={setDealId}
                     nucleusId={nucleusId}
                     setNucleusId={setNucleusId}
+                    brand={brand}
+                    setBrand={setBrand}
                     schoolName={schoolName}
                     setSchoolName={setSchoolName}
                     agreementType={agreementType}

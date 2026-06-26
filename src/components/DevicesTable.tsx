@@ -294,6 +294,7 @@ const DevicesTable: React.FC<DevicesTableProps> = ({
             device.serial_number || '',
             device.sales_order || '',
             device.deal_id || '',
+            device.brand || '',
             device.school_name || '',
             device.nucleus_id || '',
             device.asset_type || '',
@@ -462,6 +463,7 @@ const DevicesTable: React.FC<DevicesTableProps> = ({
       'order_type',
       'warehouse',
       'deal_id',
+      'brand',
       'nucleus_id',
       'school_name',
       'asset_type',
@@ -529,6 +531,7 @@ const DevicesTable: React.FC<DevicesTableProps> = ({
     order_type: '120px',
     warehouse: '120px',
     deal_id: '120px',
+    brand: '120px',
     nucleus_id: '120px',
     school_name: '150px',
     asset_type: '100px',
@@ -723,6 +726,7 @@ const DevicesTable: React.FC<DevicesTableProps> = ({
                     <TableHead style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', textAlign: 'left', position: 'sticky', top: 0, background: '#fff', zIndex: 20, width: columnWidths.order_type }}>Order Type</TableHead>
                     <TableHead style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', textAlign: 'left', position: 'sticky', top: 0, background: '#fff', zIndex: 20, width: columnWidths.warehouse }}>Warehouse</TableHead>
                     <TableHead style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', textAlign: 'left', position: 'sticky', top: 0, background: '#fff', zIndex: 20, width: columnWidths.deal_id }}>Deal ID</TableHead>
+                    <TableHead style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', textAlign: 'left', position: 'sticky', top: 0, background: '#fff', zIndex: 20, width: columnWidths.brand }}>Brand</TableHead>
                     <TableHead style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', textAlign: 'left', position: 'sticky', top: 0, background: '#fff', zIndex: 20, width: columnWidths.nucleus_id }}>Nucleus ID</TableHead>
                     <TableHead style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', textAlign: 'left', position: 'sticky', top: 0, background: '#fff', zIndex: 20, width: columnWidths.school_name }}>School Name</TableHead>
                     <TableHead style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', textAlign: 'left', position: 'sticky', top: 0, background: '#fff', zIndex: 20, width: columnWidths.asset_type }}>Asset Type</TableHead>
@@ -759,6 +763,7 @@ const DevicesTable: React.FC<DevicesTableProps> = ({
                         <TableCell style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', width: columnWidths.order_type }}>{device.order_type || ''}</TableCell>
                         <TableCell style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', width: columnWidths.warehouse }}>{device.warehouse || ''}</TableCell>
                         <TableCell style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', width: columnWidths.deal_id }}>{device.deal_id || ''}</TableCell>
+                        <TableCell style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', width: columnWidths.brand }}>{device.brand || ''}</TableCell>
                         <TableCell style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', width: columnWidths.nucleus_id }}>{device.nucleus_id || ''}</TableCell>
                         <TableCell style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', width: columnWidths.school_name }}>{device.school_name || ''}</TableCell>
                         <TableCell style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', width: columnWidths.asset_type }}>{device.asset_type || ''}</TableCell>
@@ -901,6 +906,7 @@ const DevicesTable: React.FC<DevicesTableProps> = ({
                     <p><strong>Order Type:</strong> {viewingDevice.order_type || ''}</p>
                     <p><strong>Warehouse:</strong> {viewingDevice.warehouse || ''}</p>
                     <p><strong>Deal ID:</strong> {viewingDevice.deal_id || ''}</p>
+                    <p><strong>Brand:</strong> {viewingDevice.brand || ''}</p>
                     <p><strong>Nucleus ID:</strong> {viewingDevice.nucleus_id || ''}</p>
                     <p><strong>School Name:</strong> {viewingDevice.school_name || ''}</p>
                     <p><strong>Asset Type:</strong> {viewingDevice.asset_type || ''}</p>
