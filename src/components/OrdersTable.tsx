@@ -130,76 +130,45 @@ const OrdersTable: React.FC<OrdersTableProps> = ({
     };
   }, []);
 
-  // Compute unique values for dropdown options with dependent filtering
+  // Compute unique values for dropdown options with optimized single-pass calculation
   const uniqueValues = useMemo(() => {
-    const filteredBaseOrders = orders.filter((order) => showDeleted ? true : !order.is_deleted);
-
-    const getFilteredOrders = (excludeFilter: string) => {
-      return filteredBaseOrders.filter((o) => {
-        return Object.entries({
-          warehouse: selectedWarehouse,
-          assetType: selectedAssetType,
-          model: selectedModel,
-          configuration: selectedConfiguration,
-          orderType: selectedOrderType,
-          product: selectedProduct,
-          status: selectedStatus,
-          sdCardSize: selectedSdCardSize,
-          fromDate,
-        })
-          .filter(([key]) => key !== excludeFilter)
-          .every(([key, filterValue]) => {
-            if (key === 'fromDate') {
-              if (!fromDate?.from || !fromDate?.to) return true;
-              if (!o.order_date) return false;
-              const orderDate = new Date(o.order_date);
-              const startOfDay = new Date(orderDate);
-              startOfDay.setHours(0, 0, 0, 0);
-              const endOfDay = new Date(orderDate);
-              endOfDay.setHours(23, 59, 59, 999);
-              const fromStart = new Date(fromDate.from);
-              fromStart.setHours(0, 0, 0, 0);
-              const toEnd = new Date(fromDate.to);
-              toEnd.setHours(23, 59, 59, 999);
-              return startOfDay >= fromStart && endOfDay <= toEnd;
-            }
-            const prop = key === 'warehouse' ? 'warehouse' :
-                        key === 'assetType' ? 'asset_type' :
-                        key === 'model' ? 'model' :
-                        key === 'configuration' ? 'configuration' :
-                        key === 'orderType' ? 'order_type' :
-                        key === 'product' ? 'product' :
-                        key === 'status' ? 'status' :
-                        key === 'sdCardSize' ? 'sd_card_size' : '';
-            const value = o[prop as keyof Order] || '';
-            return (filterValue as string[]).length === 0 || (filterValue as string[]).includes(value as string);
-          });
-      });
+    const vals = {
+      warehouses: new Set<string>(),
+      assetTypes: new Set<string>(),
+      models: new Set<string>(),
+      configurations: new Set<string>(),
+      orderTypes: new Set<string>(),
+      products: new Set<string>(),
+      statuses: new Set<string>(),
+      sdCardSizes: new Set<string>(),
     };
+
+    const baseList = showDeleted ? orders : orders.filter(o => !o.is_deleted);
+
+    baseList.forEach(o => {
+      if (o.warehouse) vals.warehouses.add(o.warehouse);
+      if (o.asset_type) vals.assetTypes.add(o.asset_type);
+      if (o.model) vals.models.add(o.model);
+      if (o.configuration) vals.configurations.add(o.configuration);
+      if (o.order_type) vals.orderTypes.add(o.order_type);
+      if (o.product) vals.products.add(o.product);
+      if (o.status) vals.statuses.add(o.status);
+      if (o.sd_card_size) vals.sdCardSizes.add(o.sd_card_size);
+    });
+
+    const sort = (s: Set<string>) => Array.from(s).sort();
 
     return {
-      warehouses: [...new Set(getFilteredOrders('warehouse').map(o => o.warehouse || ''))].filter(Boolean).sort(),
-      assetTypes: [...new Set(getFilteredOrders('assetType').map(o => o.asset_type || ''))].filter(Boolean).sort(),
-      models: [...new Set(getFilteredOrders('model').map(o => o.model || ''))].filter(Boolean).sort(),
-      configurations: [...new Set(getFilteredOrders('configuration').map(o => o.configuration || ''))].filter(Boolean).sort(),
-      orderTypes: [...new Set(getFilteredOrders('orderType').map(o => o.order_type || ''))].filter(Boolean).sort(),
-      products: [...new Set(getFilteredOrders('product').map(o => o.product || ''))].filter(Boolean).sort(),
-      statuses: [...new Set(getFilteredOrders('status').map(o => o.status || ''))].filter(Boolean).sort(),
-      sdCardSizes: [...new Set(getFilteredOrders('sdCardSize').map(o => o.sd_card_size || ''))].filter(Boolean).sort(),
+      warehouses: sort(vals.warehouses),
+      assetTypes: sort(vals.assetTypes),
+      models: sort(vals.models),
+      configurations: sort(vals.configurations),
+      orderTypes: sort(vals.orderTypes),
+      products: sort(vals.products),
+      statuses: sort(vals.statuses),
+      sdCardSizes: sort(vals.sdCardSizes),
     };
-  }, [
-    orders,
-    showDeleted,
-    fromDate,
-    selectedWarehouse,
-    selectedAssetType,
-    selectedModel,
-    selectedConfiguration,
-    selectedOrderType,
-    selectedProduct,
-    selectedStatus,
-    selectedSdCardSize,
-  ]);
+  }, [orders, showDeleted]);
 
   // Reset invalid filter selections
   useEffect(() => {
@@ -297,55 +266,48 @@ const OrdersTable: React.FC<OrdersTableProps> = ({
   // Sort filteredOrders by order_date (descending) and sales_order (ascending)
   const sortedOrders = useMemo(() => {
     return [...filteredOrders].sort((a, b) => {
-      const dateA = a.order_date ? new Date(a.order_date).getTime() : -Infinity;
-      const dateB = b.order_date ? new Date(b.order_date).getTime() : -Infinity;
-
-      if (dateA !== dateB) {
-        return dateB - dateA;
-      }
-
-      const salesOrderA = a.sales_order || '';
-      const salesOrderB = b.sales_order || '';
-      return salesOrderA.localeCompare(salesOrderB);
+      const dateA = a.order_date ? new Date(a.order_date).getTime() : 0;
+      const dateB = b.order_date ? new Date(b.order_date).getTime() : 0;
+      if (dateA !== dateB) return dateB - dateA;
+      return (a.sales_order || '').localeCompare(b.sales_order || '');
     });
   }, [filteredOrders]);
 
-  // Group orders by sales_order while preserving sort order
-  const ordersBySalesOrder = useMemo(() => {
-    return sortedOrders.reduce((acc, order, index) => {
-      const salesOrder = order.sales_order || 'No Sales Order';
-      if (!acc[salesOrder]) {
-        acc[salesOrder] = [];
-      }
-      acc[salesOrder].push({ ...order, originalIndex: index });
-      return acc;
-    }, {} as Record<string, (Order & { originalIndex: number })[]>);
+  // Efficiently calculate order counts (e.g. 1/3) and find duplicates in one pass
+  const { ordersWithCounts, duplicateSerials } = useMemo(() => {
+    const counts: Record<string, number> = {};
+    const serialMap: Record<string, Set<string>> = {};
+    const duplicates = new Set<string>();
+
+    // Pass 1: Count totals and track serials per Sales Order for duplicate detection
+    sortedOrders.forEach(o => {
+      const so = o.sales_order || 'No Sales Order';
+      counts[so] = (counts[so] || 0) + 1;
+
+      if (!serialMap[so]) serialMap[so] = new Set();
+      (o.serial_numbers || []).forEach(sn => {
+        if (sn) {
+          if (serialMap[so].has(sn)) duplicates.add(sn);
+          else serialMap[so].add(sn);
+        }
+      });
+    });
+
+    // Pass 2: Assign sequence numbers
+    const currentCounts: Record<string, number> = {};
+    const result = sortedOrders.map(o => {
+      const so = o.sales_order || 'No Sales Order';
+      currentCounts[so] = (currentCounts[so] || 0) + 1;
+      return {
+        ...o,
+        orderCount: `${currentCounts[so]}/${counts[so]}`,
+      };
+    });
+
+    return { ordersWithCounts: result, duplicateSerials: duplicates };
   }, [sortedOrders]);
 
-  const ordersWithCounts = useMemo(() => {
-    return Object.entries(ordersBySalesOrder)
-      .flatMap(([salesOrder, orders]) =>
-        orders
-          .sort((a, b) => a.originalIndex - b.originalIndex)
-          .map((order, index) => ({
-            ...order,
-            orderCount: `${index + 1}/${orders.length}`,
-          }))
-      )
-      .sort((a, b) => a.originalIndex - b.originalIndex);
-  }, [ordersBySalesOrder]);
-
-  const duplicateSerials = useMemo(() => {
-    const duplicates = new Set<string>();
-    Object.values(ordersBySalesOrder).forEach(salesOrderGroup => {
-      const allSerials = salesOrderGroup.flatMap(order => order.serial_numbers || []);
-      const found = allSerials.filter((serial, index, arr) => serial && arr.indexOf(serial) !== index);
-      found.forEach(serial => duplicates.add(serial));
-    });
-    return duplicates;
-  }, [ordersBySalesOrder]);
-
-  // Debug logging
+  // Debug logging - kept minimal
   useEffect(() => {
     const invalidDates = filteredOrders.filter(o => o.order_date && isNaN(new Date(o.order_date).getTime())).map(o => ({
       id: o.id,
@@ -355,16 +317,7 @@ const OrdersTable: React.FC<OrdersTableProps> = ({
     if (invalidDates.length > 0) {
       console.warn('Invalid order_date values detected:', invalidDates);
     }
-
-    console.log('OrdersTable Summary:', {
-      totalOrders: orders.length,
-      filteredOrders: filteredOrders.length,
-      sortedOrders: sortedOrders.length,
-      ordersWithCounts: ordersWithCounts.length,
-      deletedOrders: ordersWithCounts.filter(o => o.is_deleted).length,
-      activeOrders: ordersWithCounts.filter(o => !o.is_deleted).length,
-    });
-  }, [orders, filteredOrders, sortedOrders, ordersWithCounts]);
+  }, [filteredOrders]);
 
   useEffect(() => {
     setCurrentOrdersPage(1);

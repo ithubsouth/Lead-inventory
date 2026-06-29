@@ -135,92 +135,61 @@ const DevicesTable: React.FC<DevicesTableProps> = ({
     sdCardSize: 'sd_card_size',
   };
 
-  // Compute unique values for dropdown options with dependent filtering
+  // Compute unique values for dropdown options with optimized single-pass filtering
   const uniqueValues = useMemo(() => {
+    const vals = {
+      warehouses: new Set<string>(),
+      assetTypes: new Set<string>(),
+      models: new Set<string>(),
+      assetStatuses: new Set<string>(),
+      configurations: new Set<string>(),
+      products: new Set<string>(),
+      statuses: new Set<string>(),
+      orderTypes: new Set<string>(),
+      assetGroups: new Set<string>(),
+      assetConditions: new Set<string>(),
+      sdCardSizes: new Set<string>(),
+    };
+
     if (!devices) return {
-      warehouses: [],
-      assetTypes: [],
-      models: [],
-      assetStatuses: [],
-      configurations: [],
-      products: [],
-      statuses: [],
-      orderTypes: [],
-      assetGroups: [],
-      assetConditions: [],
-      sdCardSizes: [],
+      warehouses: [], assetTypes: [], models: [], assetStatuses: [],
+      configurations: [], products: [], statuses: [], orderTypes: [],
+      assetGroups: [], assetConditions: [], sdCardSizes: []
     };
 
-    const filteredBaseDevices = devices.filter((device) => showDeleted ? true : !device.is_deleted);
+    const baseList = showDeleted ? devices : devices.filter(d => !d.is_deleted);
 
-    const getFilteredDevices = (excludeFilter: string) => {
-      return filteredBaseDevices.filter((d) => {
-        return Object.entries({
-          warehouse: selectedWarehouse,
-          assetType: selectedAssetType,
-          model: selectedModel,
-          assetStatus: selectedAssetStatus,
-          configuration: selectedConfiguration,
-          product: selectedProduct,
-          status: selectedStatus,
-          orderType: selectedOrderType,
-          assetGroup: selectedAssetGroup,
-          assetCondition: selectedAssetCondition,
-          sdCardSize: selectedSdCardSize,
-          fromDate,
-        })
-          .filter(([key]) => key !== excludeFilter)
-          .every(([key, filterValue]) => {
-            if (key === 'fromDate') {
-              if (!fromDate?.from || !fromDate?.to) return true;
-              if (!d.created_at) return false;
-              const createdAt = new Date(d.created_at);
-              const startOfDay = new Date(createdAt);
-              startOfDay.setHours(0, 0, 0, 0);
-              const endOfDay = new Date(createdAt);
-              endOfDay.setHours(23, 59, 59, 999);
-              const fromStart = new Date(fromDate.from);
-              fromStart.setHours(0, 0, 0, 0);
-              const toEnd = new Date(fromDate.to);
-              toEnd.setHours(23, 59, 59, 999);
-              return startOfDay >= fromStart && endOfDay <= toEnd;
-            }
-            const prop = propertyMap[key as keyof typeof propertyMap];
-            const value = d[prop as keyof Device] || '';
-            return (filterValue as string[]).length === 0 || (filterValue as string[]).includes(value as string);
-          });
-      });
-    };
+    // Single pass to collect all possible unique values from non-deleted devices
+    baseList.forEach(d => {
+      if (d.warehouse) vals.warehouses.add(d.warehouse);
+      if (d.asset_type) vals.assetTypes.add(d.asset_type);
+      if (d.model) vals.models.add(d.model);
+      if (d.asset_status) vals.assetStatuses.add(d.asset_status);
+      if (d.configuration) vals.configurations.add(d.configuration);
+      if (d.product) vals.products.add(d.product);
+      if (d.status) vals.statuses.add(d.status);
+      if (d.order_type) vals.orderTypes.add(d.order_type);
+      if (d.asset_group) vals.assetGroups.add(d.asset_group);
+      if (d.asset_condition) vals.assetConditions.add(d.asset_condition);
+      if (d.sd_card_size) vals.sdCardSizes.add(d.sd_card_size);
+    });
+
+    const sort = (s: Set<string>) => Array.from(s).sort();
 
     return {
-      warehouses: [...new Set(getFilteredDevices('warehouse').map(d => d.warehouse || ''))].filter(Boolean).sort(),
-      assetTypes: [...new Set(getFilteredDevices('assetType').map(d => d.asset_type || ''))].filter(Boolean).sort(),
-      models: [...new Set(getFilteredDevices('model').map(d => d.model || ''))].filter(Boolean).sort(),
-      assetStatuses: [...new Set(getFilteredDevices('assetStatus').map(d => d.asset_status || ''))].filter(Boolean).sort(),
-      configurations: [...new Set(getFilteredDevices('configuration').map(d => d.configuration || ''))].filter(Boolean).sort(),
-      products: [...new Set(getFilteredDevices('product').map(d => d.product || ''))].filter(Boolean).sort(),
-      statuses: [...new Set(getFilteredDevices('status').map(d => d.status || ''))].filter(Boolean).sort(),
-      orderTypes: [...new Set(getFilteredDevices('orderType').map(d => d.order_type || ''))].filter(Boolean).sort(),
-      assetGroups: [...new Set(getFilteredDevices('assetGroup').map(d => d.asset_group || ''))].filter(Boolean).sort(),
-      assetConditions: [...new Set(getFilteredDevices('assetCondition').map(d => d.asset_condition || ''))].filter(Boolean).sort(),
-      sdCardSizes: [...new Set(getFilteredDevices('sdCardSize').map(d => d.sd_card_size || ''))].filter(Boolean).sort(),
+      warehouses: sort(vals.warehouses),
+      assetTypes: sort(vals.assetTypes),
+      models: sort(vals.models),
+      assetStatuses: sort(vals.assetStatuses),
+      configurations: sort(vals.configurations),
+      products: sort(vals.products),
+      statuses: sort(vals.statuses),
+      orderTypes: sort(vals.orderTypes),
+      assetGroups: sort(vals.assetGroups),
+      assetConditions: sort(vals.assetConditions),
+      sdCardSizes: sort(vals.sdCardSizes),
     };
-  }, [
-    devices,
-    showDeleted,
-    fromDate,
-    selectedWarehouse,
-    selectedAssetType,
-    selectedModel,
-    selectedAssetStatus,
-    selectedConfiguration,
-    selectedProduct,
-    selectedStatus,
-    selectedOrderType,
-    selectedAssetGroup,
-    selectedAssetCondition,
-    selectedSdCardSize,
-  ]);
+  }, [devices, showDeleted]);
 
   // Reset invalid filter selections
   useEffect(() => {
@@ -274,62 +243,37 @@ const DevicesTable: React.FC<DevicesTableProps> = ({
   const filteredDevices = useMemo(() => {
     if (!devices) return [];
 
-    return devices.filter((device) => {
-      const matchesDeleted = showDeleted ? true : !device.is_deleted;
-      const matchesWarehouse = selectedWarehouse.length === 0 || selectedWarehouse.includes(device.warehouse || '');
-      const matchesAssetType = selectedAssetType.length === 0 || selectedAssetType.includes(device.asset_type || '');
-      const matchesModel = selectedModel.length === 0 || selectedModel.includes(device.model || '');
-      const matchesAssetStatus = selectedAssetStatus.length === 0 || selectedAssetStatus.includes(device.asset_status || '');
-      const matchesConfiguration = selectedConfiguration.length === 0 || selectedConfiguration.includes(device.configuration || '');
-      const matchesProduct = selectedProduct.length === 0 || selectedProduct.includes(device.product || '');
-      const matchesStatus = selectedStatus.length === 0 || selectedStatus.includes(device.status || '');
-      const matchesOrderType = selectedOrderType.length === 0 || selectedOrderType.includes(device.order_type || '');
-      const matchesAssetGroup = selectedAssetGroup.length === 0 || selectedAssetGroup.includes(device.asset_group || '');
-      const matchesAssetCondition = selectedAssetCondition.length === 0 || selectedAssetCondition.includes(device.asset_condition || '');
-      const matchesSdCardSize = selectedSdCardSize.length === 0 || selectedSdCardSize.includes(device.sd_card_size || '');
-      const matchesDateRange =
-        (!fromDate?.from || !device.created_at || new Date(device.created_at) >= new Date(fromDate.from.setHours(0, 0, 0, 0))) &&
-        (!fromDate?.to || !device.created_at || new Date(device.created_at) <= new Date(fromDate.to.setHours(23, 59, 59, 999)));
-      const matchesSearch = searchQuery.trim() === ''
-        ? true
-        : [
-            device.serial_number || '',
-            device.sales_order || '',
-            device.deal_id || '',
-            device.brand || '',
-            device.school_name || '',
-            device.nucleus_id || '',
-            device.asset_type || '',
-            device.model || '',
-            device.configuration || '',
-            device.asset_status || '',
-            device.asset_condition || '',
-            device.product || '',
-            device.status || '',
-            device.order_type || '',
-            device.asset_group || '',
-            device.far_code || '',
-            device.sd_card_size || '',
-            device.profile_id || '',
-            device.updated_by || '',
-          ].some((field) => String(field).toLowerCase().includes(searchQuery.toLowerCase()));
+    const searchLower = searchQuery.trim().toLowerCase();
+    const hasSearch = searchLower !== '';
 
-      return (
-        matchesDeleted &&
-        matchesWarehouse &&
-        matchesAssetType &&
-        matchesModel &&
-        matchesAssetStatus &&
-        matchesConfiguration &&
-        matchesProduct &&
-        matchesStatus &&
-        matchesOrderType &&
-        matchesAssetGroup &&
-        matchesAssetCondition &&
-        matchesSdCardSize &&
-        matchesDateRange &&
-        matchesSearch
-      );
+    return devices.filter((device) => {
+      if (!showDeleted && device.is_deleted) return false;
+
+      if (selectedWarehouse.length > 0 && !selectedWarehouse.includes(device.warehouse || '')) return false;
+      if (selectedAssetType.length > 0 && !selectedAssetType.includes(device.asset_type || '')) return false;
+      if (selectedModel.length > 0 && !selectedModel.includes(device.model || '')) return false;
+      if (selectedAssetStatus.length > 0 && !selectedAssetStatus.includes(device.asset_status || '')) return false;
+      if (selectedConfiguration.length > 0 && !selectedConfiguration.includes(device.configuration || '')) return false;
+      if (selectedProduct.length > 0 && !selectedProduct.includes(device.product || '')) return false;
+      if (selectedStatus.length > 0 && !selectedStatus.includes(device.status || '')) return false;
+      if (selectedOrderType.length > 0 && !selectedOrderType.includes(device.order_type || '')) return false;
+      if (selectedAssetGroup.length > 0 && !selectedAssetGroup.includes(device.asset_group || '')) return false;
+      if (selectedAssetCondition.length > 0 && !selectedAssetCondition.includes(device.asset_condition || '')) return false;
+      if (selectedSdCardSize.length > 0 && !selectedSdCardSize.includes(device.sd_card_size || '')) return false;
+
+      if (fromDate?.from || fromDate?.to) {
+        if (!device.created_at) return false;
+        const dDate = new Date(device.created_at).getTime();
+        if (fromDate.from && dDate < new Date(fromDate.from).setHours(0,0,0,0)) return false;
+        if (fromDate.to && dDate > new Date(fromDate.to).setHours(23,59,59,999)) return false;
+      }
+
+      if (hasSearch) {
+        const searchableText = `${device.serial_number} ${device.sales_order} ${device.school_name} ${device.model} ${device.nucleus_id} ${device.deal_id} ${device.asset_type}`.toLowerCase();
+        if (!searchableText.includes(searchLower)) return false;
+      }
+
+      return true;
     });
   }, [
     devices,

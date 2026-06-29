@@ -262,16 +262,19 @@ const AuditTable: React.FC<AuditTableProps> = ({
   };
 
   const uniqueValues = useMemo(() => {
-    const latestDevices = new Map<string, Device>();
-    devices.forEach((d) => {
-      const key = d.serial_number || d.id;
-      const existing = latestDevices.get(key);
-      if (!existing || new Date(d.created_at) > new Date(existing.created_at)) {
-        latestDevices.set(key, d);
-      }
-    });
+    const vals = {
+      warehouses: new Set<string>(),
+      assetTypes: new Set<string>(),
+      models: new Set<string>(),
+      configurations: new Set<string>(),
+      products: new Set<string>(),
+      assetStatuses: new Set<string>(),
+      assetGroups: new Set<string>(),
+      orderTypes: new Set<string>(),
+      assetConditions: new Set<string>(),
+    };
 
-    const stockDevices = Array.from(latestDevices.values()).filter(
+    const stockDevices = devices.filter(
       (d) =>
         getEffectiveStatus(d) === 'Stock' &&
         !d.is_deleted &&
@@ -279,98 +282,33 @@ const AuditTable: React.FC<AuditTableProps> = ({
         !excludedAuditItems.models.includes(d.model as any)
     );
 
-    const getFilteredDevices = (excludeFilter: string) => {
-      return stockDevices.filter((d) => {
-        const matches = Object.entries({
-          warehouse: selectedWarehouse,
-          assetType: selectedAssetType,
-          model: selectedModel,
-          configuration: selectedConfiguration,
-          product: selectedProduct,
-          assetStatus: selectedAssetStatus,
-          assetGroup: selectedAssetGroup,
-          orderType: selectedOrderType,
-          assetCheck: selectedAssetChecks,
-          assetCondition: selectedAssetCondition, // Added for asset condition filter
-          fromDate,
-        })
-          .filter(([key]) => key !== excludeFilter)
-          .every(([key, filterValue]) => {
-            if (key === 'fromDate') {
-              if (!fromDate?.from || !fromDate?.to) return true;
-              const createdAt = new Date(d.created_at);
-              const startOfDay = new Date(createdAt);
-              startOfDay.setHours(0, 0, 0, 0);
-              const endOfDay = new Date(createdAt);
-              endOfDay.setHours(23, 59, 59, 999);
-              const fromStart = new Date(fromDate.from);
-              fromStart.setHours(0, 0, 0, 0);
-              const toEnd = new Date(fromDate.to);
-              toEnd.setHours(23, 59, 59, 999);
-              return startOfDay >= fromStart && endOfDay <= toEnd;
-            }
-            if (key === 'assetCheck') {
-              const deviceCheck = d.asset_check || 'Unmatched';
-              return selectedAssetChecks.length === 0 || selectedAssetChecks.includes(deviceCheck);
-            }
-            const prop = propertyMap[key as keyof typeof propertyMap];
-            const value = d[prop as keyof Device];
-            return (filterValue as string[]).length === 0 || (filterValue as string[]).includes(String(value));
-          });
-        const searchMatch =
-          searchQuery.trim() === '' ||
-          [
-            d.serial_number,
-            d.model,
-            d.asset_type,
-            d.configuration,
-            d.product,
-            d.asset_status,
-            d.asset_group,
-            d.far_code,
-            d.warehouse,
-            d.order_type,
-            d.sales_order,
-            d.deal_id,
-            d.brand,
-            d.nucleus_id,
-            d.school_name,
-            d.asset_check || '',
-            d.asset_condition || '',
-          ]
-            .filter(Boolean)
-            .some((field) => String(field).toLowerCase().includes(searchQuery.toLowerCase()));
-        return matches && searchMatch;
-      });
-    };
+    stockDevices.forEach(d => {
+      if (d.warehouse) vals.warehouses.add(d.warehouse);
+      if (d.asset_type) vals.assetTypes.add(d.asset_type);
+      if (d.model) vals.models.add(d.model);
+      if (d.configuration) vals.configurations.add(d.configuration);
+      if (d.product) vals.products.add(d.product);
+      if (d.asset_status) vals.assetStatuses.add(d.asset_status);
+      if (d.asset_group) vals.assetGroups.add(d.asset_group);
+      if (d.order_type) vals.orderTypes.add(d.order_type);
+      if (d.asset_condition) vals.assetConditions.add(d.asset_condition);
+    });
+
+    const sort = (s: Set<string>) => Array.from(s).sort();
 
     return {
-      warehouses: [...new Set(getFilteredDevices('warehouse').map((d) => d.warehouse || ''))].filter(Boolean).sort(),
-      assetTypes: [...new Set(getFilteredDevices('assetType').map((d) => d.asset_type || ''))].filter(Boolean).sort(),
-      models: [...new Set(getFilteredDevices('model').map((d) => d.model || ''))].filter(Boolean).sort(),
-      configurations: [...new Set(getFilteredDevices('configuration').map((d) => d.configuration || ''))].filter(Boolean).sort(),
-      products: [...new Set(getFilteredDevices('product').map((d) => d.product || ''))].filter(Boolean).sort(),
-      assetStatuses: [...new Set(getFilteredDevices('assetStatus').map((d) => d.asset_status || ''))].filter(Boolean).sort(),
-      assetGroups: [...new Set(getFilteredDevices('assetGroup').map((d) => d.asset_group || ''))].filter(Boolean).sort(),
-      orderTypes: [...new Set(getFilteredDevices('orderType').map((d) => d.order_type || ''))].filter(Boolean).sort(),
+      warehouses: sort(vals.warehouses),
+      assetTypes: sort(vals.assetTypes),
+      models: sort(vals.models),
+      configurations: sort(vals.configurations),
+      products: sort(vals.products),
+      assetStatuses: sort(vals.assetStatuses),
+      assetGroups: sort(vals.assetGroups),
+      orderTypes: sort(vals.orderTypes),
       assetChecks: ['Matched', 'Unmatched'],
-      assetConditions: [...new Set(getFilteredDevices('assetCondition').map((d) => d.asset_condition || ''))].filter(Boolean).sort(), // Added for asset condition
+      assetConditions: sort(vals.assetConditions),
     };
-  }, [
-    devices,
-    selectedWarehouse,
-    selectedAssetType,
-    selectedModel,
-    selectedConfiguration,
-    selectedProduct,
-    selectedAssetStatus,
-    selectedAssetGroup,
-    selectedOrderType,
-    selectedAssetChecks,
-    selectedAssetCondition, // Added dependency
-    fromDate,
-    searchQuery,
-  ]);
+  }, [devices]);
 
   const filteredDevices = useMemo(() => {
     const latestDevices = new Map<string, Device>();

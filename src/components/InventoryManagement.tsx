@@ -1,4 +1,4 @@
-import React, { useState, useEffect, lazy, Suspense } from 'react';
+import React, { useState, useEffect, lazy, Suspense, useDeferredValue } from 'react';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Package, BarChart3, Archive, Clock, History } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -26,9 +26,9 @@ const TabFallback = () => (
 const InventoryManagement = () => {
   const [orders, setOrders] = useState<Order[]>([]);
   const [devices, setDevices] = useState<Device[]>([]);
-  const [orderSummary, setOrderSummary] = useState<OrderSummary[]>([]);
   const [loading, setLoading] = useState(false);
   const [isClearing, setIsClearing] = useState(false);
+  const [dataLoaded, setDataLoaded] = useState({ orders: false, devices: false });
   const [showScanner, setShowScanner] = useState(false);
   const [currentSerialIndex, setCurrentSerialIndex] = useState<{ itemId: string; index: number; type: 'tablet' | 'tv' } | null>(null);
   const [selectedWarehouse, setSelectedWarehouse] = useState<string[]>([]);
@@ -47,6 +47,7 @@ const InventoryManagement = () => {
   const [toDate, setToDate] = useState<DateRange | undefined>();
   const [showDeleted, setShowDeleted] = useState<boolean>(false);
   const [searchQuery, setSearchQuery] = useState<string>('');
+  const deferredSearchQuery = useDeferredValue(searchQuery);
   const [orderType, setOrderType] = useState('');
   const [salesOrder, setSalesOrder] = useState('');
   const [dealId, setDealId] = useState('');
@@ -67,7 +68,6 @@ const InventoryManagement = () => {
     }
     return '';
   });
-  const [loadedTabs, setLoadedTabs] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     if (userRole) {
@@ -92,35 +92,23 @@ const InventoryManagement = () => {
     if (!activeTab) return;
 
     const loadDataForTab = async () => {
-      // If data for this tab (or shared data it depends on) is already being loaded or exists,
-      // we still check loadedTabs to avoid redundant triggers.
-      if (loadedTabs.has(activeTab)) return;
-
       try {
-        if (activeTab === 'view' || activeTab === 'create') {
+        if ((activeTab === 'view' || activeTab === 'create') && !dataLoaded.orders) {
           await loadOrders();
+          setDataLoaded(prev => ({ ...prev, orders: true }));
         }
 
-        // Both 'devices', 'audit', and 'order' tabs depend on the devices state
-        if (activeTab === 'devices' || activeTab === 'audit' || activeTab === 'order') {
+        if ((activeTab === 'devices' || activeTab === 'audit' || activeTab === 'order') && !dataLoaded.devices) {
           await loadDevices();
+          setDataLoaded(prev => ({ ...prev, devices: true }));
         }
-
-        // Even though OrderSummaryTable uses devices, we still load the legacy orderSummary
-        // to maintain compatibility with other parts of the system that might call loadOrderSummary
-        if (activeTab === 'order') {
-          await loadOrderSummary();
-        }
-
-        setLoadedTabs(prev => new Set(prev).add(activeTab));
       } catch (error) {
         console.error(`Error loading data for tab ${activeTab}:`, error);
-        // We don't add to loadedTabs so it can be retried if the user switches back
       }
     };
 
     loadDataForTab();
-  }, [activeTab, userRole]);
+  }, [activeTab, userRole, dataLoaded]);
 
   useEffect(() => {
     const fetchUser = async () => {
@@ -166,7 +154,6 @@ const InventoryManagement = () => {
             if (activeTab === 'view') {
               loadOrders();
             } else {
-              loadOrderSummary();
               loadDevices();
             }
           }
@@ -189,12 +176,7 @@ const InventoryManagement = () => {
             return next;
           });
           if (activeTab === 'devices' || activeTab === 'audit' || activeTab === 'order') {
-            if (activeTab === 'order') {
-              loadOrderSummary();
-              loadDevices();
-            } else {
-              loadDevices();
-            }
+            loadDevices();
           }
         }
       )
@@ -209,128 +191,108 @@ const InventoryManagement = () => {
   const loadOrders = async () => {
     try {
       setLoading(true);
-      let allOrders: any[] = [];
-      const batchSize = 500;
-      let page = 0;
-      let hasMoreOrders = true;
+      const batchSize = 1000;
 
-      while (hasMoreOrders) {
-        const { data, error } = await supabase
-          .from('orders')
-          .select('id, order_type, asset_type, model, warehouse, sales_order, deal_id, nucleus_id, school_name, configuration, product, sd_card_size, profile_id, serial_numbers, quantity, order_date, created_at, updated_at, updated_by, is_deleted, material_type')
-          .order('created_at', { ascending: false })
-          .range(page * batchSize, (page + 1) * batchSize - 1);
-        if (error) throw error;
-        allOrders = [...allOrders, ...data];
-        hasMoreOrders = data.length === batchSize;
-        page += 1;
-      }
+      // Fetch counts first to parallelize requests
+      const [{ count: ordersCount }, { count: devicesCount }] = await Promise.all([
+        supabase.from('orders').select('*', { count: 'exact', head: true }),
+        supabase.from('devices').select('*', { count: 'exact', head: true, is_deleted: false })
+      ]);
 
-      let allDevices: any[] = [];
-      page = 0;
-      let hasMoreDevices = true;
+      const ordersPages = Math.ceil((ordersCount || 0) / batchSize);
+      const devicesPages = Math.ceil((devicesCount || 0) / batchSize);
 
-      while (hasMoreDevices) {
-        const { data, error } = await supabase
-          .from('devices')
-          .select('order_id, serial_number')
-          .eq('is_deleted', false)
-          .range(page * batchSize, (page + 1) * batchSize - 1);
-        if (error) throw error;
-        allDevices = [...allDevices, ...data];
-        hasMoreDevices = data.length === batchSize;
-        page += 1;
-      }
+      // Fetch all orders and necessary device fields in parallel
+      const [ordersResults, devicesResults] = await Promise.all([
+        Promise.all(Array.from({ length: ordersPages }, (_, i) =>
+          supabase.from('orders')
+            .select('id, order_type, asset_type, model, warehouse, sales_order, deal_id, nucleus_id, school_name, configuration, product, sd_card_size, profile_id, serial_numbers, quantity, order_date, created_at, updated_at, updated_by, is_deleted, material_type')
+            .order('created_at', { ascending: false })
+            .range(i * batchSize, (i + 1) * batchSize - 1)
+        )),
+        Promise.all(Array.from({ length: devicesPages }, (_, i) =>
+          supabase.from('devices')
+            .select('order_id, serial_number')
+            .eq('is_deleted', false)
+            .range(i * batchSize, (i + 1) * batchSize - 1)
+        ))
+      ]);
 
-      // Build map of device serial numbers AND count actual device rows per order
-      const devicesByOrderId = new Map<string, string[]>();
+      const allOrders = ordersResults.flatMap(r => r.data || []);
+      const allDevicesShort = devicesResults.flatMap(r => r.data || []);
+
+      // Build mapping maps for fast lookup
+      const devicesByOrderId = new Map<string, Set<string>>();
       const deviceCountByOrderId = new Map<string, number>();
-      allDevices.forEach((device: { order_id: string; serial_number: string }) => {
-        if (device.order_id) {
-          // Count all devices, even those without serial numbers
-          deviceCountByOrderId.set(device.order_id, (deviceCountByOrderId.get(device.order_id) || 0) + 1);
 
-          // Track serial numbers only for devices that have them
-          if (device.serial_number) {
-            const normalizedSerial = device.serial_number.trim().toUpperCase();
-            if (!devicesByOrderId.has(device.order_id)) {
-              devicesByOrderId.set(device.order_id, []);
-            }
-            devicesByOrderId.get(device.order_id)!.push(normalizedSerial);
+      for (const device of allDevicesShort) {
+        const orderId = device.order_id;
+        if (!orderId) continue;
+
+        deviceCountByOrderId.set(orderId, (deviceCountByOrderId.get(orderId) || 0) + 1);
+
+        if (device.serial_number) {
+          const normalizedSerial = device.serial_number.trim().toUpperCase();
+          if (!devicesByOrderId.has(orderId)) {
+            devicesByOrderId.set(orderId, new Set());
           }
+          devicesByOrderId.get(orderId)!.add(normalizedSerial);
         }
-      });
-
-      const orderGroups = new Map<string, Order[]>();
-      allOrders.forEach((order: any) => {
-        const salesOrder = order.sales_order || '';
-        const groupKey = `${salesOrder}-${order.asset_type}-${order.model}-${order.warehouse}`;
-        if (!orderGroups.has(groupKey)) {
-          orderGroups.set(groupKey, []);
-        }
-        orderGroups.get(groupKey)!.push({
-          ...order,
-          material_type: order.material_type as 'Inward' | 'Outward',
-          asset_type: order.asset_type as 'Tablet' | 'TV' | 'SD Card' | 'Pendrive',
-          serial_numbers: (order.serial_numbers || []).map((sn: string) => sn.trim().toUpperCase()),
-          is_deleted: order.is_deleted || false,
-        });
-      });
+      }
 
       const ordersWithStatus = allOrders.map((order: any) => {
-        const salesOrder = order.sales_order || '';
-        const groupKey = `${salesOrder}-${order.asset_type}-${order.model}-${order.warehouse}`;
-        const groupOrders = orderGroups.get(groupKey) || [];
-
-        // Filter out blank serials from order.serial_numbers
-        const orderSerials = (order.serial_numbers || [])
-          .map((sn: string) => (sn ? sn.trim().toUpperCase() : null))
-          .filter((sn: string | null): sn is string => sn !== null && sn !== '');
-
-        // Use actual device row count, not just serial number count
-        const actualDeviceCount = deviceCountByOrderId.get(order.id) || 0;
-        const deviceSerialCount = devicesByOrderId.get(order.id)?.length || 0;
-
+        const rawSerials = order.serial_numbers || [];
+        const orderSerials: string[] = [];
         const orderSerialSet = new Set<string>();
         const duplicateSerialsInOrder = new Set<string>();
-        orderSerials.forEach((serial: string) => {
-          if (orderSerialSet.has(serial)) {
-            duplicateSerialsInOrder.add(serial);
-          } else {
-            orderSerialSet.add(serial);
-          }
-        });
 
+        for (const sn of rawSerials) {
+          if (sn) {
+            const normalized = sn.trim().toUpperCase();
+            if (normalized) {
+              orderSerials.push(normalized);
+              if (orderSerialSet.has(normalized)) {
+                duplicateSerialsInOrder.add(normalized);
+              } else {
+                orderSerialSet.add(normalized);
+              }
+            }
+          }
+        }
+
+        const actualDeviceCount = deviceCountByOrderId.get(order.id) || 0;
         let status: 'Success' | 'Failed' | 'Pending' = 'Pending';
         let statusDetails = '';
-
-        // Debug log for problematic orders
-        if (order.id === 'ddb73f93-ee13-4d88-b1a6-aa07cd3a41d5' || actualDeviceCount !== order.quantity) {
-          console.debug(`Order ${order.id} (${order.sales_order}): quantity=${order.quantity}, actualDeviceCount=${actualDeviceCount}, serialCount=${deviceSerialCount}, orderSerialsLength=${orderSerials.length}, rawSerialArrayLength=${(order.serial_numbers || []).length}`);
-        }
 
         if (orderSerials.length === 0) {
           status = 'Pending';
           statusDetails = 'No serial numbers provided';
         } else if (duplicateSerialsInOrder.size > 0) {
           status = 'Failed';
-          statusDetails = `Duplicate serial numbers found within this order: ${[...duplicateSerialsInOrder].join(', ')}`;
+          statusDetails = `Duplicate serial numbers found: ${Array.from(duplicateSerialsInOrder).join(', ')}`;
         } else if (orderSerials.length !== order.quantity) {
           const missingCount = order.quantity - orderSerials.length;
-          const missingPositions = Array.from({ length: order.quantity }, (_, i) => i)
-            .filter(i => !orderSerials[i])
-            .map(p => p + 1);
           status = 'Failed';
-          statusDetails = `Missing ${missingCount} serial number${missingCount > 1 ? 's' : ''} at position${missingCount > 1 ? 's' : ''} ${missingPositions.join(', ')} (Expected ${order.quantity}, got ${orderSerials.length})`;
+          statusDetails = `Missing ${missingCount} serial number${missingCount > 1 ? 's' : ''} (Expected ${order.quantity}, got ${orderSerials.length})`;
         } else if (actualDeviceCount !== order.quantity) {
           status = 'Failed';
-          statusDetails = `Device count mismatch: Expected ${order.quantity}, got ${actualDeviceCount} (with serials: ${deviceSerialCount})`;
+          statusDetails = `Device count mismatch: Expected ${order.quantity}, got ${actualDeviceCount}`;
         } else {
-          const deviceSerials = devicesByOrderId.get(order.id) || [];
-          const mismatchedSerials = orderSerials.filter(sn => !deviceSerials.includes(sn));
-          if (mismatchedSerials.length > 0) {
+          const deviceSerialSet = devicesByOrderId.get(order.id);
+          let hasMismatch = false;
+          const mismatched: string[] = [];
+
+          for (const sn of orderSerials) {
+            if (!deviceSerialSet?.has(sn)) {
+              hasMismatch = true;
+              mismatched.push(sn);
+              if (mismatched.length > 3) break;
+            }
+          }
+
+          if (hasMismatch) {
             status = 'Failed';
-            statusDetails = `Mismatched serial numbers: ${mismatchedSerials.join(', ')} not found in devices`;
+            statusDetails = `Mismatched serials: ${mismatched.join(', ')}${mismatched.length > 3 ? '...' : ''}`;
           } else {
             status = 'Success';
             statusDetails = `All ${order.quantity} serial numbers present and valid`;
@@ -341,16 +303,15 @@ const InventoryManagement = () => {
           ...order,
           material_type: order.material_type as 'Inward' | 'Outward',
           asset_type: order.asset_type as 'Tablet' | 'TV' | 'SD Card' | 'Pendrive',
-          serial_numbers: order.serial_numbers || [],
+          serial_numbers: rawSerials,
           status,
           statusDetails,
           is_deleted: order.is_deleted || false,
-        } as Order & { statusDetails: string };
+        };
       });
 
       ordersWithStatus.sort((a, b) => new Date(b.order_date).getTime() - new Date(a.order_date).getTime());
       setOrders(ordersWithStatus);
-      console.log('Loaded orders with is_deleted:', ordersWithStatus.map(o => ({ id: o.id, sales_order: o.sales_order, is_deleted: o.is_deleted })));
     } catch (error) {
       console.error('Error loading orders:', error);
       toast({ title: 'Error', description: 'Failed to load orders. Please try again.', variant: 'destructive' });
@@ -362,42 +323,25 @@ const InventoryManagement = () => {
   const loadDevices = async () => {
     try {
       setLoading(true);
-      let allDevices: any[] = [];
       const batchSize = 1000;
-      let page = 0;
-      let hasMore = true;
 
-      while (hasMore) {
-        const { data, error } = await supabase
-          .from('devices')
-          .select(
-            `id, sales_order, order_type, warehouse, deal_id, nucleus_id, school_name, asset_type, model, configuration, serial_number, sd_card_size, profile_id, product, asset_status, asset_group, asset_condition, audited_at, audited_by, created_at, updated_at, updated_by, is_deleted, order_id, orders ( material_type )`
-          )
+      const { count } = await supabase.from('devices').select('*', { count: 'exact', head: true });
+      const numPages = Math.ceil((count || 0) / batchSize);
+
+      const results = await Promise.all(Array.from({ length: numPages }, (_, i) =>
+        supabase.from('devices')
+          .select(`id, sales_order, order_type, warehouse, deal_id, nucleus_id, school_name, asset_type, model, configuration, serial_number, sd_card_size, profile_id, product, asset_status, asset_group, asset_condition, audited_at, audited_by, created_at, updated_at, updated_by, is_deleted, order_id, orders ( material_type )`)
           .order('created_at', { ascending: false })
-          .range(page * batchSize, (page + 1) * batchSize - 1);
-        if (error) throw error;
-        allDevices = [...allDevices, ...data];
-        hasMore = data.length === batchSize;
-        page += 1;
-      }
+          .range(i * batchSize, (i + 1) * batchSize - 1)
+      ));
 
-      if (allDevices.length === 0) {
-        console.warn('No devices retrieved from Supabase.');
-        toast({
-          title: 'Warning',
-          description: 'No devices found in the database. Check your data or permissions.',
-          variant: 'destructive',
-        });
-      }
+      const allDevices = results.flatMap(r => r.data || []);
 
       const updatedDevices = allDevices.map((device: any) => {
-        // Handle both object and array response for the orders join
         const orderData = Array.isArray(device.orders) ? device.orders[0] : device.orders;
         const materialType = orderData?.material_type || null;
         const status = device.order_id && materialType === 'Outward' ? 'Assigned' : 'Stock';
-        if (device.order_id && !device.orders) {
-          console.warn(`Device ${device.id} has order_id ${device.order_id} but no matching order found.`);
-        }
+
         return {
           id: device.id,
           sales_order: device.sales_order?.trim() || '',
@@ -429,128 +373,14 @@ const InventoryManagement = () => {
         } as Device;
       });
 
-      console.log('Processed devices:', updatedDevices.length);
-      console.log('Devices with sales_order 905643:', updatedDevices.filter(d => d.sales_order === '905643'));
-      console.log('Sample devices status breakdown:', {
-        total: updatedDevices.length,
-        stock: updatedDevices.filter(d => d.status === 'Stock').length,
-        assigned: updatedDevices.filter(d => d.status === 'Assigned').length,
-        sampleStock: updatedDevices.filter(d => d.status === 'Stock').slice(0, 3).map(d => ({ id: d.id, order_id: d.order_id, material_type: d.material_type })),
-        sampleAssigned: updatedDevices.filter(d => d.status === 'Assigned').slice(0, 3).map(d => ({ id: d.id, order_id: d.order_id, material_type: d.material_type })),
-      });
-      if (updatedDevices.every(d => d.status === 'Stock')) {
-        toast({
-          title: 'Warning',
-          description: 'All devices are marked as Stock. Verify order data and material types.',
-          variant: 'destructive',
-        });
-      }
       setDevices(updatedDevices);
-
-      if (updatedDevices.length === 0) {
-        toast({
-          title: 'Warning',
-          description: 'No devices loaded after processing. Check filters or database schema.',
-          variant: 'destructive',
-        });
-      }
     } catch (error: any) {
       console.error('Error loading devices:', error);
       toast({
         title: 'Error',
-        description: `Failed to load devices: ${error.message || 'Unknown error'}. Check database connection or permissions.`,
+        description: `Failed to load devices: ${error.message || 'Unknown error'}.`,
         variant: 'destructive',
       });
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const loadOrderSummary = async () => {
-    try {
-      setLoading(true);
-      const { data: ordersData, error: ordersError } = await supabase
-        .from('orders')
-        .select('warehouse, asset_type, model, material_type, quantity, sd_card_size')
-        .eq('is_deleted', false);
-      if (ordersError) throw ordersError;
-
-      const locations = ['Trichy', 'Bangalore', 'Hyderabad', 'Kolkata', 'Bhiwandi', 'Ghaziabad', 'Zirakpur', 'Indore', 'Jaipur'];
-      const assetTypeOptions = ['Tablet', 'TV', 'SD Card', 'Pendrive'];
-      const tabletModels = ['Lenovo TB301XU', 'Lenovo TB301FU', 'Lenovo TB-8505F', 'Lenovo TB-7306F', 'Lenovo TB-7306X', 'Lenovo TB-7305X', 'IRA T811'];
-      const tvModels = ['Hyundai TV - 39"', 'Hyundai TV - 43"', 'Hyundai TV - 50"', 'Hyundai TV - 55"', 'Hyundai TV - 65"', 'Xentec TV - 39"', 'Xentec TV - 43"'];
-      const sdCardSizes = ['64 GB', '128 GB', '256 GB', '512 GB'];
-
-      const summaryMap = new Map<string, OrderSummary>();
-      locations.forEach(warehouse => {
-        assetTypeOptions.forEach(asset_type => {
-          let models: string[] = [];
-          if (asset_type === 'Tablet') models = tabletModels;
-          else if (asset_type === 'TV') models = tvModels;
-          else if (asset_type === 'SD Card') models = sdCardSizes;
-          else if (asset_type === 'Pendrive') models = ['Pendrive'];
-
-          models.forEach(model => {
-            const key = `${warehouse}-${asset_type}-${model}`;
-            if (!summaryMap.has(key)) {
-              summaryMap.set(key, {
-                warehouse,
-                asset_type: asset_type as 'Tablet' | 'TV' | 'SD Card' | 'Pendrive',
-                model,
-                inward: 0,
-                outward: 0,
-                stock: 0
-              });
-            }
-          });
-        });
-      });
-
-      ordersData?.forEach((order: any) => {
-        const key = `${order.warehouse}-${order.asset_type}-${order.model}`;
-        if (!summaryMap.has(key)) {
-          summaryMap.set(key, {
-            warehouse: order.warehouse,
-            asset_type: order.asset_type as 'Tablet' | 'TV' | 'SD Card' | 'Pendrive',
-            model: order.model,
-            inward: 0,
-            outward: 0,
-            stock: 0
-          });
-        }
-        const summary = summaryMap.get(key)!;
-        if (order.material_type === 'Inward') summary.inward += order.quantity;
-        else if (order.material_type === 'Outward') summary.outward += order.quantity;
-        summary.stock = summary.inward - summary.outward;
-
-        if (order.asset_type === 'Tablet' && order.sd_card_size) {
-          const sdKey = `${order.warehouse}-SD Card-${order.sd_card_size}`;
-          if (!summaryMap.has(sdKey)) {
-            summaryMap.set(sdKey, {
-              warehouse: order.warehouse,
-              asset_type: 'SD Card',
-              model: order.sd_card_size,
-              inward: 0,
-              outward: 0,
-              stock: 0
-            });
-          }
-          const sdSummary = summaryMap.get(sdKey)!;
-          if (order.material_type === 'Inward') sdSummary.inward += order.quantity;
-          else if (order.material_type === 'Outward') sdSummary.outward += order.quantity;
-          sdSummary.stock = sdSummary.inward - sdSummary.outward;
-        }
-      });
-
-      const summaries = Array.from(summaryMap.values()).sort((a, b) =>
-        a.warehouse.localeCompare(b.warehouse) ||
-        a.asset_type.localeCompare(b.asset_type) ||
-        a.model.localeCompare(b.model)
-      );
-      setOrderSummary(summaries);
-    } catch (error) {
-      console.error('Error loading order summary:', error);
-      toast({ title: 'Error', description: 'Failed to load order summary. Please try again.', variant: 'destructive' });
     } finally {
       setLoading(false);
     }
@@ -965,7 +795,6 @@ const InventoryManagement = () => {
                     setLoading={setLoading}
                     loadOrders={loadOrders}
                     loadDevices={loadDevices}
-                    loadOrderSummary={loadOrderSummary}
                     openScanner={(itemId, index, assetType) => {
                       setCurrentSerialIndex({ itemId, index, type: assetType as 'tablet' | 'tv' });
                       setShowScanner(true);
@@ -1001,13 +830,12 @@ const InventoryManagement = () => {
                   setFromDate={setDevicesFromDate}
                   showDeleted={showDeleted}
                   setShowDeleted={setShowDeleted}
-                  searchQuery={searchQuery}
+                  searchQuery={deferredSearchQuery}
                   setSearchQuery={setSearchQuery}
                   loading={loading}
                   setLoading={setLoading}
                   loadOrders={loadOrders}
                   loadDevices={loadDevices}
-                  loadOrderSummary={loadOrderSummary}
                   userRole={userRole}
                 />
               </Suspense>
@@ -1049,7 +877,7 @@ const InventoryManagement = () => {
                   setFromDate={setFromDate}
                   showDeleted={showDeleted}
                   setShowDeleted={setShowDeleted}
-                  searchQuery={searchQuery}
+                  searchQuery={deferredSearchQuery}
                   setSearchQuery={setSearchQuery}
                 />
               </Suspense>
@@ -1087,7 +915,7 @@ const InventoryManagement = () => {
                   setFromDate={setDevicesFromDate}
                   showDeleted={showDeleted}
                   setShowDeleted={setShowDeleted}
-                  searchQuery={searchQuery}
+                  searchQuery={deferredSearchQuery}
                   setSearchQuery={setSearchQuery}
                 />
               </Suspense>
@@ -1117,7 +945,7 @@ const InventoryManagement = () => {
                   setSelectedAssetCondition={setSelectedAssetCondition}
                   fromDate={fromDate}
                   setFromDate={setFromDate}
-                  searchQuery={searchQuery}
+                  searchQuery={deferredSearchQuery}
                   setSearchQuery={setSearchQuery}
                   onUpdateAssetCheck={handleUpdateAssetCheck}
                   onClearAllChecks={handleClearAllChecks}
