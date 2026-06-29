@@ -43,6 +43,7 @@ interface DevicesTableProps {
   setShowDeleted: (value: boolean) => void;
   searchQuery: string;
   setSearchQuery: (value: string) => void;
+  loading?: boolean;
 }
 
 const DevicesTable: React.FC<DevicesTableProps> = ({
@@ -77,6 +78,7 @@ const DevicesTable: React.FC<DevicesTableProps> = ({
   setShowDeleted,
   searchQuery,
   setSearchQuery,
+  loading,
 }) => {
   const [currentDevicesPage, setCurrentDevicesPage] = useState(1);
   const [rowsPerPage, setRowsPerPage] = useState(10);
@@ -700,7 +702,9 @@ const DevicesTable: React.FC<DevicesTableProps> = ({
           </div>
         </div>
 
-        {!devices || devices.length === 0 ? (
+        {loading ? (
+          <div style={{ fontSize: '12px', padding: '8px' }}>Loading devices...</div>
+        ) : !devices || devices.length === 0 ? (
           <div style={{ fontSize: '12px', padding: '8px' }}>No devices available. Check your database or data loading logic.</div>
         ) : (
           <>

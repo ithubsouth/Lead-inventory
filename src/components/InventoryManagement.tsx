@@ -61,34 +61,62 @@ const InventoryManagement = () => {
   const { toast } = useToast();
   const [userEmail, setUserEmail] = useState<string | null>(null);
   const [userRole, setUserRole] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<string>('');
+  const [activeTab, setActiveTab] = useState<string>(() => {
+    if (typeof window !== 'undefined') {
+      return sessionStorage.getItem('inventoryActiveTab') || '';
+    }
+    return '';
+  });
   const [loadedTabs, setLoadedTabs] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     if (userRole) {
-      const initialTab = userRole === 'Reporter' ? 'view' : 'create';
-      setActiveTab(initialTab);
+      const isReporter = userRole === 'Reporter';
+      // Validate activeTab against role: Reporters cannot access 'create'
+      const isValidTab = activeTab && (isReporter ? activeTab !== 'create' : true);
+
+      if (!isValidTab) {
+        const initialTab = isReporter ? 'view' : 'create';
+        setActiveTab(initialTab);
+      }
     }
   }, [userRole]);
+
+  useEffect(() => {
+    if (activeTab) {
+      sessionStorage.setItem('inventoryActiveTab', activeTab);
+    }
+  }, [activeTab]);
 
   useEffect(() => {
     if (!activeTab) return;
 
     const loadDataForTab = async () => {
+      // If data for this tab (or shared data it depends on) is already being loaded or exists,
+      // we still check loadedTabs to avoid redundant triggers.
       if (loadedTabs.has(activeTab)) return;
 
-      if (activeTab === 'view' || activeTab === 'create') {
-        // 'create' needs some data for suggestions/validation sometimes, but mostly 'view' needs orders
-        await loadOrders();
-      }
-      if (activeTab === 'devices' || activeTab === 'audit') {
-        await loadDevices();
-      }
-      if (activeTab === 'order') {
-        await loadOrderSummary();
-      }
+      try {
+        if (activeTab === 'view' || activeTab === 'create') {
+          await loadOrders();
+        }
 
-      setLoadedTabs(prev => new Set(prev).add(activeTab));
+        // Both 'devices', 'audit', and 'order' tabs depend on the devices state
+        if (activeTab === 'devices' || activeTab === 'audit' || activeTab === 'order') {
+          await loadDevices();
+        }
+
+        // Even though OrderSummaryTable uses devices, we still load the legacy orderSummary
+        // to maintain compatibility with other parts of the system that might call loadOrderSummary
+        if (activeTab === 'order') {
+          await loadOrderSummary();
+        }
+
+        setLoadedTabs(prev => new Set(prev).add(activeTab));
+      } catch (error) {
+        console.error(`Error loading data for tab ${activeTab}:`, error);
+        // We don't add to loadedTabs so it can be retried if the user switches back
+      }
     };
 
     loadDataForTab();
@@ -135,7 +163,12 @@ const InventoryManagement = () => {
             return next;
           });
           if (activeTab === 'view' || activeTab === 'order') {
-             activeTab === 'view' ? loadOrders() : loadOrderSummary();
+            if (activeTab === 'view') {
+              loadOrders();
+            } else {
+              loadOrderSummary();
+              loadDevices();
+            }
           }
         }
       )
@@ -156,8 +189,12 @@ const InventoryManagement = () => {
             return next;
           });
           if (activeTab === 'devices' || activeTab === 'audit' || activeTab === 'order') {
-            if (activeTab === 'order') loadOrderSummary();
-            else loadDevices();
+            if (activeTab === 'order') {
+              loadOrderSummary();
+              loadDevices();
+            } else {
+              loadDevices();
+            }
           }
         }
       )
@@ -354,7 +391,9 @@ const InventoryManagement = () => {
       }
 
       const updatedDevices = allDevices.map((device: any) => {
-        const materialType = device.orders?.material_type || null;
+        // Handle both object and array response for the orders join
+        const orderData = Array.isArray(device.orders) ? device.orders[0] : device.orders;
+        const materialType = orderData?.material_type || null;
         const status = device.order_id && materialType === 'Outward' ? 'Assigned' : 'Stock';
         if (device.order_id && !device.orders) {
           console.warn(`Device ${device.id} has order_id ${device.order_id} but no matching order found.`);
@@ -875,7 +914,7 @@ const InventoryManagement = () => {
       )}
       <div className='flex-1 overflow-y-auto pt-[50px]'>
         <div className='container mx-auto px-4 py-4 h-full'>
-          <Tabs defaultValue={userRole === 'Reporter' ? 'view' : 'create'} className='w-full h-full flex flex-col'>
+          <Tabs value={activeTab} onValueChange={setActiveTab} className='w-full h-full flex flex-col'>
             <TabsList className={`grid w-full ${userRole === 'Reporter' ? 'grid-cols-5' : 'grid-cols-6'} mb-4 bg-card/50 backdrop-blur-sm border border-border/50 flex-shrink-0`}>
               {userRole !== 'Reporter' && (
                 <TabsTrigger value='create' className='flex items-center gap-2 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground'>
@@ -977,6 +1016,7 @@ const InventoryManagement = () => {
               <Suspense fallback={<TabFallback />}>
                 <OrderSummaryTable
                   devices={devices}
+                  loading={loading}
                   selectedWarehouse={selectedWarehouse}
                   setSelectedWarehouse={(value) => {
                     setSelectedWarehouse(Array.isArray(value) ? value : [value]);
@@ -1018,6 +1058,7 @@ const InventoryManagement = () => {
               <Suspense fallback={<TabFallback />}>
                 <DevicesTable
                   devices={devices}
+                  loading={loading}
                   selectedWarehouse={selectedWarehouse}
                   setSelectedWarehouse={setSelectedWarehouse}
                   selectedAssetType={selectedAssetType}
@@ -1055,6 +1096,7 @@ const InventoryManagement = () => {
               <Suspense fallback={<TabFallback />}>
                 <AuditTable
                   devices={devices}
+                  loading={loading}
                   selectedWarehouse={selectedWarehouse}
                   setSelectedWarehouse={setSelectedWarehouse}
                   selectedAssetType={selectedAssetType}

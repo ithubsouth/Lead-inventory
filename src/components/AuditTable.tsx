@@ -59,6 +59,7 @@ interface AuditTableProps {
   ) => Promise<{ matchedCount: number; notFound: string[]; updatedSerials: string[] }>;
   userRole: string;
   currentUser?: string | null;
+  loading?: boolean;
 }
 
 const AuditTable: React.FC<AuditTableProps> = ({
@@ -90,6 +91,7 @@ const AuditTable: React.FC<AuditTableProps> = ({
   onBulkAuditCheck,
   userRole,
   currentUser,
+  loading,
 }) => {
   const { toast } = useToast();
   const [scannerInput, setScannerInput] = useState('');
@@ -651,6 +653,10 @@ const AuditTable: React.FC<AuditTableProps> = ({
   if (pageRange[0] !== 1) pageRange.unshift(1);
   if (pageRange[pageRange.length - 1] < totalPages) pageRange.push('...');
   if (pageRange[pageRange.length - 1] !== totalPages) pageRange.push(totalPages);
+
+  if (loading) {
+    return <div style={{ fontSize: '12px', padding: '8px' }}>Loading audit data...</div>;
+  }
 
   if (!devices || devices.length === 0) {
     return <div style={{ fontSize: '12px', padding: '8px' }}>No devices available. Please check your data source.</div>;

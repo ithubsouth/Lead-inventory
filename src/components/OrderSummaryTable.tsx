@@ -49,6 +49,7 @@ interface OrderSummaryTableProps {
   setShowDeleted: (value: boolean) => void;
   searchQuery: string;
   setSearchQuery: (value: string) => void;
+  loading?: boolean;
 }
 
 const OrderSummaryTable: React.FC<OrderSummaryTableProps> = ({
@@ -77,6 +78,7 @@ const OrderSummaryTable: React.FC<OrderSummaryTableProps> = ({
   setShowDeleted,
   searchQuery,
   setSearchQuery,
+  loading,
 }) => {
   const [currentPage, setCurrentPage] = useState(1);
   const [rowsPerPage, setRowsPerPage] = useState(10);
@@ -584,7 +586,9 @@ const OrderSummaryTable: React.FC<OrderSummaryTableProps> = ({
           </div>
         </div>
 
-        {devices.length === 0 ? (
+        {loading ? (
+          <div style={{ fontSize: '12px', padding: '8px' }}>Loading summary data...</div>
+        ) : devices.length === 0 ? (
           <div style={{ fontSize: '12px', padding: '8px' }}>No devices available. Load devices or check your database.</div>
         ) : summaries.length === 0 ? (
           <div style={{ fontSize: '12px', padding: '8px' }}>No summary data found with current filters. Try adjusting the filters.</div>
