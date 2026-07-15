@@ -530,6 +530,67 @@ const InventoryManagement = () => {
     }
   };
 
+  const handleBulkUpdateDevices = async (updates: { id: string, updates: Partial<Device> }[]) => {
+    try {
+      if (!userEmail) throw new Error('No authenticated user found. Please log in.');
+      if (!['Super Admin', 'Admin'].includes(userRole || '')) {
+        throw new Error('Insufficient permissions to update devices. Admin or Super Admin role required.');
+      }
+
+      setLoading(true);
+      const updatePromises = updates.map(({ id, updates: devUpdates }) => {
+        const payload = {
+          ...devUpdates,
+          updated_at: new Date().toISOString(),
+          updated_by: userEmail,
+        };
+        // If updating far_code, ensure it's a number or null
+        if ('far_code' in devUpdates) {
+          payload.far_code = devUpdates.far_code === null ? null : Number(devUpdates.far_code);
+        }
+
+        return supabase
+          .from('devices')
+          .update(payload)
+          .eq('id', id);
+      });
+
+      const results = await Promise.all(updatePromises);
+      const errors = results.filter(r => r.error).map(r => r.error);
+
+      if (errors.length > 0) {
+        console.error('Some bulk updates failed:', errors);
+        toast({
+          title: 'Partial Success',
+          description: `Updated some devices, but ${errors.length} updates failed.`,
+          variant: 'destructive'
+        });
+      } else {
+        toast({ title: 'Success', description: `Successfully updated ${updates.length} devices.` });
+      }
+
+      // Update local state for all attempts (optimistic or just refresh)
+      setDevices(prev =>
+        prev.map(d => {
+          const update = updates.find(u => u.id === d.id);
+          if (update) {
+            return { ...d, ...update.updates, updated_at: new Date().toISOString(), updated_by: userEmail };
+          }
+          return d;
+        })
+      );
+    } catch (error: any) {
+      console.error('Error in bulk update:', error);
+      toast({
+        title: 'Error',
+        description: `Failed to update devices: ${error.message}`,
+        variant: 'destructive',
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const updateBatch = async (batchIds: string[], maxRetries = 3): Promise<{ updatedIds: string[]; error?: any }> => {
     if (!userEmail) {
       throw new Error('No authenticated user found. Please log in.');
@@ -984,6 +1045,7 @@ const InventoryManagement = () => {
                   setSearchQuery={setSearchQuery}
                   onUpdateAssetCheck={handleUpdateAssetCheck}
                   onUpdateDevice={handleUpdateDevice}
+                  onBulkUpdateDevices={handleBulkUpdateDevices}
                   onClearAllChecks={handleClearAllChecks}
                   onBulkAuditCheck={handleBulkAuditCheck}
                   userRole={userRole || 'unknown'}

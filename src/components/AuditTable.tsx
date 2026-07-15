@@ -58,6 +58,7 @@ interface AuditTableProps {
     serials: string[]
   ) => Promise<{ matchedCount: number; notFound: string[]; updatedSerials: string[] }>;
   onUpdateDevice: (deviceId: string, updates: Partial<Device>) => Promise<void>;
+  onBulkUpdateDevices: (updates: { id: string, updates: Partial<Device> }[]) => Promise<void>;
   userRole: string;
   currentUser?: string | null;
   loading?: boolean;
@@ -89,6 +90,7 @@ const AuditTable: React.FC<AuditTableProps> = ({
   setSearchQuery,
   onUpdateAssetCheck,
   onUpdateDevice,
+  onBulkUpdateDevices,
   onClearAllChecks,
   onBulkAuditCheck,
   userRole,
@@ -154,6 +156,45 @@ const AuditTable: React.FC<AuditTableProps> = ({
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
+  };
+
+  const handleBulkPaste = (e: React.ClipboardEvent<HTMLInputElement>, field: 'far_code' | 'asset_condition', startIndex: number) => {
+    e.preventDefault();
+    const pastedText = e.clipboardData.getData('text');
+    const values = pastedText
+      .split(/[\n\r]+/)
+      .map(v => v.trim())
+      .filter(v => v.length > 0);
+
+    if (values.length === 0) return;
+
+    const updates: { id: string; updates: Partial<Device> }[] = [];
+    let currentIdx = startIndex;
+
+    for (const val of values) {
+      if (currentIdx >= paginatedDevices.length) break;
+      const device = paginatedDevices[currentIdx];
+
+      const updatePayload: Partial<Device> = {};
+      if (field === 'far_code') {
+        const num = parseInt(val, 10);
+        if (!isNaN(num)) {
+          updatePayload.far_code = num;
+        } else {
+          currentIdx++;
+          continue;
+        }
+      } else {
+        updatePayload.asset_condition = val;
+      }
+
+      updates.push({ id: device.id, updates: updatePayload });
+      currentIdx++;
+    }
+
+    if (updates.length > 0) {
+      onBulkUpdateDevices(updates);
+    }
   };
 
   const handleAuditFile = async (file: File) => {
@@ -981,6 +1022,7 @@ const AuditTable: React.FC<AuditTableProps> = ({
                           <input
                             type="text"
                             defaultValue={d.far_code || ''}
+                            onPaste={(e) => handleBulkPaste(e, 'far_code', index)}
                             onBlur={(e) => {
                               const val = e.target.value.trim();
                               if (val === '') {
@@ -1008,6 +1050,7 @@ const AuditTable: React.FC<AuditTableProps> = ({
                           <input
                             type="text"
                             defaultValue={d.asset_condition || ''}
+                            onPaste={(e) => handleBulkPaste(e, 'asset_condition', index)}
                             onBlur={(e) => {
                               const val = e.target.value.trim();
                               if (val !== (d.asset_condition || '')) {
