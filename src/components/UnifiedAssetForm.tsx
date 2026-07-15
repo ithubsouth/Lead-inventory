@@ -1344,20 +1344,19 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
                   style={{ width: '100%', padding: '8px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '14px', background: '#f3f4f6' }}
                 />
               </div>
-              {isInward && (asset.assetStatuses[0] || 'Fresh') === 'Scrap' && (
-                <div>
-                  <label style={{ fontSize: '12px', display: 'block', marginBottom: '4px' }}>Asset Condition</label>
-                  <input
-                    type="text"
-                    value={asset.asset_conditions[0] || ''}
-                    onChange={(e) => {
-                      const newConditions = Array(asset.quantity).fill(e.target.value);
-                      updateAsset(asset.id, 'asset_conditions', newConditions);
-                    }}
-                    style={{ width: '100%', padding: '8px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '14px' }}
-                  />
-                </div>
-              )}
+              <div>
+                <label style={{ fontSize: '12px', display: 'block', marginBottom: '4px' }}>Asset Condition</label>
+                <input
+                  type="text"
+                  value={asset.asset_conditions[0] || ''}
+                  onChange={(e) => {
+                    const newConditions = Array(asset.quantity).fill(e.target.value);
+                    updateAsset(asset.id, 'asset_conditions', newConditions);
+                  }}
+                  disabled={!isInward}
+                  style={{ width: '100%', padding: '8px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '14px', background: !isInward ? '#f3f4f6' : 'transparent' }}
+                />
+              </div>
             </>
           )}
         </div>
@@ -1367,6 +1366,14 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
               Serial Numbers <span style={{ fontWeight: 'normal', color: '#6b7280' }}></span>
             </h5>
             <div style={{ display: 'grid', gap: '8px' }}>
+              <div style={{ display: 'flex', gap: '8px', alignItems: 'center', paddingBottom: '4px' }}>
+                <span style={{ fontSize: '11px', fontWeight: 'bold', color: '#4b5563', width: '200px' }}>Serial Number</span>
+                <span style={{ width: '34px' }}></span> {/* Camera button spacer */}
+                <span style={{ fontSize: '11px', fontWeight: 'bold', color: '#4b5563', width: '120px' }}>Asset Status</span>
+                <span style={{ fontSize: '11px', fontWeight: 'bold', color: '#4b5563', width: '80px' }}>Asset Group</span>
+                <span style={{ fontSize: '11px', fontWeight: 'bold', color: '#4b5563', width: '120px' }}>Asset Code</span>
+                <span style={{ fontSize: '11px', fontWeight: 'bold', color: '#4b5563', width: '200px' }}>Asset Condition</span>
+              </div>
               {Array.from({ length: asset.quantity }).map((_, index) => (
                 <div key={index} style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
                   <input
@@ -1426,19 +1433,17 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
                         disabled
                         style={{ width: '120px', padding: '8px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '14px', background: '#f3f4f6' }}
                       />
-                      {asset.assetStatuses[index] === 'Scrap' && (
-                        <input
-                          type="text"
-                          value={asset.asset_conditions[index] || ''}
-                          onChange={(e) => {
-                            const newConditions = [...asset.asset_conditions];
-                            newConditions[index] = e.target.value;
-                            updateAsset(asset.id, 'asset_conditions', newConditions);
-                          }}
-                          placeholder="Condition"
-                          style={{ width: '200px', padding: '8px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '14px' }}
-                        />
-                      )}
+                      <input
+                        type="text"
+                        value={asset.asset_conditions[index] || ''}
+                        onChange={(e) => {
+                          const newConditions = [...asset.asset_conditions];
+                          newConditions[index] = e.target.value;
+                          updateAsset(asset.id, 'asset_conditions', newConditions);
+                        }}
+                        placeholder="Asset Condition"
+                        style={{ width: '200px', padding: '8px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '14px' }}
+                      />
                     </>
                   ) : (
                     <>
@@ -1459,6 +1464,12 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
                         value={asset.farCodes[index] || ''}
                         disabled
                         style={{ width: '120px', padding: '8px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '14px', background: '#f3f4f6' }}
+                      />
+                      <input
+                        type="text"
+                        value={asset.asset_conditions[index] || ''}
+                        disabled
+                        style={{ width: '200px', padding: '8px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '14px', background: '#f3f4f6' }}
                       />
                     </>
                   )}

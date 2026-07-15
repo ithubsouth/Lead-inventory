@@ -958,15 +958,14 @@ const EditOrderForm: React.FC<EditOrderFormProps> = ({ order, onSave, onCancel }
                   className='text-xs w-32 bg-white border-gray-300'
                   disabled={!isInward}
                 />
-                {isInward && device.asset_status === 'Scrap' && (
-                  <Input
-                    type="text"
-                    value={device.asset_condition || ''}
-                    onChange={(e) => updateAssetCondition(index, e.target.value)}
-                    placeholder="Asset Condition *"
-                    className='text-xs w-48 bg-white border-gray-300'
-                  />
-                )}
+                <Input
+                  type="text"
+                  value={device.asset_condition || ''}
+                  onChange={(e) => updateAssetCondition(index, e.target.value)}
+                  placeholder="Asset Condition"
+                  className='text-xs w-48 bg-white border-gray-300'
+                  disabled={!isInward}
+                />
                 <Button
                   variant='outline'
                   size='sm'
