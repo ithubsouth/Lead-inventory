@@ -11,7 +11,7 @@ import { DatePickerWithRange } from './DatePickerWithRange';
 import { DateRange } from 'react-day-picker';
 import { Device } from './types';
 import debounce from 'lodash/debounce';
-import { excludedAuditItems } from './constants';
+import { excludedAuditItems, assetStatuses, assetGroups } from './constants';
 import MultiSelect from './MultiSelect';
 import {
   AlertDialog,
@@ -57,6 +57,7 @@ interface AuditTableProps {
   onBulkAuditCheck?: (
     serials: string[]
   ) => Promise<{ matchedCount: number; notFound: string[]; updatedSerials: string[] }>;
+  onUpdateDevice: (deviceId: string, updates: Partial<Device>) => Promise<void>;
   userRole: string;
   currentUser?: string | null;
   loading?: boolean;
@@ -87,6 +88,7 @@ const AuditTable: React.FC<AuditTableProps> = ({
   searchQuery,
   setSearchQuery,
   onUpdateAssetCheck,
+  onUpdateDevice,
   onClearAllChecks,
   onBulkAuditCheck,
   userRole,
@@ -940,6 +942,8 @@ const AuditTable: React.FC<AuditTableProps> = ({
                 paginatedDevices.map((d, index) => {
                   const checkText = d.asset_check || 'Unmatched';
                   const checkColor = checkText === 'Matched' ? '#22c55e' : checkText.startsWith('Found in') ? '#f59e0b' : '#ef4444';
+                  const isPrivileged = userRole === 'Super Admin' || userRole === 'Admin';
+
                   return (
                     <TableRow key={d.id}>
                       <TableCell style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db' }}>
@@ -950,10 +954,75 @@ const AuditTable: React.FC<AuditTableProps> = ({
                       <TableCell style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db' }}>{d.configuration}</TableCell>
                       <TableCell style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db' }}>{d.serial_number}</TableCell>
                       <TableCell style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db' }}>{d.product}</TableCell>
-                      <TableCell style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db' }}>{d.asset_status}</TableCell>
-                      <TableCell style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db' }}>{d.asset_group}</TableCell>
-                      <TableCell style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db' }}>{d.far_code}</TableCell>
-                      <TableCell style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db' }}>{d.asset_condition || ''}</TableCell>
+                      <TableCell style={{ fontSize: '12px', padding: '4px', borderBottom: '1px solid #d1d5db' }}>
+                        {isPrivileged ? (
+                          <select
+                            value={d.asset_status}
+                            onChange={(e) => onUpdateDevice(d.id, { asset_status: e.target.value })}
+                            style={{ fontSize: '11px', padding: '2px', border: '1px solid #d1d5db', borderRadius: '4px', width: '100%' }}
+                          >
+                            {assetStatuses.map(s => <option key={s} value={s}>{s}</option>)}
+                          </select>
+                        ) : d.asset_status}
+                      </TableCell>
+                      <TableCell style={{ fontSize: '12px', padding: '4px', borderBottom: '1px solid #d1d5db' }}>
+                        {isPrivileged ? (
+                          <select
+                            value={d.asset_group}
+                            onChange={(e) => onUpdateDevice(d.id, { asset_group: e.target.value })}
+                            style={{ fontSize: '11px', padding: '2px', border: '1px solid #d1d5db', borderRadius: '4px', width: '100%' }}
+                          >
+                            {assetGroups.map(g => <option key={g} value={g}>{g}</option>)}
+                          </select>
+                        ) : d.asset_group}
+                      </TableCell>
+                      <TableCell style={{ fontSize: '12px', padding: '4px', borderBottom: '1px solid #d1d5db' }}>
+                        {isPrivileged ? (
+                          <input
+                            type="text"
+                            defaultValue={d.far_code || ''}
+                            onBlur={(e) => {
+                              const val = e.target.value.trim();
+                              if (val === '') {
+                                if (d.far_code !== null) onUpdateDevice(d.id, { far_code: null });
+                              } else {
+                                const num = parseInt(val, 10);
+                                if (!isNaN(num) && num !== d.far_code) {
+                                  onUpdateDevice(d.id, { far_code: num });
+                                } else if (isNaN(num)) {
+                                  e.target.value = d.far_code?.toString() || '';
+                                }
+                              }
+                            }}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') {
+                                (e.target as HTMLInputElement).blur();
+                              }
+                            }}
+                            style={{ fontSize: '11px', padding: '4px', border: '1px solid #d1d5db', borderRadius: '4px', width: '100%' }}
+                          />
+                        ) : d.far_code}
+                      </TableCell>
+                      <TableCell style={{ fontSize: '12px', padding: '4px', borderBottom: '1px solid #d1d5db' }}>
+                        {isPrivileged ? (
+                          <input
+                            type="text"
+                            defaultValue={d.asset_condition || ''}
+                            onBlur={(e) => {
+                              const val = e.target.value.trim();
+                              if (val !== (d.asset_condition || '')) {
+                                onUpdateDevice(d.id, { asset_condition: val || null });
+                              }
+                            }}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') {
+                                (e.target as HTMLInputElement).blur();
+                              }
+                            }}
+                            style={{ fontSize: '11px', padding: '4px', border: '1px solid #d1d5db', borderRadius: '4px', width: '100%' }}
+                          />
+                        ) : (d.asset_condition || '')}
+                      </TableCell>
                       <TableCell style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db' }}>{d.warehouse}</TableCell>
                       <TableCell style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>

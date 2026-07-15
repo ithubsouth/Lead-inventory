@@ -495,6 +495,41 @@ const InventoryManagement = () => {
     }
   };
 
+  const handleUpdateDevice = async (deviceId: string, updates: Partial<Device>) => {
+    try {
+      if (!userEmail) throw new Error('No authenticated user found. Please log in.');
+      if (!['Super Admin', 'Admin'].includes(userRole || '')) {
+        throw new Error('Insufficient permissions to update device details. Admin or Super Admin role required.');
+      }
+
+      const { data, error } = await supabase
+        .from('devices')
+        .update({
+          ...updates,
+          updated_at: new Date().toISOString(),
+          updated_by: userEmail,
+        })
+        .eq('id', deviceId)
+        .select();
+
+      if (error) throw error;
+
+      if (data && data.length > 0) {
+        setDevices((prev) =>
+          prev.map((d) => (d.id === deviceId ? { ...d, ...updates, updated_at: new Date().toISOString(), updated_by: userEmail } : d))
+        );
+        toast({ title: 'Success', description: 'Device updated successfully.' });
+      }
+    } catch (error: any) {
+      console.error('Error updating device:', error);
+      toast({
+        title: 'Error',
+        description: `Failed to update device: ${error.message}`,
+        variant: 'destructive',
+      });
+    }
+  };
+
   const updateBatch = async (batchIds: string[], maxRetries = 3): Promise<{ updatedIds: string[]; error?: any }> => {
     if (!userEmail) {
       throw new Error('No authenticated user found. Please log in.');
@@ -948,6 +983,7 @@ const InventoryManagement = () => {
                   searchQuery={deferredSearchQuery}
                   setSearchQuery={setSearchQuery}
                   onUpdateAssetCheck={handleUpdateAssetCheck}
+                  onUpdateDevice={handleUpdateDevice}
                   onClearAllChecks={handleClearAllChecks}
                   onBulkAuditCheck={handleBulkAuditCheck}
                   userRole={userRole || 'unknown'}
