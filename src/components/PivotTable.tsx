@@ -91,6 +91,92 @@ const SearchableAdd: React.FC<{
   );
 };
 
+const ResizeHandle: React.FC<{
+  onResize: (deltaX: number, deltaY: number) => void;
+  type: 'horizontal' | 'vertical' | 'corner' | 'table-width' | 'table-height';
+  isResizing?: boolean;
+}> = ({ onResize, type }) => {
+  const [isResizing, setIsResizing] = useState(false);
+  const startRef = React.useRef<{ x: number; y: number }>({ x: 0, y: 0 });
+
+  const onMouseDown = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsResizing(true);
+    startRef.current = { x: e.clientX, y: e.clientY };
+    document.addEventListener('mousemove', onMouseMove);
+    document.addEventListener('mouseup', onMouseUp);
+    document.body.style.cursor = cursorClass;
+  };
+
+  const onMouseMove = (e: MouseEvent) => {
+    const deltaX = e.clientX - startRef.current.x;
+    const deltaY = e.clientY - startRef.current.y;
+    onResize(deltaX, deltaY);
+    startRef.current = { x: e.clientX, y: e.clientY };
+  };
+
+  const onMouseUp = () => {
+    setIsResizing(false);
+    document.removeEventListener('mousemove', onMouseMove);
+    document.removeEventListener('mouseup', onMouseUp);
+    document.body.style.cursor = 'default';
+  };
+
+  const cursorClass = (type === 'horizontal' || type === 'table-width')
+    ? 'col-resize'
+    : (type === 'vertical' || type === 'table-height')
+    ? 'row-resize'
+    : 'nwse-resize';
+
+  const getPositionClass = () => {
+    switch (type) {
+      case 'horizontal': return 'absolute -right-3 top-0 bottom-0 w-6 z-[100] hover:bg-sky-400/10';
+      case 'vertical': return 'absolute -bottom-3 left-0 right-0 h-6 z-[100] hover:bg-sky-400/10';
+      case 'table-width': return 'absolute right-0 top-0 bottom-0 w-4 z-[110] hover:bg-emerald-400/40 cursor-col-resize';
+      case 'table-height': return 'absolute bottom-0 left-0 right-0 h-4 z-[110] hover:bg-emerald-400/40 cursor-row-resize';
+      case 'corner': return 'absolute bottom-0 right-0 w-10 h-10 z-[120] hover:bg-sky-400/20 flex items-center justify-center rounded-br-[2rem]';
+    }
+  };
+
+  return (
+    <>
+      <div
+        className={cn('transition-colors group/handle flex items-center justify-center', getPositionClass(), isResizing && 'bg-sky-500/20')}
+        style={{ cursor: cursorClass }}
+        onMouseDown={onMouseDown}
+      >
+        {type === 'corner' && <div className="w-2 h-2 border-r-2 border-b-2 border-slate-400 rounded-br-sm" />}
+        {(type === 'horizontal' || type === 'table-width') && (
+          <div className={cn(
+            "w-[2px] h-full transition-colors",
+            isResizing ? "bg-sky-500 shadow-[0_0_8px_rgba(14,165,233,0.5)]" : "bg-slate-200 group-hover/handle:bg-sky-400"
+          )} />
+        )}
+        {(type === 'vertical' || type === 'table-height') && (
+          <div className={cn(
+            "h-[2px] w-full transition-colors",
+            isResizing ? "bg-sky-500 shadow-[0_0_8px_rgba(14,165,233,0.5)]" : "bg-slate-200 group-hover/handle:bg-sky-400"
+          )} />
+        )}
+      </div>
+
+      {/* Global Guide Lines */}
+      {isResizing && (type === 'horizontal' || type === 'table-width') && (
+        <div className="fixed top-0 bottom-0 w-px bg-sky-500/40 z-[9999] pointer-events-none" style={{ left: startRef.current.x }} />
+      )}
+      {isResizing && (type === 'vertical' || type === 'table-height') && (
+        <div className="fixed left-0 right-0 h-px bg-sky-500/40 z-[9999] pointer-events-none" style={{ top: startRef.current.y }} />
+      )}
+
+      <style dangerouslySetInnerHTML={{ __html: `
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+      `}} />
+    </>
+  );
+};
+
 const PivotTable: React.FC<PivotTableProps> = ({ devices, instanceId, onClose }) => {
   const [pivotTitle, setPivotTitle] = useState('Custom Analysis');
   const [rows, setRows] = useState<PivotDimension[]>([]);
@@ -101,6 +187,12 @@ const PivotTable: React.FC<PivotTableProps> = ({ devices, instanceId, onClose })
   const [showTotals, setShowTotals] = useState(true);
   const [pivotName, setPivotName] = useState('');
   const [savedPivots, setSavedPivots] = useState<SavedPivot[]>([]);
+
+  // Resizing State
+  const [columnWidths, setColumnWidths] = useState<Record<string, number>>({});
+  const [rowHeights, setRowHeights] = useState<Record<string, number>>({});
+  const [containerSize, setContainerSize] = useState<{ width: number; height: number }>({ width: 1200, height: 600 });
+
   const { toast } = useToast();
 
   // Load current instance state on mount
@@ -116,6 +208,9 @@ const PivotTable: React.FC<PivotTableProps> = ({ devices, instanceId, onClose })
         setFilters(s.filters || []);
         setShowTotals(s.showTotals ?? true);
         setShowEditor(s.showEditor ?? true);
+        setColumnWidths(s.columnWidths || {});
+        setRowHeights(s.rowHeights || {});
+        setContainerSize(s.containerSize || { width: 1200, height: 600 });
       } catch (e) {
         console.error('Error loading instance state', e);
       }
@@ -131,10 +226,13 @@ const PivotTable: React.FC<PivotTableProps> = ({ devices, instanceId, onClose })
       values,
       filters,
       showTotals,
-      showEditor
+      showEditor,
+      columnWidths,
+      rowHeights,
+      containerSize
     };
     localStorage.setItem(`pivot_instance_state_${instanceId}`, JSON.stringify(stateToSave));
-  }, [pivotTitle, rows, columns, values, filters, showTotals, showEditor, instanceId]);
+  }, [pivotTitle, rows, columns, values, filters, showTotals, showEditor, instanceId, columnWidths, rowHeights, containerSize]);
 
   // Dynamic Field Discovery
   const availableFields = useMemo(() => {
@@ -408,12 +506,51 @@ const PivotTable: React.FC<PivotTableProps> = ({ devices, instanceId, onClose })
     };
   }, [devices, rows, columns, values, filters]);
 
+  // 7. Calculate Total Table Width
+  const totalTableWidth = useMemo(() => {
+    let w = rows.reduce((acc, _, i) => acc + (columnWidths[`row-${i}`] || 150), 0);
+    if (columns.length > 0) {
+      w += pivotData.columns.reduce((acc, _, i) => acc + (columnWidths[`col-${i}`] || 120), 0);
+    }
+    if (columns.length > 0 || (rows.length > 0 && values.length > 0)) {
+      w += (columnWidths['total'] || 120);
+    }
+    return w;
+  }, [rows, columns, values, columnWidths, pivotData.columns]);
+
   const getAvailableOptions = (field: string) => {
     return Array.from(new Set(devices.map(d => String(d[field as keyof Device] || 'N/A')))).sort();
   };
 
   return (
-    <div className="flex h-[800px] border border-slate-200 rounded-[2.5rem] overflow-hidden bg-white shadow-xl transition-all duration-500">
+    <div
+      className="flex border border-slate-200 rounded-[2rem] bg-white shadow-xl relative group/pivot"
+      style={{
+        height: containerSize.height,
+        width: containerSize.width
+      }}
+    >
+      <ResizeHandle
+        type="corner"
+        onResize={(dx, dy) => setContainerSize(prev => ({
+          width: Math.max(400, prev.width + dx),
+          height: Math.max(300, prev.height + dy)
+        }))}
+      />
+      <ResizeHandle
+        type="table-width"
+        onResize={(dx) => setContainerSize(prev => ({
+          ...prev,
+          width: Math.max(400, prev.width + dx)
+        }))}
+      />
+      <ResizeHandle
+        type="table-height"
+        onResize={(_, dy) => setContainerSize(prev => ({
+          ...prev,
+          height: Math.max(300, prev.height + dy)
+        }))}
+      />
       {/* Pivot Editor Sidebar */}
       {showEditor && (
         <div className="w-[340px] border-r border-slate-100 bg-white flex flex-col">
@@ -695,9 +832,8 @@ const PivotTable: React.FC<PivotTableProps> = ({ devices, instanceId, onClose })
         </div>
       )}
 
-      {/* Main Content Area */}
-      <div className="flex-1 flex flex-col min-w-0 bg-white">
-        <div className="px-10 py-6 border-b border-slate-50 flex items-center justify-between bg-white/80 backdrop-blur-xl sticky top-0 z-20">
+        <div className="flex-1 flex flex-col min-w-0 bg-white">
+          <div className="px-6 py-4 border-b border-slate-50 flex items-center justify-between bg-white/80 backdrop-blur-xl sticky top-0 z-20">
           <div className="flex items-center gap-6">
             <Button
               variant="ghost"
@@ -738,25 +874,46 @@ const PivotTable: React.FC<PivotTableProps> = ({ devices, instanceId, onClose })
           </div>
         </div>
 
-        <div className="flex-1 overflow-auto p-12">
-          <div className="rounded-[2.5rem] border border-slate-100 overflow-hidden shadow-2xl bg-white">
-            <div className="overflow-x-auto">
-              <Table className="border-collapse">
+        <div className="flex-1 p-2 overflow-hidden flex flex-col">
+          <div className="rounded-[1.5rem] border border-slate-100 shadow-2xl bg-white h-full flex flex-col overflow-hidden">
+            <div className="flex-1 overflow-auto no-scrollbar">
+              <Table
+                className="border-collapse"
+                style={{
+                  tableLayout: 'fixed',
+                  width: totalTableWidth,
+                  minWidth: '100%'
+                }}
+              >
                 <TableHeader>
                   <TableRow className="bg-slate-50/50 hover:bg-slate-50/50 border-b-0">
                     {rows.map((r, i) => (
-                      <TableHead key={r.field} className={`text-[11px] font-black uppercase text-slate-400 border-r border-slate-100/50 px-8 h-16 sticky top-0 bg-slate-50/50 backdrop-blur-md z-10 ${i === rows.length - 1 ? 'border-r-4 border-slate-100' : ''}`}>
+                      <TableHead
+                        key={r.field}
+                        style={{ width: columnWidths[`row-${i}`] || 150 }}
+                        className={`text-[10px] font-black uppercase text-slate-400 border-r border-slate-100/50 px-3 h-10 sticky top-0 bg-slate-50/50 backdrop-blur-md z-[50] relative group ${i === rows.length - 1 ? 'border-r-4 border-slate-100' : ''}`}
+                      >
                         {availableFields.find(f => f.value === r.field)?.label}
+                        <ResizeHandle type="horizontal" onResize={(dx) => setColumnWidths(prev => ({ ...prev, [`row-${i}`]: Math.max(50, (prev[`row-${i}`] || 150) + dx) }))} />
                       </TableHead>
                     ))}
-                    {columns.length > 0 && pivotData.columns.map((col) => (
-                      <TableHead key={col} className="text-[11px] font-black uppercase text-slate-400 text-center border-r border-slate-100/50 px-8 h-16 min-w-[150px] sticky top-0 bg-slate-50/50 backdrop-blur-md z-10">
+                    {columns.length > 0 && pivotData.columns.map((col, i) => (
+                      <TableHead
+                        key={col}
+                        style={{ width: columnWidths[`col-${i}`] || 120 }}
+                        className="text-[10px] font-black uppercase text-slate-400 text-center border-r border-slate-100/50 px-3 h-10 sticky top-0 bg-slate-50/50 backdrop-blur-md z-[50] relative group"
+                      >
                         {col || '(Blank)'}
+                        <ResizeHandle type="horizontal" onResize={(dx) => setColumnWidths(prev => ({ ...prev, [`col-${i}`]: Math.max(50, (prev[`col-${i}`] || 120) + dx) }))} />
                       </TableHead>
                     ))}
                     {(columns.length > 0 || (rows.length > 0 && values.length > 0)) && (
-                      <TableHead className="text-[11px] font-black uppercase text-slate-400 text-center px-8 h-16 min-w-[150px] sticky top-0 bg-slate-50/50 backdrop-blur-md z-10">
+                      <TableHead
+                        style={{ width: columnWidths['total'] || 120 }}
+                        className="text-[10px] font-black uppercase text-slate-400 text-center px-3 h-10 sticky top-0 bg-slate-50/50 backdrop-blur-md z-[50] relative group"
+                      >
                         {columns.length === 0 && values.length === 1 ? availableFields.find(f => f.value === values[0].field)?.label : 'TOTAL'}
+                        <ResizeHandle type="horizontal" onResize={(dx) => setColumnWidths(prev => ({ ...prev, total: Math.max(50, (prev.total || 120) + dx) }))} />
                       </TableHead>
                     )}
                   </TableRow>
@@ -780,7 +937,11 @@ const PivotTable: React.FC<PivotTableProps> = ({ devices, instanceId, onClose })
                         const rowCells = pivotData.data[rowKey];
 
                         return (
-                          <TableRow key={rowKey} className="hover:bg-slate-50/40 transition-colors border-b border-slate-50 last:border-0 group">
+                          <TableRow
+                            key={rowKey}
+                            style={{ height: rowHeights[rowKey] || 40 }}
+                            className="hover:bg-slate-50/40 border-b border-slate-50 last:border-0 group relative"
+                          >
                             {rows.map((_, colIdx) => {
                               const span = pivotData.spans[rowIdx][colIdx];
                               if (span === 0) return null;
@@ -788,30 +949,41 @@ const PivotTable: React.FC<PivotTableProps> = ({ devices, instanceId, onClose })
                                 <TableCell
                                   key={colIdx}
                                   rowSpan={span}
-                                  className={`text-[13px] font-bold text-slate-700 border-r border-slate-100/50 px-8 bg-white/50 align-top pt-5 group-hover:bg-white transition-all ${colIdx === rows.length - 1 ? 'border-r-4 border-slate-100' : ''}`}
+                                  style={{ width: columnWidths[`row-${colIdx}`] || 150 }}
+                                  className={`text-[12px] font-bold text-slate-700 border-r border-slate-100/50 px-3 bg-white/50 align-top pt-2 group-hover:bg-white relative group/cell ${colIdx === rows.length - 1 ? 'border-r-4 border-slate-100' : ''}`}
                                 >
                                   {rowParts[colIdx]}
+                                  <ResizeHandle type="vertical" onResize={(dx, dy) => setRowHeights(prev => ({ ...prev, [rowKey]: Math.max(24, (prev[rowKey] || 40) + dy) }))} />
+                                  <ResizeHandle type="horizontal" onResize={(dx) => setColumnWidths(prev => ({ ...prev, [`row-${colIdx}`]: Math.max(50, (prev[`row-${colIdx}`] || 150) + dx) }))} />
                                 </TableCell>
                               );
                             })}
 
-                            {columns.length > 0 && pivotData.columns.map((colKey) => {
+                            {columns.length > 0 && pivotData.columns.map((colKey, i) => {
                               const cellFields = rowCells[colKey] || {};
                               // Sum all values for the cell if multiple value fields exist
                               const val = Object.values(cellFields).reduce((a, b) => a + (b as number), 0);
                               const isPercent = values.some(v => v.showAs !== 'default');
 
                               return (
-                                <TableCell key={colKey} className="text-[13px] text-center border-r border-slate-50/50 px-8 text-slate-600 font-medium group-hover:text-slate-900 transition-colors">
+                                <TableCell
+                                  key={colKey}
+                                  style={{ width: columnWidths[`col-${i}`] || 120 }}
+                                  className="text-[12px] text-center border-r border-slate-50/50 px-3 text-slate-600 font-medium group-hover:text-slate-900 relative group/cell"
+                                >
                                   {val === 0 ? '-' : isPercent ? `${val.toFixed(1)}%` : val.toLocaleString()}
+                                  <ResizeHandle type="vertical" onResize={(dx, dy) => setRowHeights(prev => ({ ...prev, [rowKey]: Math.max(24, (prev[rowKey] || 40) + dy) }))} />
+                                  <ResizeHandle type="horizontal" onResize={(dx) => setColumnWidths(prev => ({ ...prev, [`col-${i}`]: Math.max(50, (prev[`col-${i}`] || 120) + dx) }))} />
                                 </TableCell>
                               );
                             })}
 
                             {/* Row Total / Main Value */}
                             {(columns.length > 0 || (rows.length > 0 && values.length > 0)) && (
-                              <TableCell className={cn(
-                                "text-[13px] text-center font-black px-8 group-hover:text-sky-600 transition-all",
+                              <TableCell
+                                style={{ width: columnWidths['total'] || 120 }}
+                                className={cn(
+                                "text-[12px] text-center font-black px-3 group-hover:text-sky-600 relative group/cell",
                                 columns.length === 0 ? "bg-white" : "bg-slate-50/20 text-slate-900 group-hover:bg-sky-50/30"
                               )}>
                                 {(() => {
@@ -826,6 +998,8 @@ const PivotTable: React.FC<PivotTableProps> = ({ devices, instanceId, onClose })
                                     return total.toLocaleString();
                                   }
                                 })()}
+                                <ResizeHandle type="vertical" onResize={(dx, dy) => setRowHeights(prev => ({ ...prev, [rowKey]: Math.max(24, (prev[rowKey] || 40) + dy) }))} />
+                                <ResizeHandle type="horizontal" onResize={(dx) => setColumnWidths(prev => ({ ...prev, total: Math.max(50, (prev.total || 120) + dx) }))} />
                               </TableCell>
                             )}
                           </TableRow>
@@ -833,19 +1007,29 @@ const PivotTable: React.FC<PivotTableProps> = ({ devices, instanceId, onClose })
                       })}
                       {showTotals && (
                         <TableRow className="bg-slate-50/80 hover:bg-slate-50/80 border-t-4 border-slate-100">
-                          <TableCell colSpan={rows.length} className="text-[11px] font-black uppercase border-r-4 border-slate-100 px-8 h-20 text-slate-500 tracking-[0.1em]">
+                          <TableCell
+                            colSpan={rows.length}
+                            style={{ width: rows.reduce((acc, _, i) => acc + (columnWidths[`row-${i}`] || 150), 0) }}
+                            className="text-[10px] font-black uppercase border-r-4 border-slate-100 px-3 h-12 text-slate-500 tracking-[0.1em]"
+                          >
                             GRAND TOTAL
                           </TableCell>
-                          {columns.length > 0 && pivotData.columns.map((colKey) => {
+                          {columns.length > 0 && pivotData.columns.map((colKey, i) => {
                             const total = Object.values(pivotData.colTotals[colKey] || {}).reduce((a, b) => a + b, 0);
                             return (
-                              <TableCell key={colKey} className="text-[14px] text-center font-black border-r border-slate-100/50 px-8 h-20 text-slate-900">
+                              <TableCell
+                                key={colKey}
+                                style={{ width: columnWidths[`col-${i}`] || 120 }}
+                                className="text-[12px] text-center font-black border-r border-slate-100/50 px-3 h-12 text-slate-900"
+                              >
                                 {total.toLocaleString()}
                               </TableCell>
                             );
                           })}
-                          <TableCell className={cn(
-                            "text-[16px] text-center font-black px-8 h-20 text-sky-600 bg-sky-50/50",
+                          <TableCell
+                            style={{ width: columnWidths['total'] || 120 }}
+                            className={cn(
+                            "text-[14px] text-center font-black px-3 h-12 text-sky-600 bg-sky-50/50",
                             columns.length === 0 && "border-l border-slate-100/50"
                           )}>
                             {Object.values(pivotData.grandTotals).reduce((a, b) => a + b, 0).toLocaleString()}
