@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Search, Download } from 'lucide-react';
+import { Search, Download, Plus } from 'lucide-react';
 import { Device } from './types';
 import { formatDate } from './utils';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -10,6 +10,7 @@ import MultiSelect from './MultiSelect';
 import { DatePickerWithRange } from './DatePickerWithRange';
 import { DateRange } from 'react-day-picker';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import PivotTable from './PivotTable';
 
 interface OrderSummary {
   warehouse: string;
@@ -82,7 +83,15 @@ const OrderSummaryTable: React.FC<OrderSummaryTableProps> = ({
 }) => {
   const [currentPage, setCurrentPage] = useState(1);
   const [rowsPerPage, setRowsPerPage] = useState(10);
-  const [summaryType, setSummaryType] = useState<'stock' | 'stockSplit'>('stock');
+  const [summaryType, setSummaryType] = useState<'stock' | 'stockSplit' | 'customPivot'>('stock');
+  const [activePivots, setActivePivots] = useState<string[]>(() => {
+    const saved = localStorage.getItem('inventory_active_pivots');
+    return saved ? JSON.parse(saved) : ['pivot-1'];
+  });
+
+  useEffect(() => {
+    localStorage.setItem('inventory_active_pivots', JSON.stringify(activePivots));
+  }, [activePivots]);
 
   const toast = ({ title, description, variant }: { title: string; description: string; variant?: 'destructive' }) => {
     console.log(`Toast: ${title} - ${description}${variant ? ` (Variant: ${variant})` : ''}`);
@@ -415,6 +424,47 @@ const OrderSummaryTable: React.FC<OrderSummaryTableProps> = ({
     setCurrentPage(1);
   };
 
+  if (summaryType === 'customPivot') {
+    return (
+      <div className="space-y-6">
+        <div className="flex justify-between items-center bg-white p-4 rounded-xl border shadow-sm">
+          <div className="flex gap-8">
+            <div>
+              <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mb-1">Report Period</p>
+              <div className="flex gap-2 items-center">
+                <DatePickerWithRange date={fromDate} setDate={setFromDate} className="h-9 border-none shadow-none font-medium" />
+              </div>
+            </div>
+          </div>
+          <div className="flex items-center gap-4">
+            <Button
+              className="bg-[#0284c7] hover:bg-[#0369a1] text-white gap-2 h-10 rounded-xl font-bold px-6 shadow-sm transition-all"
+              onClick={() => setActivePivots(prev => [...prev, `pivot-${Date.now()}`])}
+            >
+              <Plus className="h-5 w-5" />
+              Create New Pivot
+            </Button>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 gap-8">
+          {activePivots.map((id) => (
+            <PivotTable
+              key={id}
+              instanceId={id}
+              devices={devices}
+              onClose={() => {
+                setActivePivots(prev => prev.filter(pId => pId !== id));
+                localStorage.removeItem(`pivot_instance_state_${id}`);
+                if (activePivots.length <= 1) setSummaryType('stock');
+              }}
+            />
+          ))}
+        </div>
+      </div>
+    );
+  }
+
   const columnWidths = {
     warehouse: '150px',
     asset_type: '120px',
@@ -448,12 +498,12 @@ const OrderSummaryTable: React.FC<OrderSummaryTableProps> = ({
       <CardHeader style={{ paddingBottom: '2px' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <CardTitle style={{ display: 'flex', alignItems: 'center', gap: '1px', fontSize: '12px' }}>
-            {summaryType === 'stock' ? 'Order Summary' : 'Stock Split'}
+            {summaryType === 'stock' ? 'Order Summary' : summaryType === 'stockSplit' ? 'Stock Split' : 'Custom Pivot'}
           </CardTitle>
           <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
             <Select
               value={summaryType}
-              onValueChange={(value: 'stock' | 'stockSplit') => setSummaryType(value)}
+              onValueChange={(value: 'stock' | 'stockSplit' | 'customPivot') => setSummaryType(value)}
             >
               <SelectTrigger style={{ fontSize: '12px', border: '1px solid #d1d5db', borderRadius: '4px', padding: '4px', height: '28px', width: '120px' }}>
                 <SelectValue />
@@ -461,6 +511,7 @@ const OrderSummaryTable: React.FC<OrderSummaryTableProps> = ({
               <SelectContent>
                 <SelectItem value="stock">Stock</SelectItem>
                 <SelectItem value="stockSplit">Stock Split</SelectItem>
+                <SelectItem value="customPivot">Custom Pivot</SelectItem>
               </SelectContent>
             </Select>
             <Button

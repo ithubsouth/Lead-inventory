@@ -330,7 +330,7 @@ const InventoryManagement = () => {
 
       const results = await Promise.all(Array.from({ length: numPages }, (_, i) =>
         supabase.from('devices')
-          .select(`id, sales_order, order_type, warehouse, deal_id, nucleus_id, school_name, asset_type, model, configuration, serial_number, sd_card_size, profile_id, product, asset_status, asset_group, asset_condition, audited_at, audited_by, created_at, updated_at, updated_by, is_deleted, order_id, orders ( material_type )`)
+          .select(`*, orders ( material_type )`)
           .order('created_at', { ascending: false })
           .range(i * batchSize, (i + 1) * batchSize - 1)
       ));
@@ -343,7 +343,7 @@ const InventoryManagement = () => {
         const status = device.order_id && materialType === 'Outward' ? 'Assigned' : 'Stock';
 
         return {
-          id: device.id,
+          ...device,
           sales_order: device.sales_order?.trim() || '',
           order_type: device.order_type?.trim() || '',
           warehouse: device.warehouse?.trim() || '',
@@ -361,13 +361,8 @@ const InventoryManagement = () => {
           asset_group: device.asset_group?.trim() || '',
           asset_condition: device.asset_condition?.trim() || '',
           status,
-          created_at: device.created_at || '',
-          updated_at: device.updated_at ? new Date(device.updated_at).toISOString() : '',
           updated_by: device.updated_by?.trim() || '',
-          audited_at: device.audited_at ? new Date(device.audited_at).toISOString() : '',
           audited_by: device.audited_by?.trim() || '',
-          is_deleted: device.is_deleted || false,
-          order_id: device.order_id || null,
           material_type: materialType,
           asset_check: device.asset_check?.trim() || 'Unmatched',
         } as Device;
