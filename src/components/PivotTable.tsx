@@ -246,6 +246,9 @@ const PivotTable: React.FC<PivotTableProps> = ({ devices, instanceId, onClose })
     if ((e.target as HTMLElement).closest('button, input, select')) return;
 
     setIsDragging(true);
+    // Bring to front
+    setPosition(prev => ({ ...prev })); // Trigger re-render to update z-index
+
     dragStartRef.current = { x: e.clientX - position.x, y: e.clientY - position.y };
     document.addEventListener('mousemove', handleHeaderMouseMove);
     document.addEventListener('mouseup', handleHeaderMouseUp);
@@ -563,7 +566,8 @@ const PivotTable: React.FC<PivotTableProps> = ({ devices, instanceId, onClose })
         height: containerSize.height,
         width: containerSize.width,
         left: position.x,
-        top: position.y
+        top: position.y,
+        zIndex: isDragging ? 1000 : undefined
       }}
     >
       <ResizeHandle
