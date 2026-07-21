@@ -447,7 +447,7 @@ const OrderSummaryTable: React.FC<OrderSummaryTableProps> = ({
           </div>
         </div>
 
-        <div className="grid grid-cols-1 gap-8">
+        <div className="relative min-h-[1200px] w-full">
           {activePivots.map((id) => (
             <PivotTable
               key={id}

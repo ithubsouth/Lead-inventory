@@ -1,40 +1,45 @@
-# Implementation Plan - Pivot Table Refinement (Compact Layout & Robust Resizing)
+# Implementation Plan - Draggable Pivot Tables and Restored Delete
 
-This plan focuses on making the `PivotTable` more compact, removing unnecessary scrollbars, and ensuring the resizing experience is fast and "edge-to-edge."
+This plan restores the Delete button to the `PivotTable` and implements free-form draggability for the pivot cards, including state persistence.
 
 ## User Review Required
 
 > [!IMPORTANT]
-> **Layout Density**: I will reduce the default cell padding and row heights to eliminate the "unwanted spaces" you highlighted.
+> **Drag Handle**: The "handle" for moving the card will be the top header area (where the title is).
 >
-> **Scrollbar Removal**: I will disable the internal `overflow: auto` and scrollbars. You will rely on the overall table resizing (right and bottom edges) to fit more data into view.
+> **Canvas Bounds**: I will set a large minimum height for the workspace container to ensure you have enough room to move cards around.
+>
+> **Persistence**: I will save the (X, Y) coordinates of each card in `localStorage` so they stay exactly where you moved them, even after a refresh.
 
 ## Proposed Changes
 
 ### [PivotTable.tsx](file:///C:/Users/DeLL/Desktop/Lead-inventory/src/components/PivotTable.tsx)
 
 #### [MODIFY] [PivotTable.tsx](file:///C:/Users/DeLL/Desktop/Lead-inventory/src/components/PivotTable.tsx)
+- **State Management**:
+    - Add `position` state: `{ x: number, y: number }`.
+    - Update `useEffect` (mount) to load `position` from `localStorage`.
+    - Update `useEffect` (auto-save) to include `position`.
+- **Restore Delete Button**:
+    - Re-add the `Trash2` icon to the action buttons group in the header.
+- **Dragging Logic**:
+    - Implement mouse event handlers (`onMouseDown`, `onMouseMove`, `onMouseUp`) specifically for the header area.
+    - Update `position` state in real-time.
+- **Styling**:
+    - Apply `position: absolute`, `left: position.x`, and `top: position.y` to the main card.
+    - Ensure `z-index` increases while dragging.
+    - Add `cursor: grab` and `active:cursor: grabbing` to the header.
 
-- **UI Compaction**:
-    - Reduce `TableHead` padding from `px-8` to `px-4`.
-    - Reduce `TableCell` padding and default row height from `64px` to `40px`.
-    - Tighten up the "Main Content Area" padding from `p-12` to `p-6` or less.
-- **Scrollbar & Layout**:
-    - Remove `overflow-auto` from the inner table wrappers.
-    - Set the main table container to `overflow: hidden`.
-- **Enhanced Resizing**:
-    - **Remove Animations**: Strip `transition-all duration-500` from the main card so it follows the mouse instantly.
-    - **Edge Handles**: Position the `table-width` handle to cover the **entire right edge** and the `table-height` handle to cover the **entire bottom edge**.
-    - **Global Guides**: Ensure the blue guide lines span the full analysis viewport.
-- **Alignment Fixes**:
-    - Center the "grab" lines perfectly on the table dividers.
-    - Ensure all cell dividers (in both header and body) act as resize handles.
+### [OrderSummaryTable.tsx](file:///C:/Users/DeLL/Desktop/Lead-inventory/src/components/OrderSummaryTable.tsx)
+
+#### [MODIFY] [OrderSummaryTable.tsx](file:///C:/Users/DeLL/Desktop/Lead-inventory/src/components/OrderSummaryTable.tsx)
+- **Layout Update**:
+    - Change the `PivotTable` parent `div` from `grid grid-cols-1 gap-8` to `relative min-h-[1200px] w-full`. This turns the container into a "canvas" for the absolute-positioned cards.
 
 ## Verification Plan
 
 ### Manual Verification
-1.  **Spaces**: Verify the table looks much denser and the "unwanted gaps" are gone.
-2.  **Scrollbars**: Verify there is no internal grey scrollbar.
-3.  **Resizing Performance**: verify that dragging the edges or dividers feels instant and lag-free.
-4.  **Edge Grabbing**: Verify you can grab anywhere on the right edge of the card to change the width.
-5.  **Persistence**: Refresh and verify the compact layout and custom sizes are preserved.
+1.  **Delete Check**: Click the Trash icon and verify the pivot is removed from the screen and `localStorage`.
+2.  **Move Check**: Drag a card by its header to a new location. It should follow the mouse.
+3.  **Persistence Check**: Refresh the page and verify the card is still at its new location.
+4.  **Resizing Compatibility**: Verify you can still resize columns/rows/container while the card is in an absolute position.

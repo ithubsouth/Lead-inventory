@@ -131,32 +131,32 @@ const ResizeHandle: React.FC<{
 
   const getPositionClass = () => {
     switch (type) {
-      case 'horizontal': return 'absolute -right-3 top-0 bottom-0 w-6 z-[100] hover:bg-sky-400/10';
-      case 'vertical': return 'absolute -bottom-3 left-0 right-0 h-6 z-[100] hover:bg-sky-400/10';
-      case 'table-width': return 'absolute right-0 top-0 bottom-0 w-4 z-[110] hover:bg-emerald-400/40 cursor-col-resize';
-      case 'table-height': return 'absolute bottom-0 left-0 right-0 h-4 z-[110] hover:bg-emerald-400/40 cursor-row-resize';
-      case 'corner': return 'absolute bottom-0 right-0 w-10 h-10 z-[120] hover:bg-sky-400/20 flex items-center justify-center rounded-br-[2rem]';
+      case 'horizontal': return 'absolute -right-4 top-0 bottom-0 w-8 z-[100] hover:bg-sky-400/5';
+      case 'vertical': return 'absolute -bottom-4 left-0 right-0 h-8 z-[100] hover:bg-sky-400/5';
+      case 'table-width': return 'absolute -right-3 top-0 bottom-0 w-6 z-[110] hover:bg-emerald-400/20 cursor-col-resize';
+      case 'table-height': return 'absolute -bottom-3 left-0 right-0 h-6 z-[110] hover:bg-emerald-400/40 cursor-row-resize';
+      case 'corner': return 'absolute bottom-0 right-0 w-12 h-12 z-[120] hover:bg-sky-400/10 flex items-center justify-center rounded-br-[2rem]';
     }
   };
 
   return (
     <>
       <div
-        className={cn('transition-colors group/handle flex items-center justify-center', getPositionClass(), isResizing && 'bg-sky-500/20')}
+        className={cn('transition-colors group/handle flex items-center justify-center', getPositionClass(), isResizing && (type.startsWith('table') ? 'bg-emerald-500/20' : 'bg-sky-500/10'))}
         style={{ cursor: cursorClass }}
         onMouseDown={onMouseDown}
       >
-        {type === 'corner' && <div className="w-2 h-2 border-r-2 border-b-2 border-slate-400 rounded-br-sm" />}
+        {type === 'corner' && <div className="w-3 h-3 border-r-4 border-b-4 border-slate-300 rounded-br-sm" />}
         {(type === 'horizontal' || type === 'table-width') && (
           <div className={cn(
             "w-[2px] h-full transition-colors",
-            isResizing ? "bg-sky-500 shadow-[0_0_8px_rgba(14,165,233,0.5)]" : "bg-slate-200 group-hover/handle:bg-sky-400"
+            isResizing ? (type === 'table-width' ? "bg-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.5)]" : "bg-sky-500 shadow-[0_0_8px_rgba(14,165,233,0.5)]") : "bg-transparent group-hover/handle:bg-sky-400/50"
           )} />
         )}
         {(type === 'vertical' || type === 'table-height') && (
           <div className={cn(
             "h-[2px] w-full transition-colors",
-            isResizing ? "bg-sky-500 shadow-[0_0_8px_rgba(14,165,233,0.5)]" : "bg-slate-200 group-hover/handle:bg-sky-400"
+            isResizing ? (type === 'table-height' ? "bg-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.5)]" : "bg-sky-500 shadow-[0_0_8px_rgba(14,165,233,0.5)]") : "bg-transparent group-hover/handle:bg-sky-400/50"
           )} />
         )}
       </div>
@@ -170,8 +170,8 @@ const ResizeHandle: React.FC<{
       )}
 
       <style dangerouslySetInnerHTML={{ __html: `
-        .no-scrollbar::-webkit-scrollbar { display: none; }
-        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+        .no-scrollbar::-webkit-scrollbar { display: none !important; }
+        .no-scrollbar { -ms-overflow-style: none !important; scrollbar-width: none !important; }
       `}} />
     </>
   );
@@ -191,7 +191,12 @@ const PivotTable: React.FC<PivotTableProps> = ({ devices, instanceId, onClose })
   // Resizing State
   const [columnWidths, setColumnWidths] = useState<Record<string, number>>({});
   const [rowHeights, setRowHeights] = useState<Record<string, number>>({});
-  const [containerSize, setContainerSize] = useState<{ width: number; height: number }>({ width: 1200, height: 600 });
+  const [containerSize, setContainerSize] = useState<{ width: string | number; height: number }>({ width: '100%', height: 600 });
+  const [position, setPosition] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
+  const [isDragging, setIsDragging] = useState(false);
+
+  const containerRef = React.useRef<HTMLDivElement>(null);
+  const dragStartRef = React.useRef<{ x: number; y: number }>({ x: 0, y: 0 });
 
   const { toast } = useToast();
 
@@ -210,7 +215,8 @@ const PivotTable: React.FC<PivotTableProps> = ({ devices, instanceId, onClose })
         setShowEditor(s.showEditor ?? true);
         setColumnWidths(s.columnWidths || {});
         setRowHeights(s.rowHeights || {});
-        setContainerSize(s.containerSize || { width: 1200, height: 600 });
+        setContainerSize(s.containerSize || { width: '100%', height: 600 });
+        setPosition(s.position || { x: 0, y: 0 });
       } catch (e) {
         console.error('Error loading instance state', e);
       }
@@ -229,10 +235,34 @@ const PivotTable: React.FC<PivotTableProps> = ({ devices, instanceId, onClose })
       showEditor,
       columnWidths,
       rowHeights,
-      containerSize
+      containerSize,
+      position
     };
     localStorage.setItem(`pivot_instance_state_${instanceId}`, JSON.stringify(stateToSave));
-  }, [pivotTitle, rows, columns, values, filters, showTotals, showEditor, instanceId, columnWidths, rowHeights, containerSize]);
+  }, [pivotTitle, rows, columns, values, filters, showTotals, showEditor, instanceId, columnWidths, rowHeights, containerSize, position]);
+
+  const handleHeaderMouseDown = (e: React.MouseEvent) => {
+    // Only allow dragging if we didn't click an input or button
+    if ((e.target as HTMLElement).closest('button, input, select')) return;
+
+    setIsDragging(true);
+    dragStartRef.current = { x: e.clientX - position.x, y: e.clientY - position.y };
+    document.addEventListener('mousemove', handleHeaderMouseMove);
+    document.addEventListener('mouseup', handleHeaderMouseUp);
+  };
+
+  const handleHeaderMouseMove = (e: MouseEvent) => {
+    setPosition({
+      x: e.clientX - dragStartRef.current.x,
+      y: e.clientY - dragStartRef.current.y
+    });
+  };
+
+  const handleHeaderMouseUp = () => {
+    setIsDragging(false);
+    document.removeEventListener('mousemove', handleHeaderMouseMove);
+    document.removeEventListener('mouseup', handleHeaderMouseUp);
+  };
 
   // Dynamic Field Discovery
   const availableFields = useMemo(() => {
@@ -524,31 +554,37 @@ const PivotTable: React.FC<PivotTableProps> = ({ devices, instanceId, onClose })
 
   return (
     <div
-      className="flex border border-slate-200 rounded-[2rem] bg-white shadow-xl relative group/pivot"
+      ref={containerRef}
+      className={cn(
+        "flex border border-slate-200 rounded-[2rem] bg-white shadow-xl absolute group/pivot overflow-hidden transition-shadow",
+        isDragging && "z-[1000] shadow-2xl ring-2 ring-sky-400/20"
+      )}
       style={{
         height: containerSize.height,
-        width: containerSize.width
+        width: containerSize.width,
+        left: position.x,
+        top: position.y
       }}
     >
       <ResizeHandle
         type="corner"
         onResize={(dx, dy) => setContainerSize(prev => ({
-          width: Math.max(400, prev.width + dx),
-          height: Math.max(300, prev.height + dy)
+          width: typeof prev.width === 'number' ? prev.width + dx : (containerRef.current?.clientWidth || 1200) + dx,
+          height: prev.height + dy
         }))}
       />
       <ResizeHandle
         type="table-width"
         onResize={(dx) => setContainerSize(prev => ({
           ...prev,
-          width: Math.max(400, prev.width + dx)
+          width: typeof prev.width === 'number' ? prev.width + dx : (containerRef.current?.clientWidth || 1200) + dx
         }))}
       />
       <ResizeHandle
         type="table-height"
         onResize={(_, dy) => setContainerSize(prev => ({
           ...prev,
-          height: Math.max(300, prev.height + dy)
+          height: prev.height + dy
         }))}
       />
       {/* Pivot Editor Sidebar */}
@@ -832,44 +868,33 @@ const PivotTable: React.FC<PivotTableProps> = ({ devices, instanceId, onClose })
         </div>
       )}
 
-        <div className="flex-1 flex flex-col min-w-0 bg-white">
-          <div className="px-6 py-4 border-b border-slate-50 flex items-center justify-between bg-white/80 backdrop-blur-xl sticky top-0 z-20">
-          <div className="flex items-center gap-6">
+        <div className="flex-1 flex flex-col min-w-0 bg-white relative">
+          <div
+            className="px-4 py-3 border-b border-slate-50 flex items-center justify-between bg-white/80 backdrop-blur-xl sticky top-0 z-20 overflow-hidden cursor-grab active:cursor-grabbing"
+            onMouseDown={handleHeaderMouseDown}
+          >
+          <div className="flex items-center gap-3 min-w-0 flex-1 mr-4">
             <Button
               variant="ghost"
               size="icon"
               onClick={() => setShowEditor(!showEditor)}
-              className={cn("p-3 h-11 w-11 rounded-2xl shadow-sm border transition-all", showEditor ? "bg-sky-50 text-sky-500 border-sky-100" : "bg-slate-50 text-slate-400 border-slate-100")}
+              className={cn("p-2 h-9 w-9 rounded-xl shadow-sm border flex-shrink-0 transition-all", showEditor ? "bg-sky-50 text-sky-500 border-sky-100" : "bg-slate-50 text-slate-400 border-slate-100")}
             >
-              <Settings2 className="h-5 w-5" />
+              <Settings2 className="h-4 w-4" />
             </Button>
-            <div className="px-8 py-3 bg-slate-50/50 rounded-full border border-slate-100 shadow-inner group relative">
+            <div className="px-4 py-2 bg-slate-50/50 rounded-full border border-slate-100 shadow-inner group relative flex-1 min-w-0 max-w-[300px]">
                <Input
                 value={pivotTitle}
                 onChange={e => setPivotTitle(e.target.value)}
-                className="h-6 w-auto min-w-[150px] border-none bg-transparent shadow-none focus-visible:ring-0 px-0 text-base font-bold text-slate-800 placeholder:text-slate-300 text-center"
+                className="h-5 w-full border-none bg-transparent shadow-none focus-visible:ring-0 px-0 text-sm font-bold text-slate-800 placeholder:text-slate-300 text-center truncate"
                 placeholder="Enter Analysis Name..."
                />
                <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-0 h-0.5 bg-sky-400 group-focus-within:w-1/2 transition-all duration-500 rounded-full" />
             </div>
-            <div className="w-8 h-8 rounded-full bg-emerald-50 flex items-center justify-center text-emerald-500 border border-emerald-100 shadow-sm">
-               <Check className="h-4.5 w-4.5 stroke-[3px]" />
-            </div>
           </div>
-          <div className="flex items-center gap-4">
-             {!showEditor && (
-              <Button variant="ghost" size="icon" onClick={() => setShowEditor(true)} className="h-10 w-10 text-slate-300 hover:text-sky-500 hover:bg-sky-50 rounded-2xl transition-all">
-                <Plus className="h-6 w-6" />
-              </Button>
-            )}
-            <Button variant="ghost" size="icon" onClick={savePivot} title="Save Pivot" className="h-10 w-10 text-slate-200 hover:text-emerald-500 hover:bg-emerald-50 rounded-2xl transition-all">
-              <Save className="h-5 w-5" />
-            </Button>
-            <Button variant="ghost" size="icon" onClick={onClose} className="h-10 w-10 text-slate-200 hover:text-red-400 hover:bg-red-50 rounded-2xl transition-all">
-              <Trash2 className="h-5 w-5" />
-            </Button>
-            <Button variant="ghost" size="icon" onClick={onClose} className="h-10 w-10 text-slate-200 hover:text-slate-600 hover:bg-slate-50 rounded-2xl transition-all">
-              <X className="h-6 w-6" />
+          <div className="flex items-center gap-2 flex-shrink-0">
+            <Button variant="ghost" size="icon" onClick={onClose} className="h-8 w-8 text-slate-200 hover:text-red-400 hover:bg-red-50 rounded-xl transition-all">
+              <Trash2 className="h-4 w-4" />
             </Button>
           </div>
         </div>
@@ -879,6 +904,7 @@ const PivotTable: React.FC<PivotTableProps> = ({ devices, instanceId, onClose })
             <div className="flex-1 overflow-auto no-scrollbar">
               <Table
                 className="border-collapse"
+                wrapperOverflow="visible"
                 style={{
                   tableLayout: 'fixed',
                   width: totalTableWidth,
