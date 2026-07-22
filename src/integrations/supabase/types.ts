@@ -303,6 +303,50 @@ export type Database = {
         }
         Relationships: []
       }
+      notifications: {
+        Row: {
+          body: string | null
+          created_at: string
+          id: string
+          kind: string
+          read_at: string | null
+          request_id: string | null
+          target_dept: string | null
+          title: string
+          user_id: string | null
+        }
+        Insert: {
+          body?: string | null
+          created_at?: string
+          id?: string
+          kind: string
+          read_at?: string | null
+          request_id?: string | null
+          target_dept?: string | null
+          title: string
+          user_id?: string | null
+        }
+        Update: {
+          body?: string | null
+          created_at?: string
+          id?: string
+          kind?: string
+          read_at?: string | null
+          request_id?: string | null
+          target_dept?: string | null
+          title?: string
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "notifications_request_id_fkey"
+            columns: ["request_id"]
+            isOneToOne: false
+            referencedRelation: "requests"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       old: {
         Row: {
           changed_by: string | null
@@ -423,6 +467,228 @@ export type Database = {
         }
         Relationships: []
       }
+      request_documents: {
+        Row: {
+          file_name: string
+          file_path: string
+          file_size: number | null
+          id: string
+          kind: string | null
+          mime_type: string | null
+          request_id: string
+          stage_key: string | null
+          uploaded_at: string
+          uploaded_by: string | null
+          uploaded_by_email: string | null
+        }
+        Insert: {
+          file_name: string
+          file_path: string
+          file_size?: number | null
+          id?: string
+          kind?: string | null
+          mime_type?: string | null
+          request_id: string
+          stage_key?: string | null
+          uploaded_at?: string
+          uploaded_by?: string | null
+          uploaded_by_email?: string | null
+        }
+        Update: {
+          file_name?: string
+          file_path?: string
+          file_size?: number | null
+          id?: string
+          kind?: string | null
+          mime_type?: string | null
+          request_id?: string
+          stage_key?: string | null
+          uploaded_at?: string
+          uploaded_by?: string | null
+          uploaded_by_email?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "request_documents_request_id_fkey"
+            columns: ["request_id"]
+            isOneToOne: false
+            referencedRelation: "requests"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      request_serials: {
+        Row: {
+          asset_group: string | null
+          created_at: string
+          exists_in_devices: boolean | null
+          id: string
+          is_duplicate: boolean | null
+          notes: string | null
+          request_id: string
+          serial_number: string
+          warehouse: string | null
+        }
+        Insert: {
+          asset_group?: string | null
+          created_at?: string
+          exists_in_devices?: boolean | null
+          id?: string
+          is_duplicate?: boolean | null
+          notes?: string | null
+          request_id: string
+          serial_number: string
+          warehouse?: string | null
+        }
+        Update: {
+          asset_group?: string | null
+          created_at?: string
+          exists_in_devices?: boolean | null
+          id?: string
+          is_duplicate?: boolean | null
+          notes?: string | null
+          request_id?: string
+          serial_number?: string
+          warehouse?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "request_serials_request_id_fkey"
+            columns: ["request_id"]
+            isOneToOne: false
+            referencedRelation: "requests"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      request_stages: {
+        Row: {
+          acted_at: string | null
+          action: Database["public"]["Enums"]["stage_action"]
+          actor_dept: string | null
+          actor_email: string | null
+          actor_id: string | null
+          assigned_dept: string
+          comment: string | null
+          created_at: string
+          id: string
+          order_index: number
+          request_id: string
+          stage_key: string
+          stage_label: string
+        }
+        Insert: {
+          acted_at?: string | null
+          action?: Database["public"]["Enums"]["stage_action"]
+          actor_dept?: string | null
+          actor_email?: string | null
+          actor_id?: string | null
+          assigned_dept: string
+          comment?: string | null
+          created_at?: string
+          id?: string
+          order_index: number
+          request_id: string
+          stage_key: string
+          stage_label: string
+        }
+        Update: {
+          acted_at?: string | null
+          action?: Database["public"]["Enums"]["stage_action"]
+          actor_dept?: string | null
+          actor_email?: string | null
+          actor_id?: string | null
+          assigned_dept?: string
+          comment?: string | null
+          created_at?: string
+          id?: string
+          order_index?: number
+          request_id?: string
+          stage_key?: string
+          stage_label?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "request_stages_request_id_fkey"
+            columns: ["request_id"]
+            isOneToOne: false
+            referencedRelation: "requests"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      requests: {
+        Row: {
+          agreement_type: string | null
+          asset_group: string | null
+          asset_type: string | null
+          configuration: string | null
+          created_at: string
+          current_stage: string
+          current_stage_dept: string
+          id: string
+          model: string | null
+          notes: string | null
+          po_number: string | null
+          product: string | null
+          quantity: number | null
+          raised_by: string | null
+          raised_by_email: string | null
+          raised_dept: string | null
+          status: Database["public"]["Enums"]["request_status"]
+          title: string
+          type: Database["public"]["Enums"]["request_type"]
+          updated_at: string
+          warehouse: string | null
+        }
+        Insert: {
+          agreement_type?: string | null
+          asset_group?: string | null
+          asset_type?: string | null
+          configuration?: string | null
+          created_at?: string
+          current_stage: string
+          current_stage_dept: string
+          id?: string
+          model?: string | null
+          notes?: string | null
+          po_number?: string | null
+          product?: string | null
+          quantity?: number | null
+          raised_by?: string | null
+          raised_by_email?: string | null
+          raised_dept?: string | null
+          status?: Database["public"]["Enums"]["request_status"]
+          title: string
+          type: Database["public"]["Enums"]["request_type"]
+          updated_at?: string
+          warehouse?: string | null
+        }
+        Update: {
+          agreement_type?: string | null
+          asset_group?: string | null
+          asset_type?: string | null
+          configuration?: string | null
+          created_at?: string
+          current_stage?: string
+          current_stage_dept?: string
+          id?: string
+          model?: string | null
+          notes?: string | null
+          po_number?: string | null
+          product?: string | null
+          quantity?: number | null
+          raised_by?: string | null
+          raised_by_email?: string | null
+          raised_dept?: string | null
+          status?: Database["public"]["Enums"]["request_status"]
+          title?: string
+          type?: Database["public"]["Enums"]["request_type"]
+          updated_at?: string
+          warehouse?: string | null
+        }
+        Relationships: []
+      }
       users: {
         Row: {
           account_type: string | null
@@ -469,9 +735,18 @@ export type Database = {
         Args: { ids: string[]; new_check: string }
         Returns: string[]
       }
+      user_department: { Args: never; Returns: string }
     }
     Enums: {
-      [_ in never]: never
+      request_status: "open" | "approved" | "rejected" | "revoked" | "closed"
+      request_type: "new_hardware" | "asset_movement"
+      stage_action:
+        | "pending"
+        | "approved"
+        | "rejected"
+        | "revoked"
+        | "commented"
+        | "submitted"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -598,6 +873,17 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      request_status: ["open", "approved", "rejected", "revoked", "closed"],
+      request_type: ["new_hardware", "asset_movement"],
+      stage_action: [
+        "pending",
+        "approved",
+        "rejected",
+        "revoked",
+        "commented",
+        "submitted",
+      ],
+    },
   },
 } as const
