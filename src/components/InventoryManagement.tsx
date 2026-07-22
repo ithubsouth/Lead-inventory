@@ -889,6 +889,7 @@ const InventoryManagement = () => {
                 <OrdersTable
                   orders={orders}
                   setOrders={setOrders}
+                  loadOrderSummary={async () => { setDataLoaded(prev => ({ ...prev, devices: false })); }}
                   selectedWarehouse={selectedWarehouse}
                   setSelectedWarehouse={setSelectedWarehouse}
                   selectedAssetType={selectedAssetType}
