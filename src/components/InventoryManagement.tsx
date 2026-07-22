@@ -875,6 +875,7 @@ const InventoryManagement = () => {
                     setLoading={setLoading}
                     loadOrders={loadOrders}
                     loadDevices={loadDevices}
+                    loadOrderSummary={async () => { setDataLoaded(prev => ({ ...prev, devices: false })); }}
                     openScanner={(itemId, index, assetType) => {
                       setCurrentSerialIndex({ itemId, index, type: assetType as 'tablet' | 'tv' });
                       setShowScanner(true);
