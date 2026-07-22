@@ -185,7 +185,7 @@ const InventoryManagement = () => {
       // Fetch counts first to parallelize requests
       const [{ count: ordersCount }, { count: devicesCount }] = await Promise.all([
         supabase.from('orders').select('*', { count: 'exact', head: true }),
-        supabase.from('devices').select('*', { count: 'exact', head: true, is_deleted: false })
+        supabase.from('devices').select('*', { count: 'exact', head: true }).eq('is_deleted', false)
       ]);
 
       const ordersPages = Math.ceil((ordersCount || 0) / batchSize);

@@ -329,7 +329,7 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
         toast({ title: 'Error', description: 'No order found for this sales order', variant: 'destructive' });
         return;
       }
-      const firstOrder = ordersData[0];
+      const firstOrder: any = ordersData[0];
       setOrderType(firstOrder.order_type);
       setSchoolName(firstOrder.school_name || '');
       setDealId(firstOrder.deal_id || '');
