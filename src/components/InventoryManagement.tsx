@@ -144,12 +144,7 @@ const InventoryManagement = () => {
         () => {
           console.log('Realtime update: orders table changed');
           // Only refresh if the user has already loaded this data
-          setLoadedTabs(prev => {
-            const next = new Set(prev);
-            next.delete('view');
-            next.delete('order');
-            return next;
-          });
+          setDataLoaded(prev => ({ ...prev, orders: false }));
           if (activeTab === 'view' || activeTab === 'order') {
             if (activeTab === 'view') {
               loadOrders();
@@ -168,13 +163,7 @@ const InventoryManagement = () => {
         { event: '*', schema: 'public', table: 'devices' },
         () => {
           console.log('Realtime update: devices table changed');
-          setLoadedTabs(prev => {
-            const next = new Set(prev);
-            next.delete('devices');
-            next.delete('audit');
-            next.delete('order');
-            return next;
-          });
+          setDataLoaded(prev => ({ ...prev, devices: false }));
           if (activeTab === 'devices' || activeTab === 'audit' || activeTab === 'order') {
             loadDevices();
           }
@@ -196,7 +185,7 @@ const InventoryManagement = () => {
       // Fetch counts first to parallelize requests
       const [{ count: ordersCount }, { count: devicesCount }] = await Promise.all([
         supabase.from('orders').select('*', { count: 'exact', head: true }),
-        supabase.from('devices').select('*', { count: 'exact', head: true, is_deleted: false })
+        supabase.from('devices').select('*', { count: 'exact', head: true }).eq('is_deleted', false)
       ]);
 
       const ordersPages = Math.ceil((ordersCount || 0) / batchSize);
@@ -886,6 +875,7 @@ const InventoryManagement = () => {
                     setLoading={setLoading}
                     loadOrders={loadOrders}
                     loadDevices={loadDevices}
+                    loadOrderSummary={async () => { setDataLoaded(prev => ({ ...prev, devices: false })); }}
                     openScanner={(itemId, index, assetType) => {
                       setCurrentSerialIndex({ itemId, index, type: assetType as 'tablet' | 'tv' });
                       setShowScanner(true);
@@ -899,6 +889,7 @@ const InventoryManagement = () => {
                 <OrdersTable
                   orders={orders}
                   setOrders={setOrders}
+                  loadOrderSummary={async () => { setDataLoaded(prev => ({ ...prev, devices: false })); }}
                   selectedWarehouse={selectedWarehouse}
                   setSelectedWarehouse={setSelectedWarehouse}
                   selectedAssetType={selectedAssetType}
