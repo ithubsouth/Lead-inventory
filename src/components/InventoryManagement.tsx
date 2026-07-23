@@ -63,6 +63,7 @@ const InventoryManagement = () => {
   const [tvs, setTvs] = useState<TVItem[]>([]);
   const [logoLoaded, setLogoLoaded] = useState(false);
   const [versionHistoryOpen, setVersionHistoryOpen] = useState(false);
+  const [focusRequestId, setFocusRequestId] = useState<string | null>(null);
   const { toast } = useToast();
   const [userEmail, setUserEmail] = useState<string | null>(null);
   const [userRole, setUserRole] = useState<string | null>(null);
