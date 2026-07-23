@@ -1,11 +1,12 @@
 import React, { useState, useEffect, lazy, Suspense, useDeferredValue } from 'react';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
-import { Package, BarChart3, Archive, Clock, History } from 'lucide-react';
+import { Package, BarChart3, Archive, Clock, History, Inbox } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { UserProfile } from './UserProfile';
 import { ActiveUsers } from '@/components/ActiveUsers';
+import { NotificationBell } from '@/components/NotificationBell';
 import { Order, Device, OrderSummary, TabletItem, TVItem } from './types';
 import { DateRange } from 'react-day-picker';
 
@@ -17,10 +18,13 @@ const AuditTable = lazy(() => import('./AuditTable'));
 const ActivityLogs = lazy(() => import('./ActivityLogs'));
 const EnhancedBarcodeScanner = lazy(() => import('./EnhancedBarcodeScanner'));
 const VersionHistoryDialog = lazy(() => import('./VersionHistoryDialog'));
+const RequestsPanel = lazy(() => import('./RequestsPanel'));
 
 const TabFallback = () => (
   <div className='flex items-center justify-center py-16 text-sm text-muted-foreground'>Loading…</div>
 );
+
+
 
 
 const InventoryManagement = () => {
