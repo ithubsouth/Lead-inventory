@@ -831,7 +831,7 @@ const InventoryManagement = () => {
       <div className='flex-1 overflow-y-auto pt-[50px]'>
         <div className='container mx-auto px-4 py-4 h-full'>
           <Tabs value={activeTab} onValueChange={setActiveTab} className='w-full h-full flex flex-col'>
-            <TabsList className={`grid w-full ${userRole === 'Reporter' ? 'grid-cols-5' : 'grid-cols-6'} mb-4 bg-card/50 backdrop-blur-sm border border-border/50 flex-shrink-0`}>
+            <TabsList className={`grid w-full ${userRole === 'Reporter' ? 'grid-cols-6' : 'grid-cols-7'} mb-4 bg-card/50 backdrop-blur-sm border border-border/50 flex-shrink-0`}>
               {userRole !== 'Reporter' && (
                 <TabsTrigger value='create' className='flex items-center gap-2 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground'>
                   <Package className='w-4 h-4' />
@@ -850,6 +850,10 @@ const InventoryManagement = () => {
                 <Archive className='w-4 h-4' />
                 Devices
               </TabsTrigger>
+              <TabsTrigger value='requests' className='flex items-center gap-2 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground'>
+                <Inbox className='w-4 h-4' />
+                Requests
+              </TabsTrigger>
               <TabsTrigger value='audit' className='flex items-center gap-2 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground'>
                 <Archive className='w-4 h-4' />
                 Audit View
@@ -859,6 +863,14 @@ const InventoryManagement = () => {
                 Activity Logs
               </TabsTrigger>
             </TabsList>
+            <TabsContent value='requests' className='flex-1 overflow-y-auto'>
+              <Suspense fallback={<TabFallback />}>
+                <RequestsPanel
+                  focusRequestId={focusRequestId}
+                  onFocusHandled={() => setFocusRequestId(null)}
+                />
+              </Suspense>
+            </TabsContent>
             {userRole !== 'Reporter' && (
               <TabsContent value='create' className='space-y-6 flex-1 overflow-y-auto'>
                 <Suspense fallback={<TabFallback />}>
