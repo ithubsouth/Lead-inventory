@@ -1,11 +1,12 @@
 import React, { useState, useEffect, lazy, Suspense, useDeferredValue } from 'react';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
-import { Package, BarChart3, Archive, Clock, History } from 'lucide-react';
+import { Package, BarChart3, Archive, Clock, History, Inbox } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { UserProfile } from './UserProfile';
 import { ActiveUsers } from '@/components/ActiveUsers';
+import { NotificationBell } from '@/components/NotificationBell';
 import { Order, Device, OrderSummary, TabletItem, TVItem } from './types';
 import { DateRange } from 'react-day-picker';
 
@@ -17,10 +18,13 @@ const AuditTable = lazy(() => import('./AuditTable'));
 const ActivityLogs = lazy(() => import('./ActivityLogs'));
 const EnhancedBarcodeScanner = lazy(() => import('./EnhancedBarcodeScanner'));
 const VersionHistoryDialog = lazy(() => import('./VersionHistoryDialog'));
+const RequestsPanel = lazy(() => import('./RequestsPanel'));
 
 const TabFallback = () => (
   <div className='flex items-center justify-center py-16 text-sm text-muted-foreground'>Loading…</div>
 );
+
+
 
 
 const InventoryManagement = () => {
@@ -59,6 +63,7 @@ const InventoryManagement = () => {
   const [tvs, setTvs] = useState<TVItem[]>([]);
   const [logoLoaded, setLogoLoaded] = useState(false);
   const [versionHistoryOpen, setVersionHistoryOpen] = useState(false);
+  const [focusRequestId, setFocusRequestId] = useState<string | null>(null);
   const { toast } = useToast();
   const [userEmail, setUserEmail] = useState<string | null>(null);
   const [userRole, setUserRole] = useState<string | null>(null);
@@ -812,6 +817,7 @@ const InventoryManagement = () => {
             >
               <History className='w-5 h-5' />
             </Button>
+            <NotificationBell onOpenRequest={(id) => { setFocusRequestId(id); setActiveTab('requests'); }} />
             <ActiveUsers />
             <UserProfile />
           </div>
@@ -825,7 +831,7 @@ const InventoryManagement = () => {
       <div className='flex-1 overflow-y-auto pt-[50px]'>
         <div className='container mx-auto px-4 py-4 h-full'>
           <Tabs value={activeTab} onValueChange={setActiveTab} className='w-full h-full flex flex-col'>
-            <TabsList className={`grid w-full ${userRole === 'Reporter' ? 'grid-cols-5' : 'grid-cols-6'} mb-4 bg-card/50 backdrop-blur-sm border border-border/50 flex-shrink-0`}>
+            <TabsList className={`grid w-full ${userRole === 'Reporter' ? 'grid-cols-6' : 'grid-cols-7'} mb-4 bg-card/50 backdrop-blur-sm border border-border/50 flex-shrink-0`}>
               {userRole !== 'Reporter' && (
                 <TabsTrigger value='create' className='flex items-center gap-2 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground'>
                   <Package className='w-4 h-4' />
@@ -844,6 +850,10 @@ const InventoryManagement = () => {
                 <Archive className='w-4 h-4' />
                 Devices
               </TabsTrigger>
+              <TabsTrigger value='requests' className='flex items-center gap-2 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground'>
+                <Inbox className='w-4 h-4' />
+                Requests
+              </TabsTrigger>
               <TabsTrigger value='audit' className='flex items-center gap-2 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground'>
                 <Archive className='w-4 h-4' />
                 Audit View
@@ -853,6 +863,14 @@ const InventoryManagement = () => {
                 Activity Logs
               </TabsTrigger>
             </TabsList>
+            <TabsContent value='requests' className='flex-1 overflow-y-auto'>
+              <Suspense fallback={<TabFallback />}>
+                <RequestsPanel
+                  focusRequestId={focusRequestId}
+                  onFocusHandled={() => setFocusRequestId(null)}
+                />
+              </Suspense>
+            </TabsContent>
             {userRole !== 'Reporter' && (
               <TabsContent value='create' className='space-y-6 flex-1 overflow-y-auto'>
                 <Suspense fallback={<TabFallback />}>
