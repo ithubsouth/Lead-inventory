@@ -35,6 +35,11 @@ export const CreateUserDialog = ({ onSuccess }: CreateUserDialogProps) => {
     'Production Team',
     'QA Team',
     'DevOps',
+    'Procurement Team',
+    'Planning Team',
+    'Finance',
+    'Supply Chain Management',
+    'SAP Analyst',
   ];
 
   const roles = [
