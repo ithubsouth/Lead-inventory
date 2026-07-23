@@ -817,6 +817,7 @@ const InventoryManagement = () => {
             >
               <History className='w-5 h-5' />
             </Button>
+            <NotificationBell onOpenRequest={(id) => { setFocusRequestId(id); setActiveTab('requests'); }} />
             <ActiveUsers />
             <UserProfile />
           </div>
