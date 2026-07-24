@@ -173,11 +173,15 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
         notifTitle = `Request revoked: ${req.title || REQUEST_TYPE_LABELS[req.type]}`;
       } else if (action === 'approved') {
         const nxt = nextStage(req.type, req.current_stage);
-        if (!nxt || nxt.key === 'closed') {
+        if (!nxt) {
+          // Terminal stage approved — close it. If new_hardware, materialize into orders + devices.
           nextStatus = 'closed';
-          nextStageKey = 'closed';
-          nextDept = 'Administrators';
           notifTitle = `Request approved & closed: ${req.title || REQUEST_TYPE_LABELS[req.type]}`;
+          if (req.type === 'new_hardware') {
+            await materializeAssets();
+          } else if (req.type === 'asset_movement') {
+            await applyMovement();
+          }
         } else {
           nextStageKey = nxt.key;
           nextDept = nxt.dept;
@@ -272,6 +276,171 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
     await supabase.storage.from('request-documents').remove([d.file_path]);
     await supabase.from('request_documents').delete().eq('id', d.id);
     await load();
+  };
+
+  // Materialize approved new hardware into orders + devices with generated asset codes.
+  const materializeAssets = async () => {
+    if (!req) return;
+    const { data: existingMax } = await supabase
+      .from('devices')
+      .select('far_code')
+      .not('far_code', 'is', null)
+      .order('far_code', { ascending: false })
+      .limit(1);
+    let nextCode = ((existingMax?.[0]?.far_code as number) || 100000) + 1;
+
+    const orderRow: any = {
+      order_type: 'Hardware',
+      material_type: 'Inward',
+      asset_type: req.asset_type || 'Tablet',
+      model: req.model || '-',
+      quantity: serials.length || req.quantity || 0,
+      warehouse: req.warehouse || '-',
+      sales_order: req.po_number || null,
+      configuration: req.configuration || null,
+      agreement_type: req.agreement_type || null,
+      school_name: 'Stock',
+      order_date: new Date().toISOString().split('T')[0],
+      created_by: profile?.email,
+      updated_by: profile?.email,
+    };
+    const { data: orderIns, error: oErr } = await supabase
+      .from('orders').insert(orderRow).select('id').single();
+    if (oErr) { toast.error(`Order create failed: ${oErr.message}`); return; }
+    const orderId = orderIns!.id;
+
+    if (serials.length) {
+      const deviceRows = serials.map((s) => ({
+        order_id: orderId,
+        order_type: 'Hardware',
+        warehouse: req.warehouse || '-',
+        sales_order: req.po_number || null,
+        school_name: 'Stock',
+        asset_type: req.asset_type || 'Tablet',
+        model: req.model || '-',
+        configuration: req.configuration || null,
+        serial_number: s.serial_number,
+        asset_group: s.asset_group || req.asset_group || null,
+        asset_status: 'Fresh',
+        status: 'Stock' as const,
+        far_code: nextCode++,
+        material_type: 'Inward' as const,
+        created_by: profile?.email,
+        updated_by: profile?.email,
+      }));
+      const { error: dErr } = await supabase.from('devices').insert(deviceRows);
+      if (dErr) toast.error(`Devices create failed: ${dErr.message}`);
+    }
+  };
+
+  const applyMovement = async () => {
+    if (!req || !serials.length) return;
+    const sns = serials.map((s) => s.serial_number);
+    const { error } = await supabase
+      .from('devices')
+      .update({
+        warehouse: req.warehouse || undefined,
+        asset_group: req.asset_group || undefined,
+        updated_by: profile?.email,
+      })
+      .in('serial_number', sns);
+    if (error) toast.error(`Movement update failed: ${error.message}`);
+  };
+
+  const deleteRequest = async () => {
+    if (!req) return;
+    if (!confirm(`Delete this request permanently? This removes serials, stages, documents and notifications.`)) return;
+    setBusy(true);
+    try {
+      await supabase.storage.from('request-documents').remove(docs.map((d) => d.file_path));
+      await supabase.from('request_documents').delete().eq('request_id', req.id);
+      await supabase.from('request_serials').delete().eq('request_id', req.id);
+      await supabase.from('request_stages').delete().eq('request_id', req.id);
+      await supabase.from('notifications').delete().eq('request_id', req.id);
+      const { error } = await supabase.from('requests').delete().eq('id', req.id);
+      if (error) throw error;
+      toast.success('Request deleted');
+      onChanged?.();
+      onOpenChange(false);
+    } catch (e: any) {
+      toast.error(e.message || 'Delete failed');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const downloadSerialsCsv = async () => {
+    if (!req) return;
+    // Fetch device rows (with asset codes) for these serials if they exist
+    const sns = serials.map((s) => s.serial_number);
+    let devs: any[] = [];
+    if (sns.length) {
+      const { data } = await supabase
+        .from('devices')
+        .select('serial_number,far_code,asset_group,warehouse,asset_status,status,model,configuration,sales_order')
+        .in('serial_number', sns);
+      devs = data || [];
+    }
+    const byS = new Map(devs.map((d) => [d.serial_number, d]));
+    const rows = [
+      ['Serial Number', 'Asset Code', 'Model', 'Configuration', 'Warehouse', 'Asset Group', 'Status', 'PO/SO', 'Duplicate', 'Existed Before'],
+      ...serials.map((s) => {
+        const d = byS.get(s.serial_number) || {};
+        return [
+          s.serial_number,
+          d.far_code ?? '',
+          d.model ?? req.model ?? '',
+          d.configuration ?? req.configuration ?? '',
+          s.warehouse ?? req.warehouse ?? '',
+          s.asset_group ?? req.asset_group ?? '',
+          d.status ?? '',
+          d.sales_order ?? req.po_number ?? '',
+          s.is_duplicate ? 'Yes' : 'No',
+          s.exists_in_devices ? 'Yes' : 'No',
+        ];
+      }),
+    ];
+    const csv = rows.map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(',')).join('\n');
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `request_${req.po_number || req.id}_serials.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const verifyRef = useRef<HTMLInputElement>(null);
+  const bulkVerifySerials = async (file: File) => {
+    if (!req) return;
+    setBusy(true);
+    try {
+      const text = await file.text();
+      const uploaded = text
+        .split(/\r?\n|,/)
+        .map((s) => s.trim().replace(/^"|"$/g, ''))
+        .filter((s) => s && s.toLowerCase() !== 'serial' && s.toLowerCase() !== 'serial_number' && s.toLowerCase() !== 'serial number');
+      const expected = new Set(serials.map((s) => s.serial_number));
+      const uploadedSet = new Set(uploaded);
+      const matched = uploaded.filter((s) => expected.has(s));
+      const missing = [...expected].filter((s) => !uploadedSet.has(s));
+      const extra = uploaded.filter((s) => !expected.has(s));
+      const poQty = req.quantity || 0;
+      const qtyMismatch = poQty > 0 && uploaded.length !== poQty;
+      const summary = [
+        `Verified ${matched.length}/${expected.size} serials`,
+        missing.length ? `Missing: ${missing.slice(0, 20).join(', ')}${missing.length > 20 ? '...' : ''}` : null,
+        extra.length ? `Extra: ${extra.slice(0, 20).join(', ')}${extra.length > 20 ? '...' : ''}` : null,
+        qtyMismatch ? `Qty mismatch: uploaded ${uploaded.length} vs PO qty ${poQty}` : null,
+      ].filter(Boolean).join(' | ');
+      setComment(summary);
+      toast.success(summary || 'Verification complete');
+    } catch (e: any) {
+      toast.error(e.message || 'Verification failed');
+    } finally {
+      setBusy(false);
+      if (verifyRef.current) verifyRef.current.value = '';
+    }
   };
 
   if (!req) {
