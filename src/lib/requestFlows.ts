@@ -12,11 +12,8 @@ export interface StageDef {
 export const NEW_HARDWARE_FLOW: StageDef[] = [
   { key: 'proc_add_serials', label: 'Add serials, PO/SO, warehouse, invoice', dept: 'Procurement Team' },
   { key: 'tech_verify_serials', label: 'Verify serials', dept: 'Technology Team' },
-  { key: 'scm_request_po_release', label: 'Request PO release', dept: 'Supply Chain Management' },
-  { key: 'proc_release_po', label: 'Release PO', dept: 'Procurement Team' },
   { key: 'scm_take_grn', label: 'Take GRN', dept: 'Supply Chain Management' },
   { key: 'finance_approve', label: 'Finance approval + generate Asset Code', dept: 'Finance' },
-  { key: 'closed', label: 'Closed', dept: 'Administrators' },
 ];
 
 export const ASSET_MOVEMENT_FLOW: StageDef[] = [
@@ -28,7 +25,6 @@ export const ASSET_MOVEMENT_FLOW: StageDef[] = [
   { key: 'finance_request_serials', label: 'Request serials from Technology Team', dept: 'Finance' },
   { key: 'tech_provide_serials', label: 'Provide serials', dept: 'Technology Team' },
   { key: 'finance_final_approve', label: 'Final approval', dept: 'Finance' },
-  { key: 'closed', label: 'Closed', dept: 'Administrators' },
 ];
 
 export const getFlow = (type: RequestType): StageDef[] =>
@@ -39,6 +35,11 @@ export const nextStage = (type: RequestType, currentKey: string): StageDef | nul
   const i = flow.findIndex((s) => s.key === currentKey);
   if (i < 0 || i >= flow.length - 1) return null;
   return flow[i + 1];
+};
+
+export const isTerminalStage = (type: RequestType, currentKey: string): boolean => {
+  const flow = getFlow(type);
+  return flow.findIndex((s) => s.key === currentKey) === flow.length - 1;
 };
 
 export const REQUEST_TYPE_LABELS: Record<RequestType, string> = {
