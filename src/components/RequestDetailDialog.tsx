@@ -469,7 +469,14 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
                 {req.po_number ? ` · PO ${req.po_number}` : ''} · Raised by {req.raised_by_email} ({req.raised_dept})
               </div>
             </div>
-            <Badge className='capitalize'>{req.status}</Badge>
+            <div className='flex items-center gap-2'>
+              <Badge className='capitalize'>{req.status}</Badge>
+              {profile?.role === 'Super Admin' && (
+                <Button size='sm' variant='destructive' onClick={deleteRequest} disabled={busy}>
+                  <Trash2 className='w-3.5 h-3.5 mr-1' /> Delete
+                </Button>
+              )}
+            </div>
           </div>
         </DialogHeader>
 
@@ -554,16 +561,45 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
             {/* Serials */}
             {serials.length > 0 && (
               <div>
-                <div className='flex items-center justify-between mb-2'>
+                <div className='flex items-center justify-between mb-2 flex-wrap gap-2'>
                   <div className='text-sm font-semibold'>
-                    Serial Numbers ({serials.length})
+                    Serial Numbers ({serials.length}
+                    {req.quantity ? ` / ${req.quantity} PO qty` : ''})
                   </div>
-                  {dupCount > 0 && (
-                    <div className='text-xs text-amber-700 flex items-center gap-1'>
-                      <AlertTriangle className='w-3 h-3' /> {dupCount} flagged
-                    </div>
-                  )}
+                  <div className='flex items-center gap-2'>
+                    {dupCount > 0 && (
+                      <span className='text-xs text-amber-700 flex items-center gap-1'>
+                        <AlertTriangle className='w-3 h-3' /> {dupCount} flagged
+                      </span>
+                    )}
+                    <Button size='sm' variant='outline' onClick={downloadSerialsCsv}>
+                      <FileDown className='w-3.5 h-3.5 mr-1' /> Download CSV
+                    </Button>
+                    {req.current_stage === 'tech_verify_serials' && canAct && (
+                      <>
+                        <input
+                          ref={verifyRef}
+                          type='file'
+                          accept='.csv,.txt'
+                          className='hidden'
+                          onChange={(e) => {
+                            const f = e.target.files?.[0];
+                            if (f) bulkVerifySerials(f);
+                          }}
+                        />
+                        <Button size='sm' variant='outline' onClick={() => verifyRef.current?.click()} disabled={busy}>
+                          <Upload className='w-3.5 h-3.5 mr-1' /> Bulk Verify
+                        </Button>
+                      </>
+                    )}
+                  </div>
                 </div>
+                {req.quantity && serials.length !== req.quantity && (
+                  <div className='mb-2 p-2 rounded border border-amber-300 bg-amber-50 text-xs text-amber-800 flex items-center gap-1'>
+                    <AlertTriangle className='w-3 h-3' />
+                    Serial count ({serials.length}) does not match PO quantity ({req.quantity}).
+                  </div>
+                )}
                 <div className='max-h-52 overflow-y-auto rounded border'>
                   <table className='w-full text-xs'>
                     <thead className='bg-muted/40 sticky top-0'>
