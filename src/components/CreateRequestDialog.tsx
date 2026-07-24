@@ -25,7 +25,12 @@ import {
   RequestType,
   getFlow,
 } from '@/lib/requestFlows';
-import { assetTypes, locations, agreementTypes, assetGroups } from './constants';
+import {
+  assetTypes, locations, agreementTypes, assetGroups,
+  tabletModels, tvModels, coverModels, sdCardSizes, pendriveSizes,
+  configurations, tvConfigurations,
+} from './constants';
+import ComboInput from './ComboInput';
 
 interface Props {
   open: boolean;
@@ -197,14 +202,35 @@ export default function CreateRequestDialog({ open, onOpenChange, onCreated }: P
           </div>
           <div>
             <Label>Model</Label>
-            <Input value={model} onChange={(e) => setModel(e.target.value)} />
+            <ComboInput
+              fieldKey={`req_model_${assetType || 'any'}`}
+              baseOptions={
+                assetType === 'Tablet' ? tabletModels :
+                assetType === 'TV' ? tvModels :
+                assetType === 'Cover' ? coverModels :
+                assetType === 'SD Card' ? sdCardSizes :
+                assetType === 'Pendrive' ? pendriveSizes : []
+              }
+              value={model}
+              onChange={setModel}
+              placeholder={assetType ? 'Select or type model' : 'Select asset type first'}
+            />
           </div>
           <div>
             <Label>Configuration</Label>
-            <Input value={configuration} onChange={(e) => setConfiguration(e.target.value)} />
+            <ComboInput
+              fieldKey={`req_config_${assetType || 'any'}`}
+              baseOptions={
+                assetType === 'Tablet' ? configurations :
+                assetType === 'TV' ? tvConfigurations : []
+              }
+              value={configuration}
+              onChange={setConfiguration}
+              placeholder='Select or type configuration'
+            />
           </div>
           <div>
-            <Label>Quantity</Label>
+            <Label>Quantity (PO Qty)</Label>
             <Input type='number' min={0} value={quantity} onChange={(e) => setQuantity(e.target.value)} />
           </div>
           <div>
