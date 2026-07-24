@@ -19,6 +19,7 @@ import {
   canActOnStage,
   getFlow,
   nextStage,
+  isTerminalStage,
 } from '@/lib/requestFlows';
 import { format } from 'date-fns';
 import {
@@ -30,6 +31,7 @@ import {
   Download,
   Trash2,
   AlertTriangle,
+  FileDown,
 } from 'lucide-react';
 
 interface Props {
