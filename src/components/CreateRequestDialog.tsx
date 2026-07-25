@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import {
   Dialog,
   DialogContent,
@@ -26,16 +26,25 @@ import {
   getFlow,
 } from '@/lib/requestFlows';
 import {
-  assetTypes, locations, agreementTypes, assetGroups,
+  assetTypes, locations, assetGroups, assetStatuses,
   tabletModels, tvModels, coverModels, sdCardSizes, pendriveSizes,
   configurations, tvConfigurations,
 } from './constants';
 import ComboInput from './ComboInput';
+import { Plus, Minus, Camera } from 'lucide-react';
+import { cn } from '@/lib/utils';
 
 interface Props {
   open: boolean;
   onOpenChange: (o: boolean) => void;
   onCreated?: (id: string) => void;
+}
+
+interface SerialEntry {
+  serial_number: string;
+  asset_status: string;
+  asset_group: string;
+  asset_code: string;
 }
 
 export default function CreateRequestDialog({ open, onOpenChange, onCreated }: Props) {
@@ -47,12 +56,89 @@ export default function CreateRequestDialog({ open, onOpenChange, onCreated }: P
   const [assetType, setAssetType] = useState<string>('');
   const [model, setModel] = useState('');
   const [configuration, setConfiguration] = useState('');
-  const [quantity, setQuantity] = useState<string>('');
-  const [assetGroup, setAssetGroup] = useState('');
-  const [agreementType, setAgreementType] = useState('');
-  const [serialsRaw, setSerialsRaw] = useState('');
+  const [quantity, setQuantity] = useState(1);
+  const [assetStatus, setAssetStatus] = useState('Fresh');
+  const [assetGroup, setAssetGroup] = useState('NFA');
+  const [serialEntries, setSerialEntries] = useState<SerialEntry[]>([
+    { serial_number: '', asset_status: 'Fresh', asset_group: 'NFA', asset_code: '' }
+  ]);
   const [notes, setNotes] = useState('');
   const [saving, setSaving] = useState(false);
+  const [bulkText, setBulkText] = useState('');
+  const [showBulk, setShowBulk] = useState(false);
+
+  // Validation: Check for duplicates within the current entry list
+  const duplicateSerials = useMemo(() => {
+    const seen = new Set<string>();
+    const dups = new Set<string>();
+    serialEntries.forEach(e => {
+      const s = e.serial_number?.trim();
+      if (!s) return;
+      if (seen.has(s)) dups.add(s);
+      seen.add(s);
+    });
+    return dups;
+  }, [serialEntries]);
+
+  // Sync serialEntries length with quantity
+  useEffect(() => {
+    if (quantity < 1) return;
+    setSerialEntries(prev => {
+      if (prev.length === quantity) return prev;
+      if (prev.length < quantity) {
+        const added = Array.from({ length: quantity - prev.length }, () => ({
+          serial_number: '',
+          asset_status: assetStatus || 'Fresh',
+          asset_group: assetGroup || 'NFA',
+          asset_code: ''
+        }));
+        return [...prev, ...added];
+      }
+      return prev.slice(0, quantity);
+    });
+  }, [quantity, assetStatus, assetGroup]);
+
+  // Sync bulk asset group change to individual entries
+  const handleBulkAssetGroupChange = (val: string) => {
+    setAssetGroup(val);
+    setSerialEntries(prev => prev.map(e => ({ ...e, asset_group: val })));
+  };
+
+  // Sync bulk asset status change to individual entries
+  const handleBulkAssetStatusChange = (val: string) => {
+    setAssetStatus(val);
+    setSerialEntries(prev => prev.map(e => ({ ...e, asset_status: val })));
+  };
+
+  const updateEntry = (index: number, field: keyof SerialEntry, value: string) => {
+    setSerialEntries(prev => {
+      const next = [...prev];
+      next[index] = { ...next[index], [field]: value };
+      return next;
+    });
+  };
+
+  const handleBulkPaste = () => {
+    const serials = bulkText
+      .split(/[\n\r, ]+/)
+      .map(s => s.trim())
+      .filter(s => s.length > 0);
+
+    if (serials.length === 0) return;
+
+    const newEntries = serials.map(s => ({
+      serial_number: s,
+      asset_status: assetStatus || 'Fresh',
+      asset_group: assetGroup || 'NFA',
+      asset_code: ''
+    }));
+
+    setQuantity(serials.length);
+    setSerialEntries(newEntries);
+    setShowBulk(false);
+    setBulkText('');
+    toast.success(`${serials.length} serials imported`);
+  };
 
   const submit = async () => {
     if (!profile?.id) {
@@ -67,10 +153,6 @@ export default function CreateRequestDialog({ open, onOpenChange, onCreated }: P
     try {
       const flow = getFlow(type);
       const first = flow[0];
-      const serials = serialsRaw
-        .split(/[\n,]+/)
-        .map((s) => s.trim())
-        .filter(Boolean);
 
       const { data: reqRows, error: reqErr } = await supabase
         .from('requests')
@@ -85,9 +167,8 @@ export default function CreateRequestDialog({ open, onOpenChange, onCreated }: P
           asset_type: assetType || null,
           model: model || null,
           configuration: configuration || null,
-          quantity: quantity ? Number(quantity) : null,
+          quantity: quantity,
           asset_group: assetGroup || null,
-          agreement_type: agreementType || null,
           notes: notes || null,
           raised_by: profile.id,
           raised_by_email: profile.email,
@@ -111,28 +192,35 @@ export default function CreateRequestDialog({ open, onOpenChange, onCreated }: P
         comment: 'Request raised',
       });
 
-      if (serials.length) {
-        const existing = await supabase
-          .from('devices')
-          .select('serial_number')
-          .in('serial_number', serials);
-        const existingSet = new Set(
-          (existing.data || []).map((d: any) => d.serial_number)
-        );
+      if (serialEntries.length) {
+        const serials = serialEntries.map(e => e.serial_number).filter(Boolean);
+        let existingSet = new Set<string>();
+
+        if (serials.length) {
+          const existing = await supabase
+            .from('devices')
+            .select('serial_number')
+            .in('serial_number', serials);
+          existingSet = new Set((existing.data || []).map((d: any) => d.serial_number));
+        }
+
         const seen = new Set<string>();
-        const rows = serials.map((sn) => {
-          const dup = seen.has(sn);
-          seen.add(sn);
+        const rows = serialEntries.map((e) => {
+          const dup = seen.has(e.serial_number);
+          if (e.serial_number) seen.add(e.serial_number);
+
           return {
             request_id: requestId,
-            serial_number: sn,
-            asset_group: assetGroup || null,
+            serial_number: e.serial_number,
+            asset_group: e.asset_group || null,
+            asset_status: e.asset_status || null,
+            asset_code: e.asset_code || null,
             warehouse: warehouse || null,
-            exists_in_devices: existingSet.has(sn),
+            exists_in_devices: e.serial_number ? existingSet.has(e.serial_number) : false,
             is_duplicate: dup,
           };
         });
-        await supabase.from('request_serials').insert(rows);
+        await (supabase as any).from('request_serials').insert(rows);
       }
 
       await supabase.from('notifications').insert({
@@ -155,128 +243,214 @@ export default function CreateRequestDialog({ open, onOpenChange, onCreated }: P
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className='max-w-2xl max-h-[90vh] overflow-y-auto'>
-        <DialogHeader>
+      <DialogContent className='max-w-[95vw] w-full max-h-[95vh] flex flex-col p-0'>
+        <DialogHeader className='p-6 pb-2'>
           <DialogTitle>Raise a New Request</DialogTitle>
         </DialogHeader>
-        <div className='grid grid-cols-2 gap-4'>
-          <div className='col-span-2'>
-            <Label>Request Type *</Label>
-            <Select value={type} onValueChange={(v) => setType(v as RequestType)}>
-              <SelectTrigger><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value='new_hardware'>{REQUEST_TYPE_LABELS.new_hardware}</SelectItem>
-                <SelectItem value='asset_movement'>{REQUEST_TYPE_LABELS.asset_movement}</SelectItem>
-              </SelectContent>
-            </Select>
+
+        <div className='flex-1 overflow-y-auto px-6 py-2 space-y-6'>
+          <div className='grid grid-cols-2 gap-4'>
+            <div className='col-span-2'>
+              <Label>Request Type *</Label>
+              <Select value={type} onValueChange={(v) => setType(v as RequestType)}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value='new_hardware'>{REQUEST_TYPE_LABELS.new_hardware}</SelectItem>
+                  <SelectItem value='asset_movement'>{REQUEST_TYPE_LABELS.asset_movement}</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className='col-span-2'>
+              <Label>Title *</Label>
+              <Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder='Short description' />
+            </div>
+            <div>
+              <Label>PO Number</Label>
+              <Input value={poNumber} onChange={(e) => setPoNumber(e.target.value)} />
+            </div>
+            <div>
+              <Label>Warehouse</Label>
+              <Select value={warehouse} onValueChange={setWarehouse}>
+                <SelectTrigger><SelectValue placeholder='Select' /></SelectTrigger>
+                <SelectContent>
+                  {locations.map((l) => (
+                    <SelectItem key={l} value={l}>{l}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label>Asset Type</Label>
+              <Select value={assetType} onValueChange={setAssetType}>
+                <SelectTrigger><SelectValue placeholder='Select' /></SelectTrigger>
+                <SelectContent>
+                  {assetTypes.map((a) => (
+                    <SelectItem key={a} value={a}>{a}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label>Model</Label>
+              <ComboInput
+                fieldKey={`req_model_${assetType || 'any'}`}
+                baseOptions={
+                  assetType === 'Tablet' ? tabletModels :
+                  assetType === 'TV' ? tvModels :
+                  assetType === 'Cover' ? coverModels :
+                  assetType === 'SD Card' ? sdCardSizes :
+                  assetType === 'Pendrive' ? pendriveSizes : []
+                }
+                value={model}
+                onChange={setModel}
+                placeholder={assetType ? 'Select or type model' : 'Select asset type first'}
+              />
+            </div>
+            <div>
+              <Label>Configuration</Label>
+              <ComboInput
+                fieldKey={`req_config_${assetType || 'any'}`}
+                baseOptions={
+                  assetType === 'Tablet' ? configurations :
+                  assetType === 'TV' ? tvConfigurations : []
+                }
+                value={configuration}
+                onChange={setConfiguration}
+                placeholder='Select or type configuration'
+              />
+            </div>
+            <div className='grid grid-cols-2 gap-4'>
+              <div>
+                <Label>Asset Status</Label>
+                <Select value={assetStatus} onValueChange={handleBulkAssetStatusChange}>
+                  <SelectTrigger><SelectValue placeholder='Select' /></SelectTrigger>
+                  <SelectContent>
+                    {assetStatuses.map((s) => (
+                      <SelectItem key={s} value={s}>{s}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label>Asset Group</Label>
+                <Select value={assetGroup} onValueChange={handleBulkAssetGroupChange}>
+                  <SelectTrigger><SelectValue placeholder='Select' /></SelectTrigger>
+                  <SelectContent>
+                    {assetGroups.map((a) => (
+                      <SelectItem key={a} value={a}>{a}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
           </div>
-          <div className='col-span-2'>
-            <Label>Title *</Label>
-            <Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder='Short description' />
+
+          <div className='space-y-4 pt-4 border-t'>
+            <div className='flex items-center justify-between'>
+              <div className='flex items-center gap-4'>
+                <Label className='text-base font-semibold'>Quantity *</Label>
+                <Button
+                  variant='outline'
+                  size='sm'
+                  onClick={() => setShowBulk(!showBulk)}
+                  className='h-7 text-[10px] font-bold uppercase tracking-wider bg-blue-50 text-blue-600 border-blue-100 hover:bg-blue-600 hover:text-white transition-all'
+                >
+                  {showBulk ? 'Cancel Bulk' : 'Bulk Paste'}
+                </Button>
+              </div>
+              <div className='flex items-center space-x-3'>
+                <Button
+                  variant='outline'
+                  size='icon'
+                  className='h-8 w-8'
+                  onClick={() => setQuantity(Math.max(1, quantity - 1))}
+                >
+                  <Minus className='h-4 w-4' />
+                </Button>
+                <Input
+                  type='number'
+                  className='w-16 h-8 text-center [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none'
+                  value={quantity}
+                  onChange={(e) => setQuantity(Math.max(1, parseInt(e.target.value) || 1))}
+                />
+                <Button
+                  variant='outline'
+                  size='icon'
+                  className='h-8 w-8'
+                  onClick={() => setQuantity(quantity + 1)}
+                >
+                  <Plus className='h-4 w-4' />
+                </Button>
+              </div>
+            </div>
+
+            {showBulk && (
+              <div className='space-y-3 p-4 bg-blue-50/50 rounded-2xl border border-blue-100'>
+                <Label className='text-xs font-bold text-blue-600 uppercase tracking-wider'>Paste Serial Numbers (one per line or comma separated)</Label>
+                <Textarea
+                  value={bulkText}
+                  onChange={(e) => setBulkText(e.target.value)}
+                  placeholder="Enter serials here..."
+                  className='h-32 bg-white'
+                />
+                <Button onClick={handleBulkPaste} className='w-full bg-blue-600 hover:bg-blue-700'>
+                  Apply Bulk Paste
+                </Button>
+              </div>
+            )}
+
+            <div className='space-y-2'>
+              <div className='grid grid-cols-[1fr,40px] gap-3 px-1'>
+                <Label className='text-xs font-bold text-muted-foreground uppercase tracking-wider'>Serial Number</Label>
+                <div />
+              </div>
+
+              <div className='space-y-2 max-h-[350px] overflow-y-auto pr-2 custom-scrollbar'>
+                {serialEntries.map((entry, i) => {
+                  const isDup = entry.serial_number && duplicateSerials.has(entry.serial_number);
+                  return (
+                    <div key={i} className='flex items-center gap-3'>
+                      <Input
+                        placeholder={`Serial ${i + 1}`}
+                        value={entry.serial_number}
+                        onChange={(e) => updateEntry(i, 'serial_number', e.target.value)}
+                        className={cn(
+                          'h-9 text-xs w-[300px] transition-all',
+                          isDup && 'border-red-500 bg-red-50/30'
+                        )}
+                      />
+                      <Button variant='outline' size='icon' className='h-9 w-9 shrink-0'>
+                        <Camera className='h-4 w-4' />
+                      </Button>
+                      {isDup && (
+                        <span className='text-[10px] text-red-500 font-bold whitespace-nowrap'>
+                          Duplicate within order
+                        </span>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
           </div>
-          <div>
-            <Label>PO Number</Label>
-            <Input value={poNumber} onChange={(e) => setPoNumber(e.target.value)} />
-          </div>
-          <div>
-            <Label>Warehouse</Label>
-            <Select value={warehouse} onValueChange={setWarehouse}>
-              <SelectTrigger><SelectValue placeholder='Select' /></SelectTrigger>
-              <SelectContent>
-                {locations.map((l) => (
-                  <SelectItem key={l} value={l}>{l}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div>
-            <Label>Asset Type</Label>
-            <Select value={assetType} onValueChange={setAssetType}>
-              <SelectTrigger><SelectValue placeholder='Select' /></SelectTrigger>
-              <SelectContent>
-                {assetTypes.map((a) => (
-                  <SelectItem key={a} value={a}>{a}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div>
-            <Label>Model</Label>
-            <ComboInput
-              fieldKey={`req_model_${assetType || 'any'}`}
-              baseOptions={
-                assetType === 'Tablet' ? tabletModels :
-                assetType === 'TV' ? tvModels :
-                assetType === 'Cover' ? coverModels :
-                assetType === 'SD Card' ? sdCardSizes :
-                assetType === 'Pendrive' ? pendriveSizes : []
-              }
-              value={model}
-              onChange={setModel}
-              placeholder={assetType ? 'Select or type model' : 'Select asset type first'}
-            />
-          </div>
-          <div>
-            <Label>Configuration</Label>
-            <ComboInput
-              fieldKey={`req_config_${assetType || 'any'}`}
-              baseOptions={
-                assetType === 'Tablet' ? configurations :
-                assetType === 'TV' ? tvConfigurations : []
-              }
-              value={configuration}
-              onChange={setConfiguration}
-              placeholder='Select or type configuration'
-            />
-          </div>
-          <div>
-            <Label>Quantity (PO Qty)</Label>
-            <Input type='number' min={0} value={quantity} onChange={(e) => setQuantity(e.target.value)} />
-          </div>
-          <div>
-            <Label>Asset Group</Label>
-            <Select value={assetGroup} onValueChange={setAssetGroup}>
-              <SelectTrigger><SelectValue placeholder='Select' /></SelectTrigger>
-              <SelectContent>
-                {assetGroups.map((a) => (
-                  <SelectItem key={a} value={a}>{a}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div>
-            <Label>Agreement Type</Label>
-            <Select value={agreementType} onValueChange={setAgreementType}>
-              <SelectTrigger><SelectValue placeholder='Select' /></SelectTrigger>
-              <SelectContent>
-                {agreementTypes.map((a) => (
-                  <SelectItem key={a} value={a}>{a}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className='col-span-2'>
-            <Label>Serial Numbers (one per line or comma separated)</Label>
+
+          <div className='col-span-2 pt-4 border-t'>
+            <Label className='mb-2 block'>Notes</Label>
             <Textarea
-              value={serialsRaw}
-              onChange={(e) => setSerialsRaw(e.target.value)}
-              rows={4}
-              placeholder='SN001&#10;SN002&#10;...'
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              rows={2}
+              placeholder='Additional details or requirements...'
+              className='resize-none'
             />
-            <p className='text-xs text-muted-foreground mt-1'>
-              Duplicates and serials already in devices will be flagged automatically.
-            </p>
-          </div>
-          <div className='col-span-2'>
-            <Label>Notes</Label>
-            <Textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={2} />
           </div>
         </div>
-        <DialogFooter>
+
+        <DialogFooter className='p-6 pt-3 border-t bg-muted/30'>
           <Button variant='outline' onClick={() => onOpenChange(false)} disabled={saving}>
             Cancel
           </Button>
-          <Button onClick={submit} disabled={saving}>
+          <Button onClick={submit} disabled={saving} className='bg-blue-600 hover:bg-blue-700 min-w-[120px]'>
             {saving ? 'Creating...' : 'Create Request'}
           </Button>
         </DialogFooter>

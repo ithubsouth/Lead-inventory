@@ -54,6 +54,7 @@ interface RequestFull {
   model: string | null;
   configuration: string | null;
   quantity: number | null;
+  asset_status: string | null;
   asset_group: string | null;
   agreement_type: string | null;
   notes: string | null;
@@ -82,6 +83,8 @@ interface SerialRow {
   exists_in_devices: boolean;
   warehouse: string | null;
   asset_group: string | null;
+  asset_status: string | null;
+  asset_code: string | null;
 }
 
 interface DocRow {
@@ -174,7 +177,6 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
       } else if (action === 'approved') {
         const nxt = nextStage(req.type, req.current_stage);
         if (!nxt) {
-          // Terminal stage approved — close it. If new_hardware, materialize into orders + devices.
           nextStatus = 'closed';
           notifTitle = `Request approved & closed: ${req.title || REQUEST_TYPE_LABELS[req.type]}`;
           if (req.type === 'new_hardware') {
@@ -278,7 +280,6 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
     await load();
   };
 
-  // Materialize approved new hardware into orders + devices with generated asset codes.
   const materializeAssets = async () => {
     if (!req) return;
     const { data: existingMax } = await supabase
@@ -321,9 +322,9 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
         configuration: req.configuration || null,
         serial_number: s.serial_number,
         asset_group: s.asset_group || req.asset_group || null,
-        asset_status: 'Fresh',
+        asset_status: s.asset_status || req.asset_status || 'Fresh',
         status: 'Stock' as const,
-        far_code: nextCode++,
+        far_code: s.asset_code ? Number(s.asset_code) : nextCode++,
         material_type: 'Inward' as const,
         created_by: profile?.email,
         updated_by: profile?.email,
@@ -371,7 +372,6 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
 
   const downloadSerialsCsv = async () => {
     if (!req) return;
-    // Fetch device rows (with asset codes) for these serials if they exist
     const sns = serials.map((s) => s.serial_number);
     let devs: any[] = [];
     if (sns.length) {
@@ -388,12 +388,12 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
         const d = byS.get(s.serial_number) || {};
         return [
           s.serial_number,
-          d.far_code ?? '',
+          (s.asset_code || d.far_code) ?? '',
           d.model ?? req.model ?? '',
           d.configuration ?? req.configuration ?? '',
           s.warehouse ?? req.warehouse ?? '',
           s.asset_group ?? req.asset_group ?? '',
-          d.status ?? '',
+          s.asset_status || d.asset_status || '',
           d.sales_order ?? req.po_number ?? '',
           s.is_duplicate ? 'Yes' : 'No',
           s.exists_in_devices ? 'Yes' : 'No',
@@ -457,7 +457,7 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className='max-w-6xl max-h-[95vh] overflow-hidden flex flex-col p-0'>
+      <DialogContent className='max-w-[98vw] w-full max-h-[95vh] overflow-hidden flex flex-col p-0'>
         <DialogHeader className='px-6 pt-6 pb-4 border-b'>
           <div className='flex items-start justify-between gap-4'>
             <div>
@@ -541,8 +541,8 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
                 ['Model', req.model],
                 ['Configuration', req.configuration],
                 ['Quantity', req.quantity],
+                ['Status', req.asset_status],
                 ['Asset Group', req.asset_group],
-                ['Agreement Type', req.agreement_type],
                 ['Created', format(new Date(req.created_at), 'MMM d, yyyy HH:mm')],
               ].map(([k, v]) => (
                 <div key={k as string} className='p-2 rounded border bg-muted/30'>
@@ -601,26 +601,28 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
                   </div>
                 )}
                 <div className='max-h-52 overflow-y-auto rounded border'>
-                  <table className='w-full text-xs'>
+                  <table className='w-full text-[11px]'>
                     <thead className='bg-muted/40 sticky top-0'>
                       <tr>
-                        <th className='text-left px-2 py-1'>Serial</th>
-                        <th className='text-left px-2 py-1'>Warehouse</th>
-                        <th className='text-left px-2 py-1'>Group</th>
-                        <th className='text-left px-2 py-1'>Flag</th>
+                        <th className='text-left px-2 py-1.5'>Serial</th>
+                        <th className='text-left px-2 py-1.5'>Status</th>
+                        <th className='text-left px-2 py-1.5'>Group</th>
+                        <th className='text-left px-2 py-1.5'>Asset Code</th>
+                        <th className='text-left px-2 py-1.5'>Flag</th>
                       </tr>
                     </thead>
                     <tbody>
                       {serials.map((s) => (
-                        <tr key={s.id} className='border-t'>
-                          <td className='px-2 py-1 font-mono'>{s.serial_number}</td>
-                          <td className='px-2 py-1'>{s.warehouse || '-'}</td>
-                          <td className='px-2 py-1'>{s.asset_group || '-'}</td>
-                          <td className='px-2 py-1'>
+                        <tr key={s.id} className='border-t hover:bg-muted/10'>
+                          <td className='px-2 py-1.5 font-mono'>{s.serial_number}</td>
+                          <td className='px-2 py-1.5'>{s.asset_status || req.asset_status || '-'}</td>
+                          <td className='px-2 py-1.5'>{s.asset_group || '-'}</td>
+                          <td className='px-2 py-1.5 font-mono'>{s.asset_code || '-'}</td>
+                          <td className='px-2 py-1.5'>
                             {s.exists_in_devices && (
-                              <Badge variant='destructive' className='mr-1'>Exists</Badge>
+                              <Badge variant='destructive' className='mr-1 text-[9px] h-4'>Exists</Badge>
                             )}
-                            {s.is_duplicate && <Badge variant='outline'>Duplicate</Badge>}
+                            {s.is_duplicate && <Badge variant='outline' className='text-[9px] h-4'>Duplicate</Badge>}
                           </td>
                         </tr>
                       ))}

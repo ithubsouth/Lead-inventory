@@ -98,7 +98,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     try {
       const { data, error } = await supabase
         .from('users')
-        .select('email, role, account_type')
+        .select('email, role, location')
         .eq('email', userToCheck.email)
         .single();
 

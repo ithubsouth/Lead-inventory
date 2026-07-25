@@ -9,15 +9,30 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useAuth } from '@/contexts/AuthContext';
-import { LogOut, User, Settings, Edit, Trash, Search } from 'lucide-react';
+import { LogOut, User, Settings, Edit, Trash, Search, Check, ChevronsUpDown, Plus, X } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { useToast } from '@/components/ui/use-toast';
+import { cn } from '@/lib/utils';
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 
 interface AppUser {
   id: string;
@@ -25,8 +40,93 @@ interface AppUser {
   full_name?: string;
   department?: string;
   role?: 'Super Admin' | 'Admin' | 'Operator' | 'Reporter';
-  account_type?: string;
+  location?: string;
 }
+
+const Combobox = ({
+  options,
+  value,
+  onValueChange,
+  placeholder,
+  allowCustom = true
+}: {
+  options: string[],
+  value: string,
+  onValueChange: (val: string) => void,
+  placeholder: string,
+  allowCustom?: boolean
+}) => {
+  const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState("");
+
+  const hasExactMatch = options.some(opt => opt.toLowerCase() === search.toLowerCase());
+  const showAddOption = allowCustom && search && !hasExactMatch;
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button
+          variant="outline"
+          role="combobox"
+          aria-expanded={open}
+          className="w-full justify-between text-sm font-normal bg-white"
+        >
+          {value || placeholder}
+          <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0">
+        <Command>
+          <CommandInput
+            placeholder={`Search ${placeholder.toLowerCase()}...`}
+            value={search}
+            onValueChange={setSearch}
+          />
+          <CommandList>
+            <CommandEmpty className="p-0">
+              {showAddOption ? (
+                <div
+                  className="relative flex cursor-pointer select-none items-center rounded-sm px-2 py-3 text-sm outline-none hover:bg-accent hover:text-accent-foreground text-blue-600 font-medium"
+                  onClick={() => {
+                    onValueChange(search);
+                    setOpen(false);
+                    setSearch("");
+                  }}
+                >
+                  <Plus className="mr-2 h-4 w-4" />
+                  Add "{search}"
+                </div>
+              ) : (
+                <div className="py-6 text-center text-sm">No results found.</div>
+              )}
+            </CommandEmpty>
+            <CommandGroup>
+              {options.map((option) => (
+                <CommandItem
+                  key={option}
+                  value={option}
+                  onSelect={(currentValue) => {
+                    onValueChange(currentValue);
+                    setOpen(false);
+                    setSearch("");
+                  }}
+                >
+                  <Check
+                    className={cn(
+                      "mr-2 h-4 w-4",
+                      value === option ? "opacity-100" : "opacity-0"
+                    )}
+                  />
+                  {option}
+                </CommandItem>
+              ))}
+            </CommandGroup>
+          </CommandList>
+        </Command>
+      </PopoverContent>
+    </Popover>
+  );
+};
 
 export const UserProfile = () => {
   const { user, signOut, updateUser } = useAuth();
@@ -39,13 +139,36 @@ export const UserProfile = () => {
   const [email, setEmail] = useState(user?.email || '');
   const [department, setDepartment] = useState(user?.user_metadata?.department || '');
   const [role, setRole] = useState<string>('');
-  const [accountType, setAccountType] = useState<string>('');
+  const [location, setLocation] = useState<string>('General');
   const [searchQuery, setSearchQuery] = useState('');
   const [users, setUsers] = useState<AppUser[]>([]);
   const [selectedUser, setSelectedUser] = useState<AppUser | null>(null);
   const [isAuthorized, setIsAuthorized] = useState(false);
   const [userRole, setUserRole] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState('');
+
+  const [departments, setDepartments] = useState([
+    'Administrators',
+    'Customer Support',
+    'Technology Team',
+    'Production Team',
+    'QA Team',
+    'DevOps',
+    'Procurement Team',
+    'Planning Team',
+    'Finance',
+    'Supply Chain Management',
+    'SAP Analyst',
+  ]);
+
+  const [locations, setLocations] = useState([
+    'General',
+    'Bhiwandi',
+    'Ghaziabad',
+    'Hyderabad',
+    'Trichy',
+    'Kolkata',
+  ]);
 
   const canAccessUserManagement = ['Super Admin', 'Admin', 'Operator'].includes(userRole || '');
   const canCreateEditUsers = ['Super Admin', 'Admin', 'Operator'].includes(userRole || '');
@@ -71,22 +194,22 @@ export const UserProfile = () => {
     try {
       const { data, error } = await supabase
         .from('users')
-        .select('email, role, account_type')
+        .select('email, role, location')
         .eq('email', user.email)
         .single();
       if (data && !error) {
         setIsAuthorized(true);
         setUserRole(data.role);
-        setAccountType(data.account_type || '0');
+        setLocation(data.location || 'General');
       } else {
         setIsAuthorized(false);
         setUserRole(null);
-        setAccountType('0');
+        setLocation('General');
       }
     } catch (err) {
       setIsAuthorized(false);
       setUserRole(null);
-      setAccountType('0');
+      setLocation('General');
     }
   };
 
@@ -160,7 +283,7 @@ export const UserProfile = () => {
     setFullName(user.full_name || '');
     setDepartment(user.department || '');
     setRole(user.role || '');
-    setAccountType(user.account_type || '');
+    setLocation(user.location || 'General');
     setOpenEditUser(true);
     setErrorMessage('');
   };
@@ -193,7 +316,7 @@ export const UserProfile = () => {
           full_name: fullName,
           department,
           role: updateRole,
-          account_type: accountType,
+          location: location,
         })
         .eq('id', selectedUser.id);
       if (error) throw error;
@@ -264,8 +387,8 @@ export const UserProfile = () => {
       toast({ title: 'Error', description: 'Please select a role.', variant: 'destructive' });
       return;
     }
-    if (!accountType) {
-      toast({ title: 'Error', description: 'Please select an account type.', variant: 'destructive' });
+    if (!location) {
+      toast({ title: 'Error', description: 'Please select a location.', variant: 'destructive' });
       return;
     }
     setIsLoading(true);
@@ -293,7 +416,7 @@ export const UserProfile = () => {
             full_name: fullName || null,
             department: department || null,
             role: role || null,
-            account_type: accountType || null,
+            location: location || 'General',
           },
         },
       });
@@ -308,7 +431,7 @@ export const UserProfile = () => {
           full_name: fullName || null,
           department,
           role,
-          account_type: accountType,
+          location: location,
         })
         .select()
         .single();
@@ -333,8 +456,22 @@ export const UserProfile = () => {
     setFullName('');
     setDepartment('');
     setRole('');
-    setAccountType('');
+    setLocation('General');
     setErrorMessage('');
+  };
+
+  const handleDepartmentChange = (val: string) => {
+    setDepartment(val);
+    if (val && !departments.includes(val)) {
+      setDepartments(prev => [...prev, val]);
+    }
+  };
+
+  const handleLocationChange = (val: string) => {
+    setLocation(val);
+    if (val && !locations.includes(val)) {
+      setLocations(prev => [...prev, val]);
+    }
   };
 
   const filteredUsers = users.filter(user =>
@@ -351,15 +488,6 @@ export const UserProfile = () => {
         .join('')
         .toUpperCase()
     : user?.email?.[0]?.toUpperCase() || 'U';
-
-  const departments = [
-    'Administrators',
-    'Customer Support',
-    'Technology Team',
-    'Production Team',
-    'QA Team',
-    'DevOps',
-  ];
 
   if (!user) return <div className="text-sm">Please log in to access this page.</div>;
   if (!isAuthorized) return null;
@@ -436,18 +564,14 @@ export const UserProfile = () => {
               </div>
               <div className="grid grid-cols-4 items-center gap-4">
                 <Label htmlFor="department" className="text-right text-sm">Department</Label>
-                <Select value={department} onValueChange={setDepartment}>
-                  <SelectTrigger className="col-span-3">
-                    <SelectValue placeholder="Select Department" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {departments.map((dept) => (
-                      <SelectItem key={dept} value={dept}>
-                        {dept}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <div className="col-span-3">
+                  <Combobox
+                    options={departments}
+                    value={department}
+                    onValueChange={handleDepartmentChange}
+                    placeholder="Select Department"
+                  />
+                </div>
               </div>
             </div>
             <DialogFooter>
@@ -460,60 +584,77 @@ export const UserProfile = () => {
       </Dialog>
 
       <Dialog open={openSettings} onOpenChange={setOpenSettings}>
-        <DialogContent className="max-w-[90vw] w-[900px] text-sm">
-          <DialogHeader className="flex justify-between items-center">
-            <div>
-              <DialogTitle>User Management</DialogTitle>
-              <DialogDescription>Manage user details.</DialogDescription>
+        <DialogContent className="max-w-[95vw] w-full max-h-[95vh] flex flex-col p-0 overflow-hidden border-none shadow-2xl">
+          <DialogHeader className="px-8 py-5 flex flex-row justify-between items-center border-b bg-white z-[100] relative">
+            <div className="flex flex-col gap-0.5">
+              <DialogTitle className="text-2xl font-black text-slate-800 tracking-tight flex items-center gap-3">
+                User Management
+                <Badge variant='outline' className="bg-blue-50 text-blue-600 border-blue-100 font-black text-[10px] py-0.5">ADMIN PANEL</Badge>
+              </DialogTitle>
+              <DialogDescription className="text-slate-500 font-medium text-xs">Manage system access and permissions for all team members.</DialogDescription>
             </div>
-            {canCreateEditUsers && (
+            <div className="flex items-center gap-4">
+              {canCreateEditUsers && (
+                <Button
+                  onClick={() => {
+                    resetForm();
+                    setOpenEditUser(true);
+                  }}
+                  className="bg-blue-600 hover:bg-blue-700 text-white font-bold h-10 px-6 rounded-xl shadow-lg shadow-blue-200 transition-all text-xs"
+                >
+                  <Plus className="mr-2 h-4 w-4" /> Add New User
+                </Button>
+              )}
               <Button
-                onClick={() => {
-                  resetForm();
-                  setOpenEditUser(true);
-                }}
-                className="ml-auto text-sm"
+                variant="ghost"
+                size="icon"
+                onClick={() => setOpenSettings(false)}
+                className="h-10 w-10 rounded-full hover:bg-red-50 hover:text-red-500 transition-colors group"
               >
-                Add new users
-              </Button>
-            )}
-          </DialogHeader>
-          <div className="space-y-4 py-4">
-            <div className="flex items-center gap-2">
-              <Input
-                placeholder="Search users..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full max-w-md text-sm"
-              />
-              <Button variant="outline" size="icon" onClick={() => setSearchQuery('')}>
-                <Search className="h-4 w-4" />
+                <X className="h-6 w-6 stroke-[3px]" />
               </Button>
             </div>
-            {errorMessage && <div className="text-red-500 text-sm mb-4">{errorMessage}</div>}
-            <div className="border rounded-md overflow-hidden bg-background">
-              <div className="max-h-[40vh] overflow-y-auto">
-                <Table className="w-full table-fixed text-sm">
-                  <TableHeader className="sticky top-0 bg-gray-100 z-10">
-                    <TableRow>
-                      <TableHead className="w-[150px] font-medium">Name</TableHead>
-                      <TableHead className="w-[150px] font-medium">Department</TableHead>
-                      <TableHead className="w-[200px] font-medium">Email</TableHead>
-                      <TableHead className="w-[120px] font-medium">Role</TableHead>
-                      <TableHead className="w-[120px] font-medium">Account Type</TableHead>
-                      <TableHead className="w-[100px] font-medium">Actions</TableHead>
+          </DialogHeader>
+          <div className="flex-1 flex flex-col overflow-hidden bg-slate-50/20">
+            <div className="px-8 py-4 bg-white/50 backdrop-blur-sm border-b border-slate-100">
+              <div className="flex items-center gap-3 max-w-xl">
+                <div className="relative flex-1">
+                  <Input
+                    placeholder="Search members by name, email or department..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="pl-11 h-10 rounded-xl border-slate-200 focus-visible:ring-blue-500 shadow-sm bg-white text-xs font-medium"
+                  />
+                  <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                </div>
+              </div>
+            </div>
+
+            {errorMessage && <div className="mx-8 mt-6 p-4 bg-red-50 border border-red-100 text-red-600 text-sm rounded-2xl font-bold flex items-center gap-3">
+              <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
+              {errorMessage}
+            </div>}
+
+            <div className="flex-1 m-6 border border-slate-200 rounded-[1.5rem] overflow-hidden bg-white shadow-xl flex flex-col">
+              <div className="flex-1 overflow-auto custom-scrollbar">
+                <Table className="w-full border-collapse" wrapperOverflow="visible">
+                  <TableHeader>
+                    <TableRow className="hover:bg-transparent border-b border-slate-100">
+                      <TableHead className="sticky top-0 bg-slate-100/90 backdrop-blur-md z-40 font-black uppercase tracking-[0.15em] text-[9px] text-slate-400 py-4 px-6 border-r border-slate-200/50">Name</TableHead>
+                      <TableHead className="sticky top-0 bg-slate-100/90 backdrop-blur-md z-40 font-black uppercase tracking-[0.15em] text-[9px] text-slate-400 py-4 px-4 border-r border-slate-200/50">Department</TableHead>
+                      <TableHead className="sticky top-0 bg-slate-100/90 backdrop-blur-md z-40 font-black uppercase tracking-[0.15em] text-[9px] text-slate-400 py-4 px-4 border-r border-slate-200/50">Email Address</TableHead>
+                      <TableHead className="sticky top-0 bg-slate-100/90 backdrop-blur-md z-40 font-black uppercase tracking-[0.15em] text-[9px] text-slate-400 py-4 px-4 border-r border-slate-200/50">System Role</TableHead>
+                      <TableHead className="sticky top-0 bg-slate-100/90 backdrop-blur-md z-40 font-black uppercase tracking-[0.15em] text-[9px] text-slate-400 py-4 px-4 border-r border-slate-200/50">Primary Location</TableHead>
+                      <TableHead className="sticky top-0 bg-slate-100/90 backdrop-blur-md z-40 font-black uppercase tracking-[0.15em] text-[9px] text-slate-400 py-4 px-6 text-right">Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {filteredUsers.length === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={6} className="h-24 text-center text-muted-foreground py-8">
-                          <div className="flex flex-col items-center justify-center space-y-1">
-                            <Search className="h-8 w-8 text-muted-foreground" />
-                            <p className="text-sm">No users found</p>
-                            {searchQuery && (
-                              <p className="text-xs text-muted-foreground">Try adjusting your search terms</p>
-                            )}
+                        <TableCell colSpan={6} className="py-32 text-center">
+                          <div className="flex flex-col items-center justify-center opacity-30">
+                            <Search className="h-16 w-16 text-slate-400 mb-6" />
+                            <p className="text-lg font-black uppercase tracking-[0.2em] text-slate-400">No matching members found</p>
                           </div>
                         </TableCell>
                       </TableRow>
@@ -521,52 +662,45 @@ export const UserProfile = () => {
                       filteredUsers.map((user, index) => (
                         <TableRow
                           key={user.id}
-                          className={`border-b transition-colors ${
-                            index % 2 === 0 ? 'bg-background' : 'bg-muted/30'
-                          } hover:bg-muted/50`}
+                          className="group border-b border-slate-50 last:border-0 hover:bg-slate-50/80 transition-all"
                         >
-                          <TableCell className="py-3 px-4 text-sm font-medium text-foreground align-top border-r last:border-r-0">
-                            <div className="break-words whitespace-normal">{user.full_name || '—'}</div>
+                          <TableCell className="py-4 px-6 align-middle border-r border-slate-50/50">
+                            <div className="font-bold text-slate-700">{user.full_name || '—'}</div>
                           </TableCell>
-                          <TableCell className="py-3 px-4 text-sm text-muted-foreground align-top border-r last:border-r-0">
-                            <div className="break-words whitespace-normal">{user.department || '—'}</div>
+                          <TableCell className="py-4 px-4 align-middle border-r border-slate-50/50">
+                            <Badge variant="outline" className="bg-slate-50 text-slate-500 border-slate-200 font-bold text-[10px] uppercase tracking-tighter">
+                              {user.department || '—'}
+                            </Badge>
                           </TableCell>
-                          <TableCell className="py-3 px-4 text-sm font-medium text-primary align-top border-r last:border-r-0">
-                            <div className="break-words whitespace-normal underline cursor-pointer hover:opacity-80" title={user.email}>{user.email}</div>
+                          <TableCell className="py-4 px-4 align-middle border-r border-slate-50/50">
+                            <div className="font-medium text-blue-600 truncate hover:underline cursor-pointer">{user.email}</div>
                           </TableCell>
-                          <TableCell className="py-3 px-4 text-sm align-top border-r last:border-r-0">
-                            <div className="break-words">
-                              <span
-                                className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                                  user.role === 'Super Admin'
-                                    ? 'bg-red-100 text-red-800 dark:bg-red-900/20 dark:text-red-400'
-                                    : user.role === 'Admin'
-                                    ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/20 dark:text-blue-400'
-                                    : user.role === 'Operator'
-                                    ? 'bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-400'
-                                    : 'bg-gray-100 text-gray-800 dark:bg-gray-900/20 dark:text-gray-400'
-                                }`}
-                              >
-                                {user.role}
-                              </span>
-                            </div>
+                          <TableCell className="py-4 px-4 align-middle border-r border-slate-50/50">
+                            <Badge className={cn(
+                              "border-0 capitalize font-black text-[9px] tracking-widest px-3 py-1 rounded-full",
+                              user.role === 'Super Admin' ? 'bg-red-500 text-white' :
+                              user.role === 'Admin' ? 'bg-blue-500 text-white' :
+                              user.role === 'Operator' ? 'bg-green-500 text-white' :
+                              'bg-slate-200 text-slate-700'
+                            )}>
+                              {user.role}
+                            </Badge>
                           </TableCell>
-                          <TableCell className="py-3 px-4 text-sm text-muted-foreground align-top border-r last:border-r-0">
-                            <div className="break-words whitespace-normal">{user.account_type || '0'}</div>
+                          <TableCell className="py-4 px-4 align-middle border-r border-slate-50/50">
+                            <div className="text-slate-500 font-medium">{user.location || 'General'}</div>
                           </TableCell>
-                          <TableCell className="py-3 px-4 align-top">
-                            <div className="flex items-center space-x-1">
+                          <TableCell className="py-4 px-6 align-middle text-right">
+                            <div className="flex items-center justify-end space-x-2">
                               {((canEditAllRoles) ||
                                 (canEditOperatorReporter && ['Operator', 'Reporter'].includes(user.role || '')) ||
                                 (canEditReporter && user.role === 'Reporter')) && (
                                 <Button
                                   variant="ghost"
-                                  size="sm"
+                                  size="icon"
                                   onClick={() => handleEditUser(user)}
-                                  className="h-7 w-7 p-0 text-foreground hover:bg-muted hover:text-primary transition-colors"
-                                  title="Edit user"
+                                  className="h-9 w-9 rounded-xl hover:bg-white hover:text-blue-600 hover:shadow-lg border border-transparent hover:border-slate-100 transition-all"
                                 >
-                                  <Edit className="h-3.5 w-3.5" />
+                                  <Edit className="h-4 w-4" />
                                 </Button>
                               )}
                               {((canEditAllRoles) ||
@@ -574,18 +708,12 @@ export const UserProfile = () => {
                                 (canDeleteReporter && user.role === 'Reporter')) && (
                                 <Button
                                   variant="ghost"
-                                  size="sm"
+                                  size="icon"
                                   onClick={() => handleDeleteUser(user.id)}
-                                  className="h-7 w-7 p-0 text-destructive hover:bg-destructive/10 hover:text-destructive transition-colors"
-                                  title="Delete user"
+                                  className="h-9 w-9 rounded-xl hover:bg-red-50 hover:text-red-600 border border-transparent hover:border-red-100 transition-all"
                                 >
-                                  <Trash className="h-3.5 w-3.5" />
+                                  <Trash className="h-4 w-4" />
                                 </Button>
-                              )}
-                              {!(canEditAllRoles ||
-                                (canEditOperatorReporter && ['Operator', 'Reporter'].includes(user.role || '')) ||
-                                (canEditReporter && user.role === 'Reporter')) && (
-                                <span className="text-xs text-muted-foreground px-2 py-1 bg-muted/50 rounded">Read-only</span>
                               )}
                             </div>
                           </TableCell>
@@ -621,6 +749,7 @@ export const UserProfile = () => {
                 onChange={(e) => setEmail(e.target.value)}
                 className="text-sm"
                 disabled={!!selectedUser}
+                placeholder="Email"
               />
             </div>
             <div>
@@ -630,22 +759,17 @@ export const UserProfile = () => {
                 value={fullName}
                 onChange={(e) => setFullName(e.target.value)}
                 className="text-sm"
+                placeholder="Full Name"
               />
             </div>
             <div>
-              <Label htmlFor="editDepartment" className="text-sm">Select Department *</Label>
-              <Select value={department} onValueChange={setDepartment}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select Department" />
-                </SelectTrigger>
-                <SelectContent>
-                  {departments.map((dept) => (
-                    <SelectItem key={dept} value={dept}>
-                      {dept}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <Label className="text-sm">Select Department *</Label>
+              <Combobox
+                options={departments}
+                value={department}
+                onValueChange={handleDepartmentChange}
+                placeholder="Select Department"
+              />
             </div>
             <div>
               <Label htmlFor="editRole" className="text-sm">Select role *</Label>
@@ -679,20 +803,13 @@ export const UserProfile = () => {
               </Select>
             </div>
             <div>
-              <Label htmlFor="editAccountType" className="text-sm">Account Type *</Label>
-              <Select value={accountType} onValueChange={setAccountType}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select Account Type" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="0">0</SelectItem>
-                  <SelectItem value="1">1</SelectItem>
-                  <SelectItem value="2">2</SelectItem>
-                  <SelectItem value="3">3</SelectItem>
-                  <SelectItem value="4">4</SelectItem>
-                  <SelectItem value="5">5</SelectItem>
-                </SelectContent>
-              </Select>
+              <Label className="text-sm">Location *</Label>
+              <Combobox
+                options={locations}
+                value={location}
+                onValueChange={handleLocationChange}
+                placeholder="Select Location"
+              />
             </div>
             <DialogFooter>
               <Button variant="outline" onClick={() => setOpenEditUser(false)} className="text-sm">Cancel</Button>

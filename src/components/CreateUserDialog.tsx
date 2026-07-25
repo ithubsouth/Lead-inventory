@@ -12,10 +12,110 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/components/ui/use-toast';
+import { Check, ChevronsUpDown, Plus } from "lucide-react";
+import { cn } from "@/lib/utils";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 
 interface CreateUserDialogProps {
   onSuccess: () => void;
 }
+
+const Combobox = ({
+  options,
+  value,
+  onValueChange,
+  placeholder,
+  allowCustom = true
+}: {
+  options: string[],
+  value: string,
+  onValueChange: (val: string) => void,
+  placeholder: string,
+  allowCustom?: boolean
+}) => {
+  const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState("");
+
+  const hasExactMatch = options.some(opt => opt.toLowerCase() === search.toLowerCase());
+  const showAddOption = allowCustom && search && !hasExactMatch;
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button
+          variant="outline"
+          role="combobox"
+          aria-expanded={open}
+          className="w-full justify-between text-sm font-normal bg-white"
+        >
+          {value || placeholder}
+          <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0">
+        <Command>
+          <CommandInput
+            placeholder={`Search ${placeholder.toLowerCase()}...`}
+            value={search}
+            onValueChange={setSearch}
+          />
+          <CommandList>
+            <CommandEmpty className="p-0">
+              {showAddOption ? (
+                <div
+                  className="relative flex cursor-pointer select-none items-center rounded-sm px-2 py-3 text-sm outline-none hover:bg-accent hover:text-accent-foreground text-blue-600 font-medium"
+                  onClick={() => {
+                    onValueChange(search);
+                    setOpen(false);
+                    setSearch("");
+                  }}
+                >
+                  <Plus className="mr-2 h-4 w-4" />
+                  Add "{search}"
+                </div>
+              ) : (
+                <div className="py-6 text-center text-sm">No results found.</div>
+              )}
+            </CommandEmpty>
+            <CommandGroup>
+              {options.map((option) => (
+                <CommandItem
+                  key={option}
+                  value={option}
+                  onSelect={(currentValue) => {
+                    onValueChange(currentValue);
+                    setOpen(false);
+                    setSearch("");
+                  }}
+                >
+                  <Check
+                    className={cn(
+                      "mr-2 h-4 w-4",
+                      value === option ? "opacity-100" : "opacity-0"
+                    )}
+                  />
+                  {option}
+                </CommandItem>
+              ))}
+            </CommandGroup>
+          </CommandList>
+        </Command>
+      </PopoverContent>
+    </Popover>
+  );
+};
 
 export const CreateUserDialog = ({ onSuccess }: CreateUserDialogProps) => {
   const [open, setOpen] = useState(false);
@@ -24,11 +124,11 @@ export const CreateUserDialog = ({ onSuccess }: CreateUserDialogProps) => {
   const [password, setPassword] = useState('');
   const [department, setDepartment] = useState('');
   const [role, setRole] = useState('');
-  const [accountType, setAccountType] = useState('');
+  const [location, setLocation] = useState('General');
   const [errorMessage, setErrorMessage] = useState('');
   const { toast } = useToast();
 
-  const departments = [
+  const [departments, setDepartments] = useState([
     'Administrators',
     'Customer Support',
     'Technology Team',
@@ -40,7 +140,16 @@ export const CreateUserDialog = ({ onSuccess }: CreateUserDialogProps) => {
     'Finance',
     'Supply Chain Management',
     'SAP Analyst',
-  ];
+  ]);
+
+  const [locations, setLocations] = useState([
+    'General',
+    'Bhiwandi',
+    'Ghaziabad',
+    'Hyderabad',
+    'Trichy',
+    'Kolkata',
+  ]);
 
   const roles = [
     { value: 'Super Admin', label: 'Super Admin', description: 'Full access' },
@@ -48,8 +157,6 @@ export const CreateUserDialog = ({ onSuccess }: CreateUserDialogProps) => {
     { value: 'Operator', label: 'Operator', description: 'Read, Write' },
     { value: 'Reporter', label: 'Reporter', description: 'Read' },
   ];
-
-  const accountTypes = ['0', '1', '2', '3', '4', '5'];
 
   const validateForm = () => {
     if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
@@ -68,8 +175,8 @@ export const CreateUserDialog = ({ onSuccess }: CreateUserDialogProps) => {
       setErrorMessage('Please select a role.');
       return false;
     }
-    if (!accountType) {
-      setErrorMessage('Please select an account type.');
+    if (!location) {
+      setErrorMessage('Please select a location.');
       return false;
     }
     return true;
@@ -87,7 +194,7 @@ export const CreateUserDialog = ({ onSuccess }: CreateUserDialogProps) => {
             full_name: name,
             department,
             role,
-            account_type: accountType,
+            location,
           },
         },
       });
@@ -96,9 +203,10 @@ export const CreateUserDialog = ({ onSuccess }: CreateUserDialogProps) => {
       const { error: insertError } = await (supabase as any).from('users').insert({
         id: authData.user?.id,
         email,
+        full_name: name || null,
         department,
         role,
-        account_type: accountType,
+        location,
       });
       if (insertError) throw insertError;
 
@@ -118,8 +226,22 @@ export const CreateUserDialog = ({ onSuccess }: CreateUserDialogProps) => {
     setPassword('');
     setDepartment('');
     setRole('');
-    setAccountType('');
+    setLocation('General');
     setErrorMessage('');
+  };
+
+  const handleDepartmentChange = (val: string) => {
+    setDepartment(val);
+    if (val && !departments.includes(val)) {
+      setDepartments(prev => [...prev, val]);
+    }
+  };
+
+  const handleLocationChange = (val: string) => {
+    setLocation(val);
+    if (val && !locations.includes(val)) {
+      setLocations(prev => [...prev, val]);
+    }
   };
 
   return (
@@ -132,22 +254,12 @@ export const CreateUserDialog = ({ onSuccess }: CreateUserDialogProps) => {
       </DialogTrigger>
       <DialogContent className="max-w-[425px] text-sm">
         <DialogHeader>
-          <DialogTitle>Create new users</DialogTitle>
+          <DialogTitle>Create New User</DialogTitle>
         </DialogHeader>
         {errorMessage && (
           <div className="text-red-500 text-sm mb-4">{errorMessage}</div>
         )}
         <div className="space-y-4 py-4">
-          <div>
-            <Label htmlFor="name" className="text-sm">Name</Label>
-            <Input
-              id="name"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="Type user name here"
-              className="text-sm"
-            />
-          </div>
           <div>
             <Label htmlFor="email" className="text-sm">Email *</Label>
             <Input
@@ -155,6 +267,17 @@ export const CreateUserDialog = ({ onSuccess }: CreateUserDialogProps) => {
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
+              className="text-sm"
+              placeholder="Email"
+            />
+          </div>
+          <div>
+            <Label htmlFor="name" className="text-sm">Full Name</Label>
+            <Input
+              id="name"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="Full Name"
               className="text-sm"
             />
           </div>
@@ -166,27 +289,23 @@ export const CreateUserDialog = ({ onSuccess }: CreateUserDialogProps) => {
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               className="text-sm"
+              placeholder="Password"
             />
           </div>
           <div>
-            <Label htmlFor="department" className="text-sm">Select Department *</Label>
-            <select
-              id="department"
-              className="w-full p-2 border rounded text-sm"
+            <Label className="text-sm">Select Department *</Label>
+            <Combobox
+              options={departments}
               value={department}
-              onChange={(e) => setDepartment(e.target.value)}
-            >
-              <option value="">Select Department</option>
-              {departments.map((dept) => (
-                <option key={dept} value={dept}>{dept}</option>
-              ))}
-            </select>
+              onValueChange={handleDepartmentChange}
+              placeholder="Select Department"
+            />
           </div>
           <div>
-            <Label htmlFor="role" className="text-sm">Select role *</Label>
+            <Label className="text-sm">Select role *</Label>
             <select
               id="role"
-              className="w-full p-2 border rounded text-sm"
+              className="w-full p-2 border rounded text-sm bg-white"
               value={role}
               onChange={(e) => setRole(e.target.value)}
             >
@@ -197,18 +316,13 @@ export const CreateUserDialog = ({ onSuccess }: CreateUserDialogProps) => {
             </select>
           </div>
           <div>
-            <Label htmlFor="accountType" className="text-sm">Account Type *</Label>
-            <select
-              id="accountType"
-              className="w-full p-2 border rounded text-sm"
-              value={accountType}
-              onChange={(e) => setAccountType(e.target.value)}
-            >
-              <option value="">Select Account Type</option>
-              {accountTypes.map((type) => (
-                <option key={type} value={type}>{type}</option>
-              ))}
-            </select>
+            <Label className="text-sm">Location *</Label>
+            <Combobox
+              options={locations}
+              value={location}
+              onValueChange={handleLocationChange}
+              placeholder="Select Location"
+            />
           </div>
         </div>
         <DialogFooter>

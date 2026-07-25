@@ -93,7 +93,7 @@ export type Database = {
         }
         Insert: {
           audited_at?: string
-          audited_by: string
+          audited_by?: string
           created_at?: string | null
           device_id: string
           id?: string
@@ -520,6 +520,8 @@ export type Database = {
       request_serials: {
         Row: {
           asset_group: string | null
+          asset_status: string | null
+          asset_code: string | null
           created_at: string
           exists_in_devices: boolean | null
           id: string
@@ -531,6 +533,8 @@ export type Database = {
         }
         Insert: {
           asset_group?: string | null
+          asset_status?: string | null
+          asset_code?: string | null
           created_at?: string
           exists_in_devices?: boolean | null
           id?: string
@@ -542,6 +546,8 @@ export type Database = {
         }
         Update: {
           asset_group?: string | null
+          asset_status?: string | null
+          asset_code?: string | null
           created_at?: string
           exists_in_devices?: boolean | null
           id?: string
@@ -620,6 +626,7 @@ export type Database = {
       requests: {
         Row: {
           agreement_type: string | null
+          asset_status: string | null
           asset_group: string | null
           asset_type: string | null
           configuration: string | null
@@ -643,6 +650,7 @@ export type Database = {
         }
         Insert: {
           agreement_type?: string | null
+          asset_status?: string | null
           asset_group?: string | null
           asset_type?: string | null
           configuration?: string | null
@@ -666,6 +674,7 @@ export type Database = {
         }
         Update: {
           agreement_type?: string | null
+          asset_status?: string | null
           asset_group?: string | null
           asset_type?: string | null
           configuration?: string | null
@@ -691,7 +700,7 @@ export type Database = {
       }
       users: {
         Row: {
-          account_type: string | null
+          location: string | null
           created_at: string | null
           department: string | null
           email: string
@@ -700,7 +709,7 @@ export type Database = {
           role: string | null
         }
         Insert: {
-          account_type?: string | null
+          location?: string | null
           created_at?: string | null
           department?: string | null
           email: string
@@ -709,7 +718,7 @@ export type Database = {
           role?: string | null
         }
         Update: {
-          account_type?: string | null
+          location?: string | null
           created_at?: string | null
           department?: string | null
           email?: string

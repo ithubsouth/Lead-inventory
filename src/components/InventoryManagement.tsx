@@ -18,14 +18,11 @@ const AuditTable = lazy(() => import('./AuditTable'));
 const ActivityLogs = lazy(() => import('./ActivityLogs'));
 const EnhancedBarcodeScanner = lazy(() => import('./EnhancedBarcodeScanner'));
 const VersionHistoryDialog = lazy(() => import('./VersionHistoryDialog'));
-const RequestsPanel = lazy(() => import('./RequestsPanel'));
+import RequestsPanel from './RequestsPanel';
 
 const TabFallback = () => (
   <div className='flex items-center justify-center py-16 text-sm text-muted-foreground'>Loading…</div>
 );
-
-
-
 
 const InventoryManagement = () => {
   const [orders, setOrders] = useState<Order[]>([]);
@@ -67,23 +64,23 @@ const InventoryManagement = () => {
   const { toast } = useToast();
   const [userEmail, setUserEmail] = useState<string | null>(null);
   const [userRole, setUserRole] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<string>(() => {
-    if (typeof window !== 'undefined') {
-      return sessionStorage.getItem('inventoryActiveTab') || '';
-    }
-    return '';
-  });
+  const [activeTab, setActiveTab] = useState<string>('');
 
   useEffect(() => {
-    if (userRole) {
-      const isReporter = userRole === 'Reporter';
-      // Validate activeTab against role: Reporters cannot access 'create'
-      const isValidTab = activeTab && (isReporter ? activeTab !== 'create' : true);
+    if (!userRole) return;
 
-      if (!isValidTab) {
-        const initialTab = isReporter ? 'view' : 'create';
-        setActiveTab(initialTab);
+    const saved = sessionStorage.getItem('inventoryActiveTab');
+    const isReporter = userRole === 'Reporter';
+
+    if (saved) {
+      // Security/Logic check: don't let reporters stay on 'create' tab
+      if (isReporter && saved === 'create') {
+        setActiveTab('view');
+      } else {
+        setActiveTab(saved);
       }
+    } else {
+      setActiveTab(isReporter ? 'view' : 'create');
     }
   }, [userRole]);
 
@@ -113,7 +110,7 @@ const InventoryManagement = () => {
     };
 
     loadDataForTab();
-  }, [activeTab, userRole, dataLoaded]);
+  }, [activeTab, userRole]);
 
   useEffect(() => {
     const fetchUser = async () => {
@@ -140,15 +137,12 @@ const InventoryManagement = () => {
     };
     fetchUser();
 
-    // Set up Realtime subscriptions
     const ordersChannel = supabase
       .channel('orders-realtime')
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'orders' },
         () => {
-          console.log('Realtime update: orders table changed');
-          // Only refresh if the user has already loaded this data
           setDataLoaded(prev => ({ ...prev, orders: false }));
           if (activeTab === 'view' || activeTab === 'order') {
             if (activeTab === 'view') {
@@ -167,7 +161,6 @@ const InventoryManagement = () => {
         'postgres_changes',
         { event: '*', schema: 'public', table: 'devices' },
         () => {
-          console.log('Realtime update: devices table changed');
           setDataLoaded(prev => ({ ...prev, devices: false }));
           if (activeTab === 'devices' || activeTab === 'audit' || activeTab === 'order') {
             loadDevices();
@@ -187,7 +180,6 @@ const InventoryManagement = () => {
       setLoading(true);
       const batchSize = 1000;
 
-      // Fetch counts first to parallelize requests
       const [{ count: ordersCount }, { count: devicesCount }] = await Promise.all([
         supabase.from('orders').select('*', { count: 'exact', head: true }),
         supabase.from('devices').select('*', { count: 'exact', head: true }).eq('is_deleted', false)
@@ -196,7 +188,6 @@ const InventoryManagement = () => {
       const ordersPages = Math.ceil((ordersCount || 0) / batchSize);
       const devicesPages = Math.ceil((devicesCount || 0) / batchSize);
 
-      // Fetch all orders and necessary device fields in parallel
       const [ordersResults, devicesResults] = await Promise.all([
         Promise.all(Array.from({ length: ordersPages }, (_, i) =>
           supabase.from('orders')
@@ -215,7 +206,6 @@ const InventoryManagement = () => {
       const allOrders = ordersResults.flatMap(r => r.data || []);
       const allDevicesShort = devicesResults.flatMap(r => r.data || []);
 
-      // Build mapping maps for fast lookup
       const devicesByOrderId = new Map<string, Set<string>>();
       const deviceCountByOrderId = new Map<string, number>();
 
@@ -453,7 +443,6 @@ const InventoryManagement = () => {
       }
 
       if (data && data.length > 0) {
-        console.log(`Successfully updated device ${deviceId}:`, data);
         toast({
           title: 'Success',
           description: `Asset check set to ${validStatus} for device ${deviceId}.`,
@@ -464,7 +453,6 @@ const InventoryManagement = () => {
             device.id === deviceId ? { ...device, asset_check: device.asset_check || 'Unmatched' } : device
           )
         );
-        console.warn(`No device found with ID ${deviceId}`);
         toast({
           title: 'Warning',
           description: `No device found with ID ${deviceId}.`,
@@ -473,12 +461,9 @@ const InventoryManagement = () => {
       }
     } catch (error: any) {
       console.error('Error updating asset check:', error);
-      const errorMessage = error.message?.includes('Failed to fetch')
-        ? 'Network error: Failed to connect to Supabase. Check CORS or network settings.'
-        : error.message || 'Unknown error';
       toast({
         title: 'Error',
-        description: `Failed to set asset check to ${checkStatus}: ${errorMessage}`,
+        description: `Failed to set asset check to ${checkStatus}: ${error.message || 'Unknown error'}`,
         variant: 'destructive'
       });
     }
@@ -528,12 +513,11 @@ const InventoryManagement = () => {
 
       setLoading(true);
       const updatePromises = updates.map(({ id, updates: devUpdates }) => {
-        const payload = {
+        const payload: any = {
           ...devUpdates,
           updated_at: new Date().toISOString(),
           updated_by: userEmail,
         };
-        // If updating far_code, ensure it's a number or null
         if ('far_code' in devUpdates) {
           payload.far_code = devUpdates.far_code === null ? null : Number(devUpdates.far_code);
         }
@@ -548,7 +532,6 @@ const InventoryManagement = () => {
       const errors = results.filter(r => r.error).map(r => r.error);
 
       if (errors.length > 0) {
-        console.error('Some bulk updates failed:', errors);
         toast({
           title: 'Partial Success',
           description: `Updated some devices, but ${errors.length} updates failed.`,
@@ -558,7 +541,6 @@ const InventoryManagement = () => {
         toast({ title: 'Success', description: `Successfully updated ${updates.length} devices.` });
       }
 
-      // Update local state for all attempts (optimistic or just refresh)
       setDevices(prev =>
         prev.map(d => {
           const update = updates.find(u => u.id === d.id);
@@ -581,9 +563,7 @@ const InventoryManagement = () => {
   };
 
   const updateBatch = async (batchIds: string[], maxRetries = 3): Promise<{ updatedIds: string[]; error?: any }> => {
-    if (!userEmail) {
-      throw new Error('No authenticated user found. Please log in.');
-    }
+    if (!userEmail) throw new Error('No authenticated user found. Please log in.');
     if (!['Super Admin', 'Admin', 'Operator'].includes(userRole || '')) {
       throw new Error('Insufficient permissions to update devices. Super Admin, Admin, or Operator role required.');
     }
@@ -595,7 +575,6 @@ const InventoryManagement = () => {
 
     for (let retry = 1; retry <= maxRetries; retry++) {
       try {
-        console.log(`Batch update attempt ${retry}/${maxRetries} for IDs:`, batchIds);
         const { data, error } = await supabase
           .from('devices')
           .update(updates)
@@ -603,16 +582,13 @@ const InventoryManagement = () => {
           .select('id');
 
         if (error) {
-          console.error(`Batch update error (try ${retry}):`, error);
           if (retry === maxRetries) throw error;
           await new Promise(resolve => setTimeout(resolve, 1000));
           continue;
         }
 
-        console.log(`Batch update success (try ${retry}):`, data);
         return { updatedIds: data?.map((row: any) => row.id) || [] };
       } catch (err: any) {
-        console.error(`Batch update fetch error (try ${retry}):`, err);
         if (retry === maxRetries || !err.message?.includes('Failed to fetch')) throw err;
         await new Promise(resolve => setTimeout(resolve, 1000));
       }
@@ -635,7 +611,6 @@ const InventoryManagement = () => {
       return { matchedCount: 0, notFound: [], updatedSerials: [] };
     }
 
-    // Find which serials exist as eligible audit devices (Stock, not deleted)
     const { data: existing, error: fetchErr } = await supabase
       .from('devices')
       .select('id, serial_number, is_deleted, material_type')
@@ -691,119 +666,56 @@ const InventoryManagement = () => {
   const handleClearAllChecks = async (ids: string[]) => {
     try {
       setIsClearing(true);
-      if (!userEmail) {
-        throw new Error('No authenticated user found. Please log in.');
-      }
+      if (!userEmail) throw new Error('No authenticated user found. Please log in.');
       if (!['Super Admin', 'Admin', 'Operator'].includes(userRole || '')) {
         throw new Error('Insufficient permissions to unmatch devices. Super Admin, Admin, or Operator role required.');
       }
       if (ids.length === 0) {
-        console.warn('No device IDs provided for clearing checks.');
-        toast({
-          title: 'Info',
-          description: 'No devices selected to unmatch. Adjust filters or select devices.',
-          variant: 'default',
-        });
+        toast({ title: 'Info', description: 'No devices selected to unmatch.', variant: 'default' });
         return;
       }
-
-      console.log('Testing Supabase connectivity before batch update...');
-      const { error: testError } = await supabase.from('devices').select('id').limit(1);
-      if (testError) {
-        console.error('Connectivity test failed:', testError);
-        throw new Error(`Supabase connection failed: ${testError.message}. Check CORS/network.`);
-      }
-      console.log('Connectivity test passed.');
-
-      console.log('Starting unmatch for device IDs:', ids);
 
       if (ids.length === 1) {
         await handleUpdateAssetCheck(ids[0], 'Unmatched');
       } else {
         const BATCH_SIZE = 50;
         const allUpdatedIds: string[] = [];
-        const errors: any[] = [];
 
         for (let i = 0; i < ids.length; i += BATCH_SIZE) {
           const batchIds = ids.slice(i, i + BATCH_SIZE);
           const result = await updateBatch(batchIds);
-          if (result.error) {
-            errors.push(result.error);
-          } else {
-            allUpdatedIds.push(...result.updatedIds);
-          }
+          allUpdatedIds.push(...result.updatedIds);
         }
 
         if (allUpdatedIds.length > 0) {
           setDevices(prevDevices => {
-            const updatedDevices = prevDevices.map(device =>
+            return prevDevices.map(device =>
               allUpdatedIds.includes(device.id)
                 ? { ...device, asset_check: 'Unmatched', updated_at: new Date().toISOString(), updated_by: userEmail }
                 : device
             );
-            console.log('Updated devices state after batch unmatch:', updatedDevices);
-            return updatedDevices;
           });
-
-          toast({
-            title: 'Success',
-            description: `Unmatched ${allUpdatedIds.length} device${allUpdatedIds.length !== 1 ? 's' : ''}.`,
-          });
-        }
-
-        if (errors.length > 0) {
-          console.warn('Some batches failed:', errors);
-          toast({
-            title: 'Partial Success',
-            description: `Unmatched ${allUpdatedIds.length} devices, but ${errors.length} batches failed. Check console.`,
-            variant: 'default',
-          });
-        }
-
-        if (allUpdatedIds.length === 0) {
-          console.warn('No devices unmatched during batch operation.');
-          toast({
-            title: 'Warning',
-            description: 'No devices were unmatched. Check filters or permissions.',
-            variant: 'destructive',
-          });
+          toast({ title: 'Success', description: `Unmatched ${allUpdatedIds.length} device(s).` });
         }
       }
     } catch (error: any) {
-      console.error('Error in handleClearAllChecks:', error);
-      const message = error.message?.includes('Failed to fetch')
-        ? 'Network error (CORS/fetch failed). Check browser console/Network tab and Supabase CORS settings.'
-        : error.message || 'Unknown error';
-      toast({
-        title: 'Error',
-        description: `Failed to unmatch devices: ${message} Please try again or contact support.`,
-        variant: 'destructive',
-      });
+      toast({ title: 'Error', description: `Failed to unmatch devices: ${error.message}`, variant: 'destructive' });
     } finally {
       setIsClearing(false);
     }
   };
 
-  const devicesFromDate: DateRange | undefined = fromDate;
-
-  const setDevicesFromDate = (range: DateRange | undefined) => {
-    setFromDate(range);
-    setToDate(undefined);
-  };
-
   return (
-    <div className='min-h-screen max-h-screen overflow-hidden bg-gradient-to-br from-background to-secondary/20 flex flex-col'>
-      <div className='w-full bg-card/80 backdrop-blur-sm border-b border-border/50 fixed top-0 left-0 right-0 z-50 shadow-sm'>
-        <div className='container mx-auto px-4 py-3 flex justify-between items-center'>
+    <div className='h-screen flex flex-col overflow-hidden bg-gradient-to-br from-background to-secondary/20 relative'>
+      <div className='w-full bg-card/95 backdrop-blur-md border-b border-border/50 z-50 shadow-sm flex-shrink-0'>
+        <div className='w-full px-8 py-3 flex justify-between items-center'>
           <div className='flex items-center space-x-4'>
             <img
               src={`${import.meta.env.BASE_URL}logo.png`}
               alt='LEAD GROUP'
               className={`h-11 w-auto transition-opacity duration-300 ${logoLoaded ? 'opacity-100' : 'opacity-0'}`}
               onLoad={() => setLogoLoaded(true)}
-              onError={(e) => {
-                e.currentTarget.style.display = 'none';
-              }}
+              onError={(e) => { e.currentTarget.style.display = 'none'; }}
             />
             <h1 className='text-2xl font-bold bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent'>Lead Inventory Management</h1>
           </div>
@@ -828,243 +740,256 @@ const InventoryManagement = () => {
           <VersionHistoryDialog open={versionHistoryOpen} onOpenChange={setVersionHistoryOpen} />
         </Suspense>
       )}
-      <div className='flex-1 overflow-y-auto pt-[50px]'>
-        <div className='container mx-auto px-4 py-4 h-full'>
-          <Tabs value={activeTab} onValueChange={setActiveTab} className='w-full h-full flex flex-col'>
-            <TabsList className={`grid w-full ${userRole === 'Reporter' ? 'grid-cols-6' : 'grid-cols-7'} mb-4 bg-card/50 backdrop-blur-sm border border-border/50 flex-shrink-0`}>
-              {userRole !== 'Reporter' && (
-                <TabsTrigger value='create' className='flex items-center gap-2 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground'>
-                  <Package className='w-4 h-4' />
-                  Create Order
+
+      <main className='flex-1 overflow-y-auto custom-scrollbar bg-white/40 pb-16'>
+        {!activeTab ? (
+          <div className="flex h-full items-center justify-center py-32">
+            <div className="inline-block w-8 h-8 border-4 border-primary/30 border-t-primary rounded-full animate-spin"></div>
+          </div>
+        ) : (
+          <div className='w-full min-h-full flex flex-col'>
+            <Tabs value={activeTab} onValueChange={(v) => { if (v) setActiveTab(v); }} className='w-full flex-1 flex flex-col'>
+              <TabsList className='flex w-full sticky top-0 z-40 bg-card/95 backdrop-blur-md border-b border-border/50 flex-shrink-0 px-8 h-16 rounded-none shadow-sm gap-2 overflow-x-auto no-scrollbar'>
+                {userRole !== 'Reporter' && (
+                  <TabsTrigger value='create' className='flex-1 min-w-[140px] flex items-center justify-center gap-2 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground font-bold rounded-lg transition-all h-10'>
+                    <Package className='w-4 h-4' />
+                    Create Order
+                  </TabsTrigger>
+                )}
+                <TabsTrigger value='view' className='flex-1 min-w-[140px] flex items-center justify-center gap-2 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground font-bold rounded-lg transition-all h-10'>
+                  <Archive className='w-4 h-4' />
+                  View Orders
                 </TabsTrigger>
-              )}
-              <TabsTrigger value='view' className='flex items-center gap-2 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground'>
-                <Archive className='w-4 h-4' />
-                View Orders
-              </TabsTrigger>
-              <TabsTrigger value='order' className='flex items-center gap-2 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground'>
-                <BarChart3 className='w-4 h-4' />
-                Order Summary
-              </TabsTrigger>
-              <TabsTrigger value='devices' className='flex items-center gap-2 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground'>
-                <Archive className='w-4 h-4' />
-                Devices
-              </TabsTrigger>
-              <TabsTrigger value='requests' className='flex items-center gap-2 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground'>
-                <Inbox className='w-4 h-4' />
-                Requests
-              </TabsTrigger>
-              <TabsTrigger value='audit' className='flex items-center gap-2 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground'>
-                <Archive className='w-4 h-4' />
-                Audit View
-              </TabsTrigger>
-              <TabsTrigger value='activity' className='flex items-center gap-2 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground'>
-                <Clock className='w-4 h-4' />
-                Activity Logs
-              </TabsTrigger>
-            </TabsList>
-            <TabsContent value='requests' className='flex-1 overflow-y-auto'>
-              <Suspense fallback={<TabFallback />}>
+                <TabsTrigger value='order' className='flex-1 min-w-[140px] flex items-center justify-center gap-2 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground font-bold rounded-lg transition-all h-10'>
+                  <BarChart3 className='w-4 h-4' />
+                  Order Summary
+                </TabsTrigger>
+                <TabsTrigger value='devices' className='flex-1 min-w-[140px] flex items-center justify-center gap-2 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground font-bold rounded-lg transition-all h-10'>
+                  <Archive className='w-4 h-4' />
+                  Devices
+                </TabsTrigger>
+                <TabsTrigger value='requests' className='flex-1 min-w-[140px] flex items-center justify-center gap-2 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground font-bold rounded-lg transition-all h-10'>
+                  <Inbox className='w-4 h-4' />
+                  Approvals
+                </TabsTrigger>
+                <TabsTrigger value='audit' className='flex-1 min-w-[140px] flex items-center justify-center gap-2 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground font-bold rounded-lg transition-all h-10'>
+                  <Archive className='w-4 h-4' />
+                  Audit View
+                </TabsTrigger>
+                <TabsTrigger value='activity' className='flex-1 min-w-[140px] flex items-center justify-center gap-2 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground font-bold rounded-lg transition-all h-10'>
+                  <Clock className='w-4 h-4' />
+                  Activity Logs
+                </TabsTrigger>
+              </TabsList>
+              <TabsContent value='requests' className='w-full bg-white'>
                 <RequestsPanel
                   focusRequestId={focusRequestId}
                   onFocusHandled={() => setFocusRequestId(null)}
                 />
-              </Suspense>
-            </TabsContent>
-            {userRole !== 'Reporter' && (
-              <TabsContent value='create' className='space-y-6 flex-1 overflow-y-auto'>
+              </TabsContent>
+              {userRole !== 'Reporter' && (
+                <TabsContent value='create' className='space-y-6 w-full px-8 py-6'>
+                  <Suspense fallback={<TabFallback />}>
+                    <UnifiedAssetForm
+                      orderType={orderType}
+                      setOrderType={setOrderType}
+                      salesOrder={salesOrder}
+                      setSalesOrder={setSalesOrder}
+                      dealId={dealId}
+                      setDealId={setDealId}
+                      nucleusId={nucleusId}
+                      setNucleusId={setNucleusId}
+                      brand={brand}
+                      setBrand={setBrand}
+                      schoolName={schoolName}
+                      setSchoolName={setSchoolName}
+                      agreementType={agreementType}
+                      setAgreementType={setAgreementType}
+                      loading={loading}
+                      setLoading={setLoading}
+                      loadOrders={loadOrders}
+                      loadDevices={loadDevices}
+                      loadOrderSummary={async () => { setDataLoaded(prev => ({ ...prev, devices: false })); }}
+                      openScanner={(itemId, index, assetType) => {
+                        setCurrentSerialIndex({ itemId, index, type: assetType as 'tablet' | 'tv' });
+                        setShowScanner(true);
+                      }}
+                    />
+                  </Suspense>
+                </TabsContent>
+              )}
+              <TabsContent value='view' className='w-full'>
                 <Suspense fallback={<TabFallback />}>
-                  <UnifiedAssetForm
-                    orderType={orderType}
-                    setOrderType={setOrderType}
-                    salesOrder={salesOrder}
-                    setSalesOrder={setSalesOrder}
-                    dealId={dealId}
-                    setDealId={setDealId}
-                    nucleusId={nucleusId}
-                    setNucleusId={setNucleusId}
-                    brand={brand}
-                    setBrand={setBrand}
-                    schoolName={schoolName}
-                    setSchoolName={setSchoolName}
-                    agreementType={agreementType}
-                    setAgreementType={setAgreementType}
+                  <OrdersTable
+                    orders={orders}
+                    setOrders={setOrders}
+                    loadOrderSummary={async () => { setDataLoaded(prev => ({ ...prev, devices: false })); }}
+                    selectedWarehouse={selectedWarehouse}
+                    setSelectedWarehouse={setSelectedWarehouse}
+                    selectedAssetType={selectedAssetType}
+                    setSelectedAssetType={setSelectedAssetType}
+                    selectedModel={selectedModel}
+                    setSelectedModel={setSelectedModel}
+                    selectedConfiguration={selectedConfiguration}
+                    setSelectedConfiguration={setSelectedConfiguration}
+                    selectedOrderType={selectedOrderType}
+                    setSelectedOrderType={setSelectedOrderType}
+                    selectedAgreementType={selectedAgreementType}
+                    setSelectedAgreementType={setSelectedAgreementType}
+                    selectedProduct={selectedProduct}
+                    setSelectedProduct={setSelectedProduct}
+                    selectedStatus={selectedStatus}
+                    setSelectedStatus={setSelectedStatus}
+                    selectedSdCardSize={selectedSdCardSize}
+                    setSelectedSdCardSize={setSelectedSdCardSize}
+                    fromDate={fromDate}
+                    setFromDate={setFromDate}
+                    showDeleted={showDeleted}
+                    setShowDeleted={setShowDeleted}
+                    searchQuery={deferredSearchQuery}
+                    setSearchQuery={setSearchQuery}
                     loading={loading}
                     setLoading={setLoading}
                     loadOrders={loadOrders}
                     loadDevices={loadDevices}
-                    loadOrderSummary={async () => { setDataLoaded(prev => ({ ...prev, devices: false })); }}
-                    openScanner={(itemId, index, assetType) => {
-                      setCurrentSerialIndex({ itemId, index, type: assetType as 'tablet' | 'tv' });
-                      setShowScanner(true);
-                    }}
+                    userRole={userRole}
                   />
                 </Suspense>
               </TabsContent>
-            )}
-            <TabsContent value='view' className='flex-1 overflow-y-auto'>
-              <Suspense fallback={<TabFallback />}>
-                <OrdersTable
-                  orders={orders}
-                  setOrders={setOrders}
-                  loadOrderSummary={async () => { setDataLoaded(prev => ({ ...prev, devices: false })); }}
-                  selectedWarehouse={selectedWarehouse}
-                  setSelectedWarehouse={setSelectedWarehouse}
-                  selectedAssetType={selectedAssetType}
-                  setSelectedAssetType={setSelectedAssetType}
-                  selectedModel={selectedModel}
-                  setSelectedModel={setSelectedModel}
-                  selectedConfiguration={selectedConfiguration}
-                  setSelectedConfiguration={setSelectedConfiguration}
-                  selectedOrderType={selectedOrderType}
-                  setSelectedOrderType={setSelectedOrderType}
-                  selectedAgreementType={selectedAgreementType}
-                  setSelectedAgreementType={setSelectedAgreementType}
-                  selectedProduct={selectedProduct}
-                  setSelectedProduct={setSelectedProduct}
-                  selectedStatus={selectedStatus}
-                  setSelectedStatus={setSelectedStatus}
-                  selectedSdCardSize={selectedSdCardSize}
-                  setSelectedSdCardSize={setSelectedSdCardSize}      
-                  fromDate={devicesFromDate}
-                  setFromDate={setDevicesFromDate}
-                  showDeleted={showDeleted}
-                  setShowDeleted={setShowDeleted}
-                  searchQuery={deferredSearchQuery}
-                  setSearchQuery={setSearchQuery}
-                  loading={loading}
-                  setLoading={setLoading}
-                  loadOrders={loadOrders}
-                  loadDevices={loadDevices}
-                  userRole={userRole}
-                />
-              </Suspense>
-            </TabsContent>
-            <TabsContent value='order' className='flex-1 overflow-y-auto'>
-              <Suspense fallback={<TabFallback />}>
-                <OrderSummaryTable
-                  devices={devices}
-                  loading={loading}
-                  selectedWarehouse={selectedWarehouse}
-                  setSelectedWarehouse={(value) => {
-                    setSelectedWarehouse(Array.isArray(value) ? value : [value]);
-                    setSelectedAssetType([]);
-                    setSelectedModel([]);
-                    setSelectedProduct([]);
-                    setSelectedAssetStatus([]);
-                    setSelectedAssetGroup([]);
-                  }}
-                  selectedAssetType={selectedAssetType}
-                  setSelectedAssetType={(value) => {
-                    setSelectedAssetType(Array.isArray(value) ? value : [value]);
-                    setSelectedModel([]);
-                  }}
-                  selectedModel={selectedModel}
-                  setSelectedModel={setSelectedModel}
-                  selectedAssetStatus={selectedAssetStatus}
-                  setSelectedAssetStatus={setSelectedAssetStatus}
-                  selectedAssetGroup={selectedAssetGroup}
-                  setSelectedAssetGroup={setSelectedAssetGroup}
-                  selectedProduct={selectedProduct}
-                  setSelectedProduct={setSelectedProduct}
-                  selectedAssetCondition={selectedAssetCondition}
-                  setSelectedAssetCondition={setSelectedAssetCondition}
-                  selectedAgreementType={selectedAgreementType}
-                  setSelectedAgreementType={setSelectedAgreementType}
-                  selectedSdCardSize={selectedSdCardSize}
-                  setSelectedSdCardSize={setSelectedSdCardSize}
-                  fromDate={fromDate}
-                  setFromDate={setFromDate}
-                  showDeleted={showDeleted}
-                  setShowDeleted={setShowDeleted}
-                  searchQuery={deferredSearchQuery}
-                  setSearchQuery={setSearchQuery}
-                />
-              </Suspense>
-            </TabsContent>
-            <TabsContent value='devices' className='flex-1 overflow-y-auto'>
-              <Suspense fallback={<TabFallback />}>
-                <DevicesTable
-                  devices={devices}
-                  loading={loading}
-                  selectedWarehouse={selectedWarehouse}
-                  setSelectedWarehouse={setSelectedWarehouse}
-                  selectedAssetType={selectedAssetType}
-                  setSelectedAssetType={setSelectedAssetType}
-                  selectedModel={selectedModel}
-                  setSelectedModel={setSelectedModel}
-                  selectedAssetStatus={selectedAssetStatus}
-                  setSelectedAssetStatus={setSelectedAssetStatus}
-                  selectedConfiguration={selectedConfiguration}
-                  setSelectedConfiguration={setSelectedConfiguration}
-                  selectedProduct={selectedProduct}
-                  setSelectedProduct={setSelectedProduct}
-                  selectedStatus={selectedStatus}
-                  setSelectedStatus={setSelectedStatus}
-                  selectedSdCardSize={selectedSdCardSize}
-                  setSelectedSdCardSize={setSelectedSdCardSize}
-                  selectedOrderType={selectedOrderType}
-                  setSelectedOrderType={setSelectedOrderType}
-                  selectedAgreementType={selectedAgreementType}
-                  setSelectedAgreementType={setSelectedAgreementType}
-                  selectedAssetGroup={selectedAssetGroup}
-                  setSelectedAssetGroup={setSelectedAssetGroup}
-                  selectedAssetCondition={selectedAssetCondition}
-                  setSelectedAssetCondition={setSelectedAssetCondition}
-                  fromDate={devicesFromDate}
-                  setFromDate={setDevicesFromDate}
-                  showDeleted={showDeleted}
-                  setShowDeleted={setShowDeleted}
-                  searchQuery={deferredSearchQuery}
-                  setSearchQuery={setSearchQuery}
-                />
-              </Suspense>
-            </TabsContent>
-            <TabsContent value='audit' className='flex-1 overflow-y-auto'>
-              <Suspense fallback={<TabFallback />}>
-                <AuditTable
-                  devices={devices}
-                  loading={loading}
-                  selectedWarehouse={selectedWarehouse}
-                  setSelectedWarehouse={setSelectedWarehouse}
-                  selectedAssetType={selectedAssetType}
-                  setSelectedAssetType={setSelectedAssetType}
-                  selectedModel={selectedModel}
-                  setSelectedModel={setSelectedModel}
-                  selectedAssetStatus={selectedAssetStatus}
-                  setSelectedAssetStatus={setSelectedAssetStatus}
-                  selectedConfiguration={selectedConfiguration}
-                  setSelectedConfiguration={setSelectedConfiguration}
-                  selectedProduct={selectedProduct}
-                  setSelectedProduct={setSelectedProduct}
-                  selectedOrderType={selectedOrderType}
-                  setSelectedOrderType={setSelectedOrderType}
-                  selectedAssetGroup={selectedAssetGroup}
-                  setSelectedAssetGroup={setSelectedAssetGroup}
-                  selectedAssetCondition={selectedAssetCondition}
-                  setSelectedAssetCondition={setSelectedAssetCondition}
-                  fromDate={fromDate}
-                  setFromDate={setFromDate}
-                  searchQuery={deferredSearchQuery}
-                  setSearchQuery={setSearchQuery}
-                  onUpdateAssetCheck={handleUpdateAssetCheck}
-                  onUpdateDevice={handleUpdateDevice}
-                  onBulkUpdateDevices={handleBulkUpdateDevices}
-                  onClearAllChecks={handleClearAllChecks}
-                  onBulkAuditCheck={handleBulkAuditCheck}
-                  userRole={userRole || 'unknown'}
-                  currentUser={userEmail}
-                />
-              </Suspense>
-            </TabsContent>
-            <TabsContent value='activity' className='flex-1 overflow-y-auto'>
-              <Suspense fallback={<TabFallback />}>
-                <ActivityLogs />
-              </Suspense>
-            </TabsContent>
-          </Tabs>
-        </div>
-      </div>
+              <TabsContent value='order' className='w-full'>
+                <Suspense fallback={<TabFallback />}>
+                  <OrderSummaryTable
+                    devices={devices}
+                    loading={loading}
+                    selectedWarehouse={selectedWarehouse}
+                    setSelectedWarehouse={(value) => {
+                      setSelectedWarehouse(Array.isArray(value) ? value : [value]);
+                      setSelectedAssetType([]);
+                      setSelectedModel([]);
+                      setSelectedProduct([]);
+                      setSelectedAssetStatus([]);
+                      setSelectedAssetGroup([]);
+                    }}
+                    selectedAssetType={selectedAssetType}
+                    setSelectedAssetType={(value) => {
+                      setSelectedAssetType(Array.isArray(value) ? value : [value]);
+                      setSelectedModel([]);
+                    }}
+                    selectedModel={selectedModel}
+                    setSelectedModel={setSelectedModel}
+                    selectedAssetStatus={selectedAssetStatus}
+                    setSelectedAssetStatus={setSelectedAssetStatus}
+                    selectedAssetGroup={selectedAssetGroup}
+                    setSelectedAssetGroup={setSelectedAssetGroup}
+                    selectedProduct={selectedProduct}
+                    setSelectedProduct={setSelectedProduct}
+                    selectedAssetCondition={selectedAssetCondition}
+                    setSelectedAssetCondition={setSelectedAssetCondition}
+                    selectedAgreementType={selectedAgreementType}
+                    setSelectedAgreementType={setSelectedAgreementType}
+                    selectedSdCardSize={selectedSdCardSize}
+                    setSelectedSdCardSize={setSelectedSdCardSize}
+                    fromDate={fromDate}
+                    setFromDate={setFromDate}
+                    showDeleted={showDeleted}
+                    setShowDeleted={setShowDeleted}
+                    searchQuery={deferredSearchQuery}
+                    setSearchQuery={setSearchQuery}
+                  />
+                </Suspense>
+              </TabsContent>
+              <TabsContent value='devices' className='w-full'>
+                <Suspense fallback={<TabFallback />}>
+                  <DevicesTable
+                    devices={devices}
+                    loading={loading}
+                    selectedWarehouse={selectedWarehouse}
+                    setSelectedWarehouse={setSelectedWarehouse}
+                    selectedAssetType={selectedAssetType}
+                    setSelectedAssetType={setSelectedAssetType}
+                    selectedModel={selectedModel}
+                    setSelectedModel={setSelectedModel}
+                    selectedAssetStatus={selectedAssetStatus}
+                    setSelectedAssetStatus={setSelectedAssetStatus}
+                    selectedConfiguration={selectedConfiguration}
+                    setSelectedConfiguration={setSelectedConfiguration}
+                    selectedProduct={selectedProduct}
+                    setSelectedProduct={setSelectedProduct}
+                    selectedStatus={selectedStatus}
+                    setSelectedStatus={setSelectedStatus}
+                    selectedSdCardSize={selectedSdCardSize}
+                    setSelectedSdCardSize={setSelectedSdCardSize}
+                    selectedOrderType={selectedOrderType}
+                    setSelectedOrderType={setSelectedOrderType}
+                    selectedAgreementType={selectedAgreementType}
+                    setSelectedAgreementType={setSelectedAgreementType}
+                    selectedAssetGroup={selectedAssetGroup}
+                    setSelectedAssetGroup={setSelectedAssetGroup}
+                    selectedAssetCondition={selectedAssetCondition}
+                    setSelectedAssetCondition={setSelectedAssetCondition}
+                    fromDate={fromDate}
+                    setFromDate={setFromDate}
+                    showDeleted={showDeleted}
+                    setShowDeleted={setShowDeleted}
+                    searchQuery={deferredSearchQuery}
+                    setSearchQuery={setSearchQuery}
+                  />
+                </Suspense>
+              </TabsContent>
+              <TabsContent value='audit' className='w-full'>
+                <Suspense fallback={<TabFallback />}>
+                  <AuditTable
+                    devices={devices}
+                    loading={loading}
+                    selectedWarehouse={selectedWarehouse}
+                    setSelectedWarehouse={setSelectedWarehouse}
+                    selectedAssetType={selectedAssetType}
+                    setSelectedAssetType={setSelectedAssetType}
+                    selectedModel={selectedModel}
+                    setSelectedModel={setSelectedModel}
+                    selectedAssetStatus={selectedAssetStatus}
+                    setSelectedAssetStatus={setSelectedAssetStatus}
+                    selectedConfiguration={selectedConfiguration}
+                    setSelectedConfiguration={setSelectedConfiguration}
+                    selectedProduct={selectedProduct}
+                    setSelectedProduct={setSelectedProduct}
+                    selectedOrderType={selectedOrderType}
+                    setSelectedOrderType={setSelectedOrderType}
+                    selectedAssetGroup={selectedAssetGroup}
+                    setSelectedAssetGroup={setSelectedAssetGroup}
+                    selectedAssetCondition={selectedAssetCondition}
+                    setSelectedAssetCondition={setSelectedAssetCondition}
+                    fromDate={fromDate}
+                    setFromDate={setFromDate}
+                    searchQuery={deferredSearchQuery}
+                    setSearchQuery={setSearchQuery}
+                    onUpdateAssetCheck={handleUpdateAssetCheck}
+                    onUpdateDevice={handleUpdateDevice}
+                    onBulkUpdateDevices={handleBulkUpdateDevices}
+                    onClearAllChecks={handleClearAllChecks}
+                    onBulkAuditCheck={handleBulkAuditCheck}
+                    userRole={userRole || 'unknown'}
+                    currentUser={userEmail}
+                  />
+                </Suspense>
+              </TabsContent>
+              <TabsContent value='activity' className='w-full'>
+                <Suspense fallback={<TabFallback />}>
+                  <ActivityLogs />
+                </Suspense>
+              </TabsContent>
+            </Tabs>
+          </div>
+        )}
+      </main>
+
+      <footer className='fixed bottom-0 left-0 right-0 py-3 text-center text-slate-400 text-[10px] font-bold uppercase tracking-widest border-t border-slate-100 bg-white/80 backdrop-blur-md z-50 flex-shrink-0'>
+        Crafted by 🤓 IT Infra minds, for IT Infra needs
+      </footer>
+      <style dangerouslySetInnerHTML={{ __html: `
+        .no-scrollbar::-webkit-scrollbar { display: none !important; }
+        .no-scrollbar { -ms-overflow-style: none !important; scrollbar-width: none !important; }
+      `}} />
       {showScanner && (
         <Suspense fallback={null}>
           <EnhancedBarcodeScanner

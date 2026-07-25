@@ -529,7 +529,7 @@ const OrdersTable: React.FC<OrdersTableProps> = ({
   }
 
   return (
-    <Card style={{ border: '1px solid #e2e8f0', borderRadius: '8px', background: '#fff', padding: '8px', minHeight: '200px' }}>
+    <Card style={{ border: 'none', borderRadius: '0', background: '#fff', padding: '24px', minHeight: '200px', width: '100%' }}>
       <CardHeader style={{ paddingBottom: '2px' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <CardTitle style={{ display: 'flex', alignItems: 'center', gap: '1px', fontSize: '12px' }}>
@@ -577,7 +577,7 @@ const OrdersTable: React.FC<OrdersTableProps> = ({
               {showDeleted ? 'Show Active' : 'Show Deleted'}
             </Button>
           </div>
-          <div style={{ display: 'flex', gap: '4px', marginTop: '4px', maxWidth: '1200px', overflowX: 'auto', whiteSpace: 'nowrap' }}>
+          <div style={{ display: 'flex', gap: '4px', marginTop: '4px', width: '100%', overflowX: 'auto', whiteSpace: 'nowrap' }}>
             <MultiSelect
               id="warehouseFilter"
               label="Warehouse"
