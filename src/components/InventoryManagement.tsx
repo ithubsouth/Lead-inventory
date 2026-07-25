@@ -983,7 +983,7 @@ const InventoryManagement = () => {
         )}
       </main>
 
-      <footer className='fixed bottom-0 left-0 right-0 py-3 text-center text-slate-400 text-[10px] font-bold uppercase tracking-widest border-t border-slate-100 bg-white/80 backdrop-blur-md z-50 flex-shrink-0'>
+      <footer className='fixed bottom-0 left-0 right-0 py-3 text-left px-8 text-slate-400 text-[10px] font-bold uppercase tracking-widest border-t border-slate-100 bg-white/80 backdrop-blur-md z-50 flex-shrink-0'>
         Crafted by 🤓 IT Infra minds, for IT Infra needs
       </footer>
       <style dangerouslySetInnerHTML={{ __html: `

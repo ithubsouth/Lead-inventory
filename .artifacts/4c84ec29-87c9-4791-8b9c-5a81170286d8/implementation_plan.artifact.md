@@ -1,27 +1,24 @@
-# Implementation Plan - Further Reduce Scrollbar Thickness
+# Implementation Plan - Fix Blank Screen Crash
 
-The previous reduction to 6px was not enough. This plan further reduces the scrollbar thickness across the application to provide a more minimal look.
+Identify and resolve the runtime error causing the application to crash (blank screen) when opening the "New Request" dialog.
+
+## Root Cause Analysis
+The crash is caused by two main issues in `CreateRequestDialog.tsx`:
+1.  **Missing Import**: The `Trash2` icon is used in the code but not imported from `lucide-react`.
+2.  **Unsupported Function**: The code calls `toast.info()`, but the `sonner` library does not provide an `.info` method, causing a runtime error during the initial render.
 
 ## Proposed Changes
 
-### Styles & Global Configuration
-
-#### [MODIFY] [index.css](file:///C:/Users/gkmec/OneDrive/Desktop/nucleus-inventory/src/index.css)
-- Reduce `.custom-scrollbar` width/height from 10px to 6px.
-- Reduce `.custom-scrollbar-thin` width/height from 6px to 3px.
-- Adjust borders and padding to maintain the "inset" look for the thumb.
-
-#### [MODIFY] [scroll-area.tsx](file:///C:/Users/gkmec/OneDrive/Desktop/nucleus-inventory/src/components/ui/scroll-area.tsx)
-- Further reduce `ScrollBar` thickness from `w-1.5` (6px) to `w-1` (4px) or similar.
-
-### Component Updates
+### Create Request Dialog
 
 #### [MODIFY] [CreateRequestDialog.tsx](file:///C:/Users/gkmec/OneDrive/Desktop/nucleus-inventory/src/components/CreateRequestDialog.tsx)
-- Change `custom-scrollbar` to `custom-scrollbar-thin` for the serial number list to match other table-like scrollbars.
+- Update `lucide-react` imports to include `Trash2`.
+- Change `toast.info` to `toast` for the draft restoration message.
+- Remove unused `X` icon import.
 
 ## Verification Plan
 
 ### Manual Verification
-- Check the main container: should now have a 6px scrollbar (previously 10px).
-- Check all tables: should now have a very thin 3px scrollbar (previously 6px).
-- Ensure the scrollbars are still usable and visible enough to indicate scroll state.
+- Click the **"+ New Request"** button. The dialog should now open correctly without crashing.
+- Verify that the **"Delete Draft"** button correctly displays the trash icon.
+- Verify that entering data, closing the dialog, and reopening it restores the data and shows a notification.

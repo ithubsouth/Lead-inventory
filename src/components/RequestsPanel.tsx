@@ -5,7 +5,17 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 // import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
-import { Plus, Inbox, User, Layers, Search } from 'lucide-react';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { Plus, Inbox, User, Layers, Search, FileEdit, Trash2 } from 'lucide-react';
 import { REQUEST_TYPE_LABELS, getFlow, RequestType, RequestStatus } from '@/lib/requestFlows';
 import { formatDistanceToNow } from 'date-fns';
 import { cn } from '@/lib/utils';
@@ -47,17 +57,43 @@ export default function RequestsPanel({ focusRequestId, onFocusHandled }: Props)
   const { profile, loading: profileLoading } = useUserProfile();
   const [rows, setRows] = useState<RequestRow[]>([]);
   const [loading, setLoading] = useState(true);
-  const [tab, setTab] = useState<'inbox' | 'mine' | 'all'>('inbox');
+  const [tab, setTab] = useState<'inbox' | 'mine' | 'drafts' | 'all'>('inbox');
   const [q, setQ] = useState('');
   const [createOpen, setCreateOpen] = useState(false);
   const [detailId, setDetailId] = useState<string | null>(null);
+  const [draft, setDraft] = useState<any>(null);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
 
   const isReporter = profile?.role === 'Reporter';
   const isSuperAdmin = profile?.role === 'Super Admin';
 
+  const STORAGE_KEY = 'nucleus_request_draft';
+
+  const checkDraft = () => {
+    const saved = localStorage.getItem(STORAGE_KEY);
+    if (saved) {
+      try {
+        setDraft(JSON.parse(saved));
+      } catch (e) {
+        setDraft(null);
+      }
+    } else {
+      setDraft(null);
+    }
+  };
+
+  const clearDraft = (e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    localStorage.removeItem(STORAGE_KEY);
+    checkDraft();
+    setDeleteConfirmOpen(false);
+    toast.success('Draft deleted');
+  };
+
   const load = async () => {
     try {
       setLoading(true);
+      checkDraft();
       const { data, error } = await supabase
         .from('requests')
         .select('*')
@@ -144,9 +180,6 @@ export default function RequestsPanel({ focusRequestId, onFocusHandled }: Props)
           <p className='text-sm font-medium text-slate-400'>Monitor and manage hardware procurement and movement requests.</p>
         </div>
         <div className='flex items-center gap-3'>
-          <Badge variant='outline' className='bg-green-50 text-green-700 border-green-200'>
-            System Active
-          </Badge>
           {!isReporter && (
             <Button onClick={() => setCreateOpen(true)} className='gap-2 bg-blue-600 hover:bg-blue-700 text-white font-bold'>
               <Plus className='w-4 h-4' /> New Request
@@ -175,6 +208,18 @@ export default function RequestsPanel({ focusRequestId, onFocusHandled }: Props)
           >
             <User className='w-4 h-4' /> My Requests
           </button>
+          {!isReporter && (
+            <button
+              onClick={() => { setTab('drafts'); checkDraft(); }}
+              className={cn(
+                'px-4 py-2 text-xs font-black uppercase tracking-widest rounded-lg flex items-center gap-2 transition-all',
+                tab === 'drafts' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:bg-white/50'
+              )}
+            >
+              <FileEdit className='w-4 h-4' /> Drafts
+              {draft && <div className='w-2 h-2 rounded-full bg-blue-500 animate-pulse' />}
+            </button>
+          )}
           {isSuperAdmin && (
             <button
               onClick={() => setTab('all')}
@@ -188,6 +233,17 @@ export default function RequestsPanel({ focusRequestId, onFocusHandled }: Props)
           )}
         </div>
         <div className='flex items-center gap-2'>
+          {tab === 'drafts' && draft && (
+            <Button
+              variant='ghost'
+              size='sm'
+              onClick={() => setDeleteConfirmOpen(true)}
+              className='text-red-500 hover:text-red-600 hover:bg-red-50 font-bold h-10 px-4 rounded-xl mr-2'
+            >
+              <Trash2 className='w-4 h-4 mr-2' />
+              Delete All Drafts
+            </Button>
+          )}
           <div className='relative'>
             <Input
               value={q}
@@ -215,6 +271,53 @@ export default function RequestsPanel({ focusRequestId, onFocusHandled }: Props)
             <div className='inline-block w-10 h-10 border-4 border-blue-500/30 border-t-blue-500 rounded-full animate-spin mb-4'></div>
             <p className='text-sm font-bold text-slate-400 uppercase tracking-widest'>Syncing with server...</p>
           </div>
+        ) : tab === 'drafts' ? (
+          draft ? (
+            <div className='divide-y divide-slate-100'>
+              <button
+                onClick={() => setCreateOpen(true)}
+                className='w-full text-left grid grid-cols-12 gap-3 px-8 py-6 hover:bg-blue-50/30 transition-all group border-l-4 border-l-blue-500/30 hover:border-l-blue-500'
+              >
+                <div className='col-span-5 min-w-0'>
+                  <div className='font-bold text-base text-slate-700 truncate group-hover:text-blue-600 transition-colors'>
+                    {draft.title || 'Incomplete Request'}
+                  </div>
+                  <div className='text-xs font-medium text-slate-400 mt-1 uppercase tracking-widest'>
+                    Currently saved in your browser
+                  </div>
+                </div>
+                <div className='col-span-4 flex items-center gap-4'>
+                   <Badge variant='outline' className='bg-blue-50 text-blue-600 border-blue-100 font-black text-[10px] px-3 py-1 rounded-lg uppercase tracking-widest'>
+                     Draft Mode
+                   </Badge>
+                   <span className='text-[11px] font-bold text-slate-400'>
+                     {draft.serialEntries?.length || 0} items entered
+                   </span>
+                </div>
+                <div className='col-span-3 text-right flex items-center justify-end gap-2'>
+                  <Button
+                    variant='ghost'
+                    size='sm'
+                    onClick={(e) => { e.stopPropagation(); setDeleteConfirmOpen(true); }}
+                    className='text-red-500 hover:text-red-600 hover:bg-red-50 font-bold h-9 px-4 rounded-xl'
+                  >
+                    <Trash2 className='w-4 h-4 mr-2' />
+                    Delete
+                  </Button>
+                  <Button size='sm' className='bg-blue-600 hover:bg-blue-700 text-white font-bold h-9 px-6 rounded-xl shadow-md transition-all active:scale-95'>
+                    Resume Editing
+                  </Button>
+                </div>
+              </button>
+            </div>
+          ) : (
+            <div className='px-6 py-40 text-center'>
+              <div className='w-20 h-20 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-4'>
+                <FileEdit className='w-10 h-10 text-slate-200' />
+              </div>
+              <p className='text-sm font-bold text-slate-400 uppercase tracking-widest'>No drafts found in this browser</p>
+            </div>
+          )
         ) : filtered.length === 0 ? (
           <div className='px-6 py-40 text-center'>
             <div className='w-20 h-20 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-4'>
@@ -290,6 +393,23 @@ export default function RequestsPanel({ focusRequestId, onFocusHandled }: Props)
           onChanged={load}
         />
       )}
+
+      <AlertDialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Draft Request?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently remove your unsaved request. This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={() => clearDraft()} className='bg-red-600 hover:bg-red-700 text-white'>
+              Delete Permanently
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
