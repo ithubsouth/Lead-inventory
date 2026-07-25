@@ -32,6 +32,8 @@ import {
   Trash2,
   AlertTriangle,
   FileDown,
+  Eye,
+  Loader2,
 } from 'lucide-react';
 
 interface Props {
@@ -235,7 +237,7 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
     }
     setBusy(true);
     try {
-      const path = `${req.id}/${Date.now()}_${file.name}`;
+      const path = `${req.id}/${Date.now()}_${file.name.replace(/[^\w.\-]+/g, '_')}`;
       const { error: upErr } = await supabase.storage
         .from('request-documents')
         .upload(path, file);
@@ -262,15 +264,31 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
     }
   };
 
-  const downloadDoc = async (d: DocRow) => {
+  const sign = async (path: string): Promise<string | null> => {
     const { data, error } = await supabase.storage
       .from('request-documents')
-      .createSignedUrl(d.file_path, 300);
+      .createSignedUrl(path, 300);
     if (error) {
       toast.error('Could not fetch file');
-      return;
+      return null;
     }
-    window.open(data.signedUrl, '_blank');
+    return data.signedUrl;
+  };
+
+  const viewDoc = async (d: DocRow) => {
+    const url = await sign(d.file_path);
+    if (url) window.open(url, '_blank', 'noopener');
+  };
+
+  const downloadDoc = async (d: DocRow) => {
+    const url = await sign(d.file_path);
+    if (!url) return;
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = d.file_name;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
   };
 
   const deleteDoc = async (d: DocRow) => {
@@ -572,8 +590,8 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
                         <AlertTriangle className='w-3 h-3' /> {dupCount} flagged
                       </span>
                     )}
-                    <Button size='sm' variant='outline' onClick={downloadSerialsCsv}>
-                      <FileDown className='w-3.5 h-3.5 mr-1' /> Download CSV
+                    <Button size='sm' variant='outline' onClick={downloadSerialsCsv} title="Download CSV">
+                      <FileDown className='w-3.5 h-3.5' />
                     </Button>
                     {req.current_stage === 'tech_verify_serials' && canAct && (
                       <>
@@ -633,55 +651,69 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
             )}
 
             {/* Documents */}
-            <div>
-              <div className='flex items-center justify-between mb-2'>
-                <div className='text-sm font-semibold'>Documents</div>
-                <div>
-                  <input
-                    ref={fileRef}
-                    type='file'
-                    accept='.pdf,.jpg,.jpeg,.png,.webp,.xlsx,.csv'
-                    className='hidden'
-                    onChange={(e) => {
-                      const f = e.target.files?.[0];
-                      if (f) uploadFile(f);
-                    }}
-                  />
-                  <Button
-                    size='sm'
-                    variant='outline'
-                    onClick={() => fileRef.current?.click()}
-                    disabled={busy}
-                  >
-                    <Upload className='w-3 h-3 mr-1' /> Upload
-                  </Button>
+            <div className="space-y-3">
+              <div className='flex items-center justify-between'>
+                <div className="space-y-0.5">
+                  <div className='flex items-center gap-2'>
+                    <div className='text-sm font-bold text-slate-700'>Documents</div>
+                    <Button
+                      variant='outline'
+                      size='sm'
+                      onClick={() => fileRef.current?.click()}
+                      className='h-7 px-2 text-[10px] font-bold uppercase tracking-widest gap-1.5 border-blue-100 bg-blue-50 text-blue-600 hover:bg-blue-100'
+                      disabled={busy}
+                    >
+                      {busy ? <Loader2 className="w-3 h-3 animate-spin" /> : <Upload className='w-3 h-3' />}
+                      Click to upload files
+                    </Button>
+                  </div>
+                  <p className="text-[10px] text-muted-foreground font-medium">No limit on number of uploads.</p>
                 </div>
               </div>
-              <div className='space-y-1'>
-                {docs.length === 0 && (
-                  <div className='text-xs text-muted-foreground py-2'>No documents yet.</div>
+
+              <input
+                ref={fileRef}
+                type='file'
+                multiple
+                accept='.pdf,.jpg,.jpeg,.png,.webp,.xlsx,.csv'
+                className='hidden'
+                onChange={(e) => {
+                  const f = e.target.files?.[0];
+                  if (f) uploadFile(f);
+                }}
+                disabled={busy}
+              />
+
+              <div className='space-y-1.5'>
+                {docs.length === 0 && !busy && (
+                  <div className='text-xs text-muted-foreground py-6 text-center bg-slate-50 rounded-xl border border-slate-100'>No documents yet.</div>
                 )}
                 {docs.map((d) => (
                   <div
                     key={d.id}
-                    className='flex items-center justify-between px-2 py-1.5 rounded border bg-muted/20 text-xs'
+                    className='flex items-center justify-between px-3 py-2 rounded-xl border border-slate-100 bg-white shadow-sm text-xs group hover:border-blue-200 transition-colors'
                   >
-                    <div className='flex items-center gap-2 min-w-0'>
-                      <FileText className='w-4 h-4 flex-shrink-0' />
-                      <div className='truncate'>
-                        <div className='font-medium truncate'>{d.file_name}</div>
-                        <div className='text-muted-foreground'>
+                    <div className='flex items-center gap-3 min-w-0'>
+                      <div className="w-8 h-8 rounded-lg bg-blue-50 flex items-center justify-center shrink-0">
+                        <FileText className='w-4 h-4 text-blue-600' />
+                      </div>
+                      <div className='truncate flex flex-col'>
+                        <div className='font-bold text-slate-700 truncate'>{d.file_name}</div>
+                        <div className='text-[10px] text-slate-400 font-medium'>
                           {d.uploaded_by_email} · {format(new Date(d.uploaded_at), 'MMM d, HH:mm')}
                         </div>
                       </div>
                     </div>
                     <div className='flex items-center gap-1'>
-                      <Button size='icon' variant='ghost' onClick={() => downloadDoc(d)}>
-                        <Download className='w-3.5 h-3.5' />
+                      <Button size='icon' variant='ghost' className="h-8 w-8 rounded-lg hover:bg-blue-50 hover:text-blue-600" onClick={() => viewDoc(d)} title="Preview">
+                        <Eye className='w-4 h-4' />
+                      </Button>
+                      <Button size='icon' variant='ghost' className="h-8 w-8 rounded-lg hover:bg-blue-50 hover:text-blue-600" onClick={() => downloadDoc(d)} title="Download">
+                        <Download className='w-4 h-4' />
                       </Button>
                       {(profile?.role === 'Super Admin' || profile?.role === 'Admin') && (
-                        <Button size='icon' variant='ghost' onClick={() => deleteDoc(d)}>
-                          <Trash2 className='w-3.5 h-3.5 text-red-600' />
+                        <Button size='icon' variant='ghost' className="h-8 w-8 rounded-lg hover:bg-red-50 hover:text-red-600" onClick={() => deleteDoc(d)} title="Delete">
+                          <Trash2 className='w-4 h-4' />
                         </Button>
                       )}
                     </div>

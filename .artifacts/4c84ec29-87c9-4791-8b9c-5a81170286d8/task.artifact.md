@@ -1,4 +1,3 @@
-- [x] Fix crashes in `CreateRequestDialog.tsx`:
-    - [x] Import `Trash2` from `lucide-react`
-    - [x] Replace `toast.info` with `toast`
-- [x] Verify functionality
+- [x] Implement `handleSerialPaste` in `CreateRequestDialog.tsx`
+- [x] Add `onPaste` handler to Serial Number input
+- [x] Verify functionality with multi-row paste from sheets

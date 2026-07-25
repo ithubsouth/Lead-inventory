@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import {
   Dialog,
   DialogContent,
@@ -41,7 +41,7 @@ import {
   configurations, tvConfigurations,
 } from './constants';
 import ComboInput from './ComboInput';
-import { Plus, Minus, Camera, Trash2 } from 'lucide-react';
+import { Plus, Minus, Camera, Trash2, RotateCcw, Download, Upload, FileText, X, Loader2, Eye } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { lazy, Suspense } from 'react';
 
@@ -80,9 +80,10 @@ export default function CreateRequestDialog({ open, onOpenChange, onCreated }: P
   ]);
   const [notes, setNotes] = useState('');
   const [saving, setSaving] = useState(false);
-  const [bulkText, setBulkText] = useState('');
-  const [showBulk, setShowBulk] = useState(false);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [docToDelete, setDocToDelete] = useState<number | null>(null);
+  const [pendingDocs, setPendingDocs] = useState<File[]>([]);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const STORAGE_KEY = 'nucleus_request_draft';
 
@@ -143,8 +144,37 @@ export default function CreateRequestDialog({ open, onOpenChange, onCreated }: P
     setAssetCondition('');
     setSerialEntries([{ serial_number: '', asset_status: 'Fresh', asset_group: 'NFA', asset_code: '', asset_condition: '' }]);
     setNotes('');
+    setPendingDocs([]);
     setDeleteConfirmOpen(false);
-    toast.success('Draft deleted');
+    toast.success('Form reset');
+  };
+
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    setPendingDocs(prev => [...prev, ...files]);
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+
+  const removePendingDoc = (index: number) => {
+    setPendingDocs(prev => prev.filter((_, i) => i !== index));
+    setDocToDelete(null);
+  };
+
+  const viewPendingDoc = (file: File) => {
+    const url = URL.createObjectURL(file);
+    window.open(url, '_blank', 'noopener');
+    // We don't revoke immediately because it would break the new tab
+  };
+
+  const downloadPendingDoc = (file: File) => {
+    const url = URL.createObjectURL(file);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = file.name;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
   };
 
   // New state for system duplicates and camera
@@ -250,27 +280,41 @@ export default function CreateRequestDialog({ open, onOpenChange, onCreated }: P
     });
   };
 
-  const handleBulkPaste = () => {
-    const serials = bulkText
-      .split(/[\n\r, ]+/)
-      .map(s => s.trim())
-      .filter(s => s.length > 0);
+  const downloadCSV = () => {
+    const headers = [
+      'Request Type', 'Title', 'PO Number', 'Warehouse', 'Asset Type', 'Model', 'Configuration',
+      'Serial Number', 'Asset Status', 'Asset Group', 'Asset Code', 'Asset Condition'
+    ];
+    const rows = serialEntries.map(e => [
+      REQUEST_TYPE_LABELS[type] || type,
+      title,
+      poNumber,
+      warehouse,
+      assetType,
+      model,
+      configuration,
+      e.serial_number,
+      e.asset_status,
+      e.asset_group,
+      e.asset_code,
+      e.asset_condition
+    ]);
 
-    if (serials.length === 0) return;
+    const csvContent = [
+      headers.join(','),
+      ...rows.map(r => r.map(v => `"${String(v || '').replace(/"/g, '""')}"`).join(','))
+    ].join('\n');
 
-    const newEntries = serials.map(s => ({
-      serial_number: s,
-      asset_status: assetStatus || 'Fresh',
-      asset_group: assetGroup || 'NFA',
-      asset_code: assetCode || '',
-      asset_condition: assetCondition || ''
-    }));
-
-    setQuantity(serials.length);
-    setSerialEntries(newEntries);
-    setShowBulk(false);
-    setBulkText('');
-    toast.success(`${serials.length} serials imported`);
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.setAttribute('href', url);
+    link.setAttribute('download', `request_serials_template.csv`);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    toast.success('CSV Template downloaded');
   };
 
   const handleScanResult = (scannedText: string) => {
@@ -279,6 +323,47 @@ export default function CreateRequestDialog({ open, onOpenChange, onCreated }: P
       setScannerOpen(false);
       setActiveScannerIndex(null);
     }
+  };
+
+  const handleSerialPaste = (e: React.ClipboardEvent<HTMLInputElement>, startIndex: number) => {
+    const pastedText = e.clipboardData.getData('text');
+    const serials = pastedText
+      .split(/[\n\r\t, ]+/)
+      .map(s => s.trim())
+      .filter(s => s.length > 0);
+
+    if (serials.length <= 1) return; // Standard paste behavior
+
+    e.preventDefault();
+
+    setSerialEntries(prev => {
+      const next = [...prev];
+      let currentIdx = startIndex;
+
+      for (const s of serials) {
+        if (currentIdx < next.length) {
+          next[currentIdx] = { ...next[currentIdx], serial_number: s };
+        } else {
+          next.push({
+            serial_number: s,
+            asset_status: assetStatus || 'Fresh',
+            asset_group: assetGroup || 'NFA',
+            asset_code: assetCode || '',
+            asset_condition: assetCondition || ''
+          });
+        }
+        currentIdx++;
+      }
+
+      // Update quantity if we added more rows
+      if (next.length > quantity) {
+        setQuantity(next.length);
+      }
+
+      return next;
+    });
+
+    toast.success(`Pasted ${serials.length} serial numbers`);
   };
 
   const submit = async () => {
@@ -364,6 +449,37 @@ export default function CreateRequestDialog({ open, onOpenChange, onCreated }: P
       });
 
       localStorage.removeItem(STORAGE_KEY);
+
+      // Upload pending documents
+      if (pendingDocs.length > 0) {
+        for (const file of pendingDocs) {
+          try {
+            const path = `${requestId}/${Date.now()}_${file.name.replace(/[^\w.\-]+/g, '_')}`;
+            const { error: upErr } = await supabase.storage
+              .from('request-documents')
+              .upload(path, file);
+
+            if (upErr) {
+              console.error(`Failed to upload ${file.name}:`, upErr);
+              continue;
+            }
+
+            await supabase.from('request_documents').insert({
+              request_id: requestId,
+              stage_key: first.key,
+              file_path: path,
+              file_name: file.name,
+              file_size: file.size,
+              mime_type: file.type,
+              uploaded_by: profile.id,
+              uploaded_by_email: profile.email,
+            });
+          } catch (uploadErr) {
+            console.error(`Error processing ${file.name}:`, uploadErr);
+          }
+        }
+      }
+
       toast.success('Request created');
       onCreated?.(requestId);
       onOpenChange(false);
@@ -511,28 +627,14 @@ export default function CreateRequestDialog({ open, onOpenChange, onCreated }: P
                 <Button
                   variant='outline'
                   size='sm'
-                  onClick={() => setShowBulk(!showBulk)}
-                  className='h-7 text-[10px] font-bold uppercase tracking-wider bg-blue-50 text-blue-600 border-blue-100'
+                  onClick={downloadCSV}
+                  className='h-7 bg-blue-50 text-blue-600 border-blue-100 flex items-center'
+                  title="Download CSV Template"
                 >
-                  {showBulk ? 'Cancel' : 'Bulk Paste'}
+                  <Download className='w-3 h-3' />
                 </Button>
               </div>
             </div>
-
-            {showBulk && (
-              <div className='space-y-3 p-4 bg-blue-50/50 rounded-2xl border border-blue-100'>
-                <Label className='text-xs font-bold text-blue-600 uppercase tracking-wider'>Paste Serial Numbers (one per line or comma separated)</Label>
-                <Textarea
-                  value={bulkText}
-                  onChange={(e) => setBulkText(e.target.value)}
-                  placeholder="Enter serials here..."
-                  className='h-32 bg-white'
-                />
-                <Button onClick={handleBulkPaste} className='w-full bg-blue-600 hover:bg-blue-700'>
-                  Apply Bulk Paste
-                </Button>
-              </div>
-            )}
 
             <div className='space-y-2'>
               <div className='grid grid-cols-[220px,40px,120px,100px,100px,120px,1fr] gap-3 px-1'>
@@ -558,6 +660,7 @@ export default function CreateRequestDialog({ open, onOpenChange, onCreated }: P
                           placeholder={`Serial ${i + 1}`}
                           value={entry.serial_number}
                           onChange={(e) => updateEntry(i, 'serial_number', e.target.value)}
+                          onPaste={(e) => handleSerialPaste(e, i)}
                           className={cn(
                             'h-10 text-xs w-full font-mono transition-all',
                             (isLocalDup || systemLocation) && 'border-red-500 bg-red-50/30 ring-red-200'
@@ -627,23 +730,121 @@ export default function CreateRequestDialog({ open, onOpenChange, onCreated }: P
             </div>
           </div>
 
-          <div className='col-span-2 pt-4 border-t'>
-            <Label className='mb-2 block'>Notes</Label>
-            <Textarea
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-              rows={2}
-              placeholder='Additional details or requirements...'
-              className='resize-none'
-            />
+          <div className='col-span-2 pt-4 border-t space-y-4'>
+            <div>
+              <div className='flex items-center justify-between mb-3'>
+                <div className="space-y-0.5">
+                  <div className='flex items-center gap-2'>
+                    <Label className='text-sm font-bold text-slate-700'>Documents</Label>
+                    <Button
+                      variant='outline'
+                      size='sm'
+                      onClick={() => fileInputRef.current?.click()}
+                      className='h-7 px-2 text-[10px] font-bold uppercase tracking-widest gap-1.5 border-blue-100 bg-blue-50 text-blue-600 hover:bg-blue-100'
+                    >
+                      <Upload className='w-3 h-3' />
+                      Click to upload files
+                    </Button>
+                  </div>
+                  <p className="text-[10px] text-muted-foreground font-medium">Upload PDF, Images, or Spreadsheets. No limit on number of uploads.</p>
+                </div>
+              </div>
+
+              <input
+                type='file'
+                multiple
+                accept='.pdf,.jpg,.jpeg,.png,.webp,.xlsx,.csv'
+                className='hidden'
+                ref={fileInputRef}
+                onChange={handleFileSelect}
+              />
+
+              {pendingDocs.length > 0 && (
+                <div className='grid grid-cols-2 md:grid-cols-3 gap-3 mt-4'>
+                  {pendingDocs.map((file, idx) => (
+                    <div key={idx} className='flex items-center justify-between bg-white px-3 py-2.5 rounded-xl border border-slate-100 shadow-sm text-[11px] group hover:border-blue-200 transition-colors'>
+                      <div className='flex items-center gap-3 truncate'>
+                        <div className="w-8 h-8 rounded-lg bg-blue-50 flex items-center justify-center shrink-0">
+                          <FileText className='w-4 h-4 text-blue-600' />
+                        </div>
+                        <div className="flex flex-col min-w-0">
+                          <span className='truncate font-bold text-slate-700'>{file.name}</span>
+                          <span className='text-[10px] font-bold text-slate-400 uppercase'>{(file.size / 1024).toFixed(0)} KB</span>
+                        </div>
+                      </div>
+                      <div className='flex items-center gap-1'>
+                        <Button
+                          size='icon'
+                          variant='ghost'
+                          className="h-7 w-7 rounded-lg hover:bg-blue-50 hover:text-blue-600"
+                          onClick={() => viewPendingDoc(file)}
+                          title="Preview"
+                        >
+                          <Eye className='w-3.5 h-3.5' />
+                        </Button>
+                        <Button
+                          size='icon'
+                          variant='ghost'
+                          className="h-7 w-7 rounded-lg hover:bg-blue-50 hover:text-blue-600"
+                          onClick={() => downloadPendingDoc(file)}
+                          title="Download"
+                        >
+                          <Download className='w-3.5 h-3.5' />
+                        </Button>
+                        <Button
+                          size='icon'
+                          variant='ghost'
+                          className="h-7 w-7 rounded-lg hover:bg-red-50 hover:text-red-600"
+                          onClick={() => setDocToDelete(idx)}
+                          title="Delete"
+                        >
+                          <X className='w-3.5 h-3.5' />
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              <AlertDialog open={docToDelete !== null} onOpenChange={(o) => !o && setDocToDelete(null)}>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>Remove Document?</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      Are you sure you want to remove <strong>{docToDelete !== null ? pendingDocs[docToDelete]?.name : ''}</strong> from this request?
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>Cancel</AlertDialogCancel>
+                    <AlertDialogAction
+                      onClick={() => docToDelete !== null && removePendingDoc(docToDelete)}
+                      className='bg-red-600 hover:bg-red-700 text-white'
+                    >
+                      Remove
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
+            </div>
+
+            <div>
+              <Label className='mb-2 block text-xs font-bold text-slate-600 uppercase tracking-widest'>Notes</Label>
+              <Textarea
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+                rows={2}
+                placeholder='Additional details or requirements...'
+                className='resize-none'
+              />
+            </div>
           </div>
         </div>
 
         <DialogFooter className='p-6 pt-3 border-t bg-muted/30 flex justify-between items-center'>
           <div className='flex gap-2'>
             <Button variant='ghost' size='sm' onClick={() => setDeleteConfirmOpen(true)} className='text-red-500 hover:text-red-600 hover:bg-red-50 gap-2 font-bold'>
-              <Trash2 className='w-4 h-4' />
-              Delete Draft
+              <RotateCcw className='w-4 h-4' />
+              Reset Form
             </Button>
           </div>
           <div className='flex gap-2'>
@@ -672,15 +873,15 @@ export default function CreateRequestDialog({ open, onOpenChange, onCreated }: P
         <AlertDialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
           <AlertDialogContent>
             <AlertDialogHeader>
-              <AlertDialogTitle>Permanently delete this draft?</AlertDialogTitle>
+              <AlertDialogTitle>Reset Form?</AlertDialogTitle>
               <AlertDialogDescription>
-                All your progress will be lost. This action cannot be undone.
+                This will clear all fields and delete your saved draft. This action cannot be undone.
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
               <AlertDialogCancel>Cancel</AlertDialogCancel>
               <AlertDialogAction onClick={clearDraft} className='bg-red-600 hover:bg-red-700 text-white'>
-                Delete Permanently
+                Reset Form
               </AlertDialogAction>
             </AlertDialogFooter>
           </AlertDialogContent>
