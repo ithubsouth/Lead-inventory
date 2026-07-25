@@ -31,8 +31,11 @@ import {
   configurations, tvConfigurations,
 } from './constants';
 import ComboInput from './ComboInput';
-import { Plus, Minus, Camera } from 'lucide-react';
+import { Plus, Minus, Camera, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { lazy, Suspense } from 'react';
+
+const EnhancedBarcodeScanner = lazy(() => import('./EnhancedBarcodeScanner'));
 
 interface Props {
   open: boolean;
@@ -67,6 +70,11 @@ export default function CreateRequestDialog({ open, onOpenChange, onCreated }: P
   const [bulkText, setBulkText] = useState('');
   const [showBulk, setShowBulk] = useState(false);
 
+  // New state for system duplicates and camera
+  const [systemDuplicateSerials, setSystemDuplicateSerials] = useState<Set<string>>(new Set());
+  const [scannerOpen, setScannerOpen] = useState(false);
+  const [activeScannerIndex, setActiveScannerIndex] = useState<number | null>(null);
+
   // Validation: Check for duplicates within the current entry list
   const duplicateSerials = useMemo(() => {
     const seen = new Set<string>();
@@ -78,6 +86,35 @@ export default function CreateRequestDialog({ open, onOpenChange, onCreated }: P
       seen.add(s);
     });
     return dups;
+  }, [serialEntries]);
+
+  // System validation: Check Supabase devices table for existing serials
+  useEffect(() => {
+    const timer = setTimeout(async () => {
+      const serialsToCheck = serialEntries
+        .map(e => e.serial_number?.trim())
+        .filter(Boolean);
+
+      if (serialsToCheck.length === 0) {
+        setSystemDuplicateSerials(new Set());
+        return;
+      }
+
+      try {
+        const { data, error } = await supabase
+          .from('devices')
+          .select('serial_number')
+          .in('serial_number', serialsToCheck)
+          .eq('is_deleted', false);
+
+        if (error) throw error;
+        setSystemDuplicateSerials(new Set((data || []).map(d => d.serial_number)));
+      } catch (err) {
+        console.error('System duplicate check failed:', err);
+      }
+    }, 400); // Debounce check
+
+    return () => clearTimeout(timer);
   }, [serialEntries]);
 
   // Sync serialEntries length with quantity
@@ -138,6 +175,14 @@ export default function CreateRequestDialog({ open, onOpenChange, onCreated }: P
     setShowBulk(false);
     setBulkText('');
     toast.success(`${serials.length} serials imported`);
+  };
+
+  const handleScanResult = (scannedText: string) => {
+    if (activeScannerIndex !== null) {
+      updateEntry(activeScannerIndex, 'serial_number', scannedText);
+      setScannerOpen(false);
+      setActiveScannerIndex(null);
+    }
   };
 
   const submit = async () => {
@@ -400,33 +445,54 @@ export default function CreateRequestDialog({ open, onOpenChange, onCreated }: P
             )}
 
             <div className='space-y-2'>
-              <div className='grid grid-cols-[1fr,40px] gap-3 px-1'>
+              <div className='grid grid-cols-[300px,40px,1fr] gap-3 px-1'>
                 <Label className='text-xs font-bold text-muted-foreground uppercase tracking-wider'>Serial Number</Label>
+                <div />
                 <div />
               </div>
 
-              <div className='space-y-2 max-h-[350px] overflow-y-auto pr-2 custom-scrollbar'>
+              <div className='space-y-3 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar border border-slate-100 rounded-xl p-2'>
                 {serialEntries.map((entry, i) => {
-                  const isDup = entry.serial_number && duplicateSerials.has(entry.serial_number);
+                  const s = entry.serial_number?.trim();
+                  const isLocalDup = s && duplicateSerials.has(s);
+                  const isSystemDup = s && systemDuplicateSerials.has(s);
+
                   return (
-                    <div key={i} className='flex items-center gap-3'>
-                      <Input
-                        placeholder={`Serial ${i + 1}`}
-                        value={entry.serial_number}
-                        onChange={(e) => updateEntry(i, 'serial_number', e.target.value)}
-                        className={cn(
-                          'h-9 text-xs w-[300px] transition-all',
-                          isDup && 'border-red-500 bg-red-50/30'
-                        )}
-                      />
-                      <Button variant='outline' size='icon' className='h-9 w-9 shrink-0'>
-                        <Camera className='h-4 w-4' />
-                      </Button>
-                      {isDup && (
-                        <span className='text-[10px] text-red-500 font-bold whitespace-nowrap'>
-                          Duplicate within order
-                        </span>
-                      )}
+                    <div key={i} className='flex flex-col gap-1.5'>
+                      <div className='flex items-center gap-3'>
+                        <Input
+                          placeholder={`Serial ${i + 1}`}
+                          value={entry.serial_number}
+                          onChange={(e) => updateEntry(i, 'serial_number', e.target.value)}
+                          className={cn(
+                            'h-10 text-xs w-[300px] font-mono transition-all',
+                            (isLocalDup || isSystemDup) && 'border-red-500 bg-red-50/30 ring-red-200'
+                          )}
+                        />
+                        <Button
+                          variant='outline'
+                          size='icon'
+                          className='h-10 w-10 shrink-0 hover:bg-blue-50 hover:text-blue-600 transition-colors'
+                          onClick={() => {
+                            setActiveScannerIndex(i);
+                            setScannerOpen(true);
+                          }}
+                        >
+                          <Camera className='h-4 w-4' />
+                        </Button>
+                        <div className='flex flex-col justify-center'>
+                          {isLocalDup && (
+                            <span className='text-[10px] text-red-500 font-black uppercase tracking-tighter'>
+                              Duplicate in order
+                            </span>
+                          )}
+                          {isSystemDup && (
+                            <span className='text-[10px] text-red-500 font-black uppercase tracking-tighter'>
+                              Already in system
+                            </span>
+                          )}
+                        </div>
+                      </div>
                     </div>
                   );
                 })}
@@ -454,6 +520,19 @@ export default function CreateRequestDialog({ open, onOpenChange, onCreated }: P
             {saving ? 'Creating...' : 'Create Request'}
           </Button>
         </DialogFooter>
+
+        {scannerOpen && (
+          <Suspense fallback={null}>
+            <EnhancedBarcodeScanner
+              isOpen={scannerOpen}
+              onClose={() => {
+                setScannerOpen(false);
+                setActiveScannerIndex(null);
+              }}
+              onScan={handleScanResult}
+            />
+          </Suspense>
+        )}
       </DialogContent>
     </Dialog>
   );

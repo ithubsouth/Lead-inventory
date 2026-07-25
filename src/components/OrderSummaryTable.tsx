@@ -646,6 +646,7 @@ const OrderSummaryTable: React.FC<OrderSummaryTableProps> = ({
         ) : (
           <>
             <div
+              className="custom-scrollbar-thin"
               style={{
                 overflowX: 'auto',
                 overflowY: 'auto',

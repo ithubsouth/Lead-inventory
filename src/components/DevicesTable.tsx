@@ -653,6 +653,7 @@ const DevicesTable: React.FC<DevicesTableProps> = ({
         ) : (
           <>
             <div
+              className="custom-scrollbar-thin"
               style={{
                 overflowX: 'auto',
                 overflowY: 'auto',

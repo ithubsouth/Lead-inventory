@@ -658,6 +658,7 @@ const OrdersTable: React.FC<OrdersTableProps> = ({
         ) : (
           <>
             <div
+              className="custom-scrollbar-thin"
               style={{
                 overflowX: 'auto',
                 overflowY: 'auto',

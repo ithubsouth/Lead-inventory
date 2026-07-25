@@ -905,7 +905,7 @@ const PivotTable: React.FC<PivotTableProps> = ({ devices, instanceId, onClose })
 
         <div className="flex-1 p-2 overflow-hidden flex flex-col">
           <div className="rounded-[1.5rem] border border-slate-100 shadow-2xl bg-white h-full flex flex-col overflow-hidden">
-            <div className="flex-1 overflow-auto no-scrollbar">
+            <div className="flex-1 overflow-auto custom-scrollbar-thin">
               <Table
                 className="border-collapse"
                 wrapperOverflow="visible"

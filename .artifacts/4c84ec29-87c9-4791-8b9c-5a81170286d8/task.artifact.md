@@ -1,0 +1,12 @@
+- [x] Define scrollbar styles in `index.css`
+    - [x] Add `.custom-scrollbar` (10px)
+    - [x] Add `.custom-scrollbar-thin` (6px)
+- [x] Update `ScrollArea` component (`scroll-area.tsx`)
+- [x] Apply `.custom-scrollbar-thin` to tables
+    - [x] `DevicesTable.tsx`
+    - [x] `AuditTable.tsx`
+    - [x] `OrdersTable.tsx`
+    - [x] `OrderSummaryTable.tsx`
+    - [x] `UserProfile.tsx`
+    - [x] `PivotTable.tsx`
+- [x] Verify changes

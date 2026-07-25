@@ -636,7 +636,7 @@ export const UserProfile = () => {
             </div>}
 
             <div className="flex-1 m-6 border border-slate-200 rounded-[1.5rem] overflow-hidden bg-white shadow-xl flex flex-col">
-              <div className="flex-1 overflow-auto custom-scrollbar">
+              <div className="flex-1 overflow-auto custom-scrollbar-thin">
                 <Table className="w-full border-collapse" wrapperOverflow="visible">
                   <TableHeader>
                     <TableRow className="hover:bg-transparent border-b border-slate-100">

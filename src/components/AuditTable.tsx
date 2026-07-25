@@ -884,6 +884,7 @@ const AuditTable: React.FC<AuditTableProps> = ({
           </div>
         </div>
         <div
+          className="custom-scrollbar-thin"
           style={{
             overflowX: 'auto',
             overflowY: 'auto',
