@@ -41,7 +41,7 @@ import {
   configurations, tvConfigurations,
 } from './constants';
 import ComboInput from './ComboInput';
-import { Plus, Minus, Camera, Trash2, RotateCcw, Download, Upload, FileText, X, Loader2, Eye } from 'lucide-react';
+import { Plus, Minus, Camera, Trash2, RotateCcw, Download, Upload, FileText, X, Loader2, Eye, AlertTriangle, Search } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { lazy, Suspense } from 'react';
 
@@ -81,6 +81,7 @@ export default function CreateRequestDialog({ open, onOpenChange, onCreated }: P
   const [notes, setNotes] = useState('');
   const [saving, setSaving] = useState(false);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [serialSearchQuery, setSerialSearchQuery] = useState('');
   const [docToDelete, setDocToDelete] = useState<number | null>(null);
   const [pendingDocs, setPendingDocs] = useState<File[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -636,7 +637,27 @@ export default function CreateRequestDialog({ open, onOpenChange, onCreated }: P
               </div>
             </div>
 
-            <div className='space-y-2'>
+            <div className='space-y-4 pt-4 border-t'>
+              <div className='flex items-center gap-4 mb-2'>
+                <div className='relative flex-1'>
+                  <Search className='absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400' />
+                  <Input
+                    placeholder='Search serial numbers...'
+                    value={serialSearchQuery}
+                    onChange={(e) => setSerialSearchQuery(e.target.value)}
+                    className='pl-9 h-9 text-xs'
+                  />
+                  {serialSearchQuery && (
+                    <button
+                      onClick={() => setSerialSearchQuery('')}
+                      className='absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600'
+                    >
+                      <X className='w-4 h-4' />
+                    </button>
+                  )}
+                </div>
+              </div>
+
               <div className='grid grid-cols-[220px,40px,120px,100px,100px,120px,1fr] gap-3 px-1'>
                 <Label className='text-[10px] font-bold text-muted-foreground uppercase tracking-wider'>Serial Number</Label>
                 <div />
@@ -650,6 +671,10 @@ export default function CreateRequestDialog({ open, onOpenChange, onCreated }: P
               <div className='space-y-3 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar-thin border border-slate-100 rounded-xl p-2'>
                 {serialEntries.map((entry, i) => {
                   const s = entry.serial_number?.trim();
+                  const matchesSearch = !serialSearchQuery || s?.toLowerCase().includes(serialSearchQuery.toLowerCase());
+
+                  if (!matchesSearch) return null;
+
                   const isLocalDup = s && duplicateSerials.has(s);
                   const systemLocation = s ? systemDuplicateInfo[s] : null;
 
@@ -711,15 +736,15 @@ export default function CreateRequestDialog({ open, onOpenChange, onCreated }: P
                         placeholder="Condition"
                       />
 
-                      <div className='flex-1 flex items-center min-w-0'>
+                      <div className='flex items-center min-w-0 pl-3'>
                         {isLocalDup && (
-                          <span className='text-[10px] text-red-500 font-bold uppercase truncate'>
+                          <span className='text-[10px] text-red-600 font-black uppercase tracking-tighter animate-pulse'>
                             Local Duplicate
                           </span>
                         )}
                         {systemLocation && !isLocalDup && (
-                          <span className='text-[10px] text-red-500 font-bold uppercase truncate'>
-                            Currently Inward in {systemLocation}
+                          <span className='text-[10px] text-amber-600 font-black uppercase tracking-tighter'>
+                            Inward in {systemLocation}
                           </span>
                         )}
                       </div>

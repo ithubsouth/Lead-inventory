@@ -34,6 +34,8 @@ import {
   FileDown,
   Eye,
   Loader2,
+  History,
+  Search,
 } from 'lucide-react';
 
 interface Props {
@@ -98,6 +100,9 @@ interface DocRow {
   uploaded_by_email: string | null;
   uploaded_at: string;
   stage_key: string | null;
+  is_deleted: boolean;
+  deleted_at: string | null;
+  deleted_by_email: string | null;
 }
 
 export default function RequestDetailDialog({ requestId, open, onOpenChange, onChanged }: Props) {
@@ -106,6 +111,8 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
   const [stages, setStages] = useState<StageRow[]>([]);
   const [serials, setSerials] = useState<SerialRow[]>([]);
   const [docs, setDocs] = useState<DocRow[]>([]);
+  const [showHistory, setShowHistory] = useState(false);
+  const [serialSearchQuery, setSerialSearchQuery] = useState('');
   const [comment, setComment] = useState('');
   const [busy, setBusy] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -132,7 +139,38 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
   };
 
   useEffect(() => {
-    if (open) load();
+    if (open) {
+      load();
+
+      // Set up real-time subscription for this specific request
+      const channel = supabase
+        .channel(`request-detail-${requestId}`)
+        .on(
+          'postgres_changes',
+          { event: '*', schema: 'public', table: 'requests', filter: `id=eq.${requestId}` },
+          () => load()
+        )
+        .on(
+          'postgres_changes',
+          { event: '*', schema: 'public', table: 'request_stages', filter: `request_id=eq.${requestId}` },
+          () => load()
+        )
+        .on(
+          'postgres_changes',
+          { event: '*', schema: 'public', table: 'request_serials', filter: `request_id=eq.${requestId}` },
+          () => load()
+        )
+        .on(
+          'postgres_changes',
+          { event: '*', schema: 'public', table: 'request_documents', filter: `request_id=eq.${requestId}` },
+          () => load()
+        )
+        .subscribe();
+
+      return () => {
+        supabase.removeChannel(channel);
+      };
+    }
   }, [open, requestId]);
 
   const flow = useMemo(() => (req ? getFlow(req.type) : []), [req]);
@@ -292,10 +330,48 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
   };
 
   const deleteDoc = async (d: DocRow) => {
-    if (!confirm(`Delete ${d.file_name}?`)) return;
-    await supabase.storage.from('request-documents').remove([d.file_path]);
-    await supabase.from('request_documents').delete().eq('id', d.id);
-    await load();
+    if (!confirm(`Move ${d.file_name} to history?`)) return;
+    setBusy(true);
+    try {
+      const { error } = await supabase
+        .from('request_documents')
+        .update({
+          is_deleted: true,
+          deleted_at: new Date().toISOString(),
+          deleted_by: profile?.id,
+          deleted_by_email: profile?.email,
+        })
+        .eq('id', d.id);
+      if (error) throw error;
+      toast.success('Moved to history');
+      await load();
+    } catch (e: any) {
+      toast.error(e.message || 'Action failed');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const restoreDoc = async (d: DocRow) => {
+    setBusy(true);
+    try {
+      const { error } = await supabase
+        .from('request_documents')
+        .update({
+          is_deleted: false,
+          deleted_at: null,
+          deleted_by: null,
+          deleted_by_email: null,
+        })
+        .eq('id', d.id);
+      if (error) throw error;
+      toast.success('Restored');
+      await load();
+    } catch (e: any) {
+      toast.error(e.message || 'Restore failed');
+    } finally {
+      setBusy(false);
+    }
   };
 
   const materializeAssets = async () => {
@@ -578,8 +654,8 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
 
             {/* Serials */}
             {serials.length > 0 && (
-              <div>
-                <div className='flex items-center justify-between mb-2 flex-wrap gap-2'>
+              <div className='space-y-3'>
+                <div className='flex items-center justify-between flex-wrap gap-2'>
                   <div className='text-sm font-semibold'>
                     Serial Numbers ({serials.length}
                     {req.quantity ? ` / ${req.quantity} PO qty` : ''})
@@ -612,8 +688,27 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
                     )}
                   </div>
                 </div>
+
+                <div className='relative'>
+                  <Search className='absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400' />
+                  <Input
+                    placeholder='Search serial numbers...'
+                    value={serialSearchQuery}
+                    onChange={(e) => setSerialSearchQuery(e.target.value)}
+                    className='pl-9 h-9 text-xs bg-white'
+                  />
+                  {serialSearchQuery && (
+                    <button
+                      onClick={() => setSerialSearchQuery('')}
+                      className='absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600'
+                    >
+                      <X className='w-4 h-4' />
+                    </button>
+                  )}
+                </div>
+
                 {req.quantity && serials.length !== req.quantity && (
-                  <div className='mb-2 p-2 rounded border border-amber-300 bg-amber-50 text-xs text-amber-800 flex items-center gap-1'>
+                  <div className='p-2 rounded border border-amber-300 bg-amber-50 text-xs text-amber-800 flex items-center gap-1'>
                     <AlertTriangle className='w-3 h-3' />
                     Serial count ({serials.length}) does not match PO quantity ({req.quantity}).
                   </div>
@@ -630,7 +725,9 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
                       </tr>
                     </thead>
                     <tbody>
-                      {serials.map((s) => (
+                      {serials
+                        .filter(s => !serialSearchQuery || s.serial_number?.toLowerCase().includes(serialSearchQuery.toLowerCase()))
+                        .map((s) => (
                         <tr key={s.id} className='border-t hover:bg-muted/10'>
                           <td className='px-2 py-1.5 font-mono'>{s.serial_number}</td>
                           <td className='px-2 py-1.5'>{s.asset_status || req.asset_status || '-'}</td>
@@ -666,6 +763,17 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
                       {busy ? <Loader2 className="w-3 h-3 animate-spin" /> : <Upload className='w-3 h-3' />}
                       Click to upload files
                     </Button>
+                    {(profile?.role === 'Super Admin' || profile?.role === 'Admin' || profile?.department === 'Administrators') && (
+                      <Button
+                        variant='ghost'
+                        size='icon'
+                        onClick={() => setShowHistory(!showHistory)}
+                        className={cn("h-7 w-7 rounded-lg transition-colors", showHistory ? "bg-blue-100 text-blue-600" : "text-slate-400 hover:bg-slate-100")}
+                        title="Document History"
+                      >
+                        <History className='w-4 h-4' />
+                      </Button>
+                    )}
                   </div>
                   <p className="text-[10px] text-muted-foreground font-medium">No limit on number of uploads.</p>
                 </div>
@@ -684,11 +792,51 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
                 disabled={busy}
               />
 
-              <div className='space-y-1.5'>
-                {docs.length === 0 && !busy && (
-                  <div className='text-xs text-muted-foreground py-6 text-center bg-slate-50 rounded-xl border border-slate-100'>No documents yet.</div>
-                )}
-                {docs.map((d) => (
+              {showHistory ? (
+                <div className="space-y-2">
+                  <div className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.2em] px-1">Deleted History</div>
+                  <div className='space-y-1.5'>
+                    {docs.filter(d => d.is_deleted).length === 0 ? (
+                      <div className='text-xs text-muted-foreground py-6 text-center bg-slate-50 rounded-xl border border-slate-100 italic'>No history found.</div>
+                    ) : (
+                      docs.filter(d => d.is_deleted).map((d) => (
+                        <div
+                          key={d.id}
+                          className='flex items-center justify-between px-3 py-2 rounded-xl border border-dashed border-slate-200 bg-slate-50/50 text-xs'
+                        >
+                          <div className='flex items-center gap-3 min-w-0 opacity-60'>
+                            <div className="w-8 h-8 rounded-lg bg-slate-100 flex items-center justify-center shrink-0">
+                              <FileText className='w-4 h-4 text-slate-400' />
+                            </div>
+                            <div className='truncate flex flex-col'>
+                              <div className='font-bold text-slate-600 truncate line-through'>{d.file_name}</div>
+                              <div className='text-[9px] text-slate-400 font-medium'>
+                                Deleted by {d.deleted_by_email} · {d.deleted_at ? format(new Date(d.deleted_at), 'MMM d, HH:mm') : ''}
+                              </div>
+                            </div>
+                          </div>
+                          <div className='flex items-center gap-1'>
+                            <Button size='icon' variant='ghost' className="h-8 w-8 rounded-lg hover:bg-blue-50 hover:text-blue-600" onClick={() => viewDoc(d)} title="View Original">
+                              <Eye className='w-4 h-4' />
+                            </Button>
+                            <Button size='icon' variant='ghost' className="h-8 w-8 rounded-lg hover:bg-green-50 hover:text-green-600" onClick={() => restoreDoc(d)} title="Restore File" disabled={busy}>
+                              <RotateCcw className='w-4 h-4' />
+                            </Button>
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                  <Button variant="ghost" size="sm" onClick={() => setShowHistory(false)} className="w-full text-[10px] uppercase font-bold text-slate-400 hover:text-slate-600">
+                    Back to Active Documents
+                  </Button>
+                </div>
+              ) : (
+                <div className='space-y-1.5'>
+                  {docs.filter(d => !d.is_deleted).length === 0 && !busy && (
+                    <div className='text-xs text-muted-foreground py-6 text-center bg-slate-50 rounded-xl border border-slate-100'>No documents yet.</div>
+                  )}
+                  {docs.filter(d => !d.is_deleted).map((d) => (
                   <div
                     key={d.id}
                     className='flex items-center justify-between px-3 py-2 rounded-xl border border-slate-100 bg-white shadow-sm text-xs group hover:border-blue-200 transition-colors'
@@ -720,7 +868,8 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
                   </div>
                 ))}
               </div>
-            </div>
+            )}
+          </div>
 
             {/* Action */}
             {req.status === 'open' && (

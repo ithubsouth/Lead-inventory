@@ -118,8 +118,9 @@ export default function RequestsPanel({ focusRequestId, onFocusHandled }: Props)
   useEffect(() => {
     load();
     const ch = supabase
-      .channel('requests-list')
+      .channel('requests-list-live')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'requests' }, () => load())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'request_stages' }, () => load())
       .subscribe();
     return () => {
       supabase.removeChannel(ch);
@@ -274,41 +275,55 @@ export default function RequestsPanel({ focusRequestId, onFocusHandled }: Props)
         ) : tab === 'drafts' ? (
           draft ? (
             <div className='divide-y divide-slate-100'>
-              <button
+              <div
+                className='w-full text-left grid grid-cols-12 gap-3 px-8 py-6 hover:bg-blue-50/30 transition-all group border-l-4 border-l-blue-500/30 hover:border-l-blue-500 cursor-pointer'
                 onClick={() => setCreateOpen(true)}
-                className='w-full text-left grid grid-cols-12 gap-3 px-8 py-6 hover:bg-blue-50/30 transition-all group border-l-4 border-l-blue-500/30 hover:border-l-blue-500'
               >
-                <div className='col-span-5 min-w-0'>
-                  <div className='font-bold text-base text-slate-700 truncate group-hover:text-blue-600 transition-colors'>
-                    {draft.title || 'Incomplete Request'}
+                <div className='col-span-3 min-w-0'>
+                  <div className='font-bold text-sm text-slate-700 truncate group-hover:text-blue-600 transition-colors'>
+                    {draft.title || 'Untitled Draft Request'}
                   </div>
-                  <div className='text-xs font-medium text-slate-400 mt-1 uppercase tracking-widest'>
-                    Currently saved in your browser
+                  <div className='text-[11px] font-medium text-slate-400 mt-1 truncate'>
+                    Draft · {draft.poNumber || '-'}
+                    {draft.warehouse ? ` · ${draft.warehouse}` : ''}
+                  </div>
+                  <div className='text-[9px] font-bold text-blue-500 mt-2 uppercase tracking-tight'>
+                    Saved in browser
                   </div>
                 </div>
-                <div className='col-span-4 flex items-center gap-4'>
-                   <Badge variant='outline' className='bg-blue-50 text-blue-600 border-blue-100 font-black text-[10px] px-3 py-1 rounded-lg uppercase tracking-widest'>
-                     Draft Mode
+                <div className='col-span-3 flex items-center'>
+                   <Badge variant='outline' className='bg-blue-50 text-blue-600 border-blue-100 font-bold text-[10px] px-3 py-1 rounded-lg uppercase tracking-widest'>
+                     Drafting Stage
                    </Badge>
-                   <span className='text-[11px] font-bold text-slate-400'>
-                     {draft.serialEntries?.length || 0} items entered
-                   </span>
                 </div>
-                <div className='col-span-3 text-right flex items-center justify-end gap-2'>
-                  <Button
-                    variant='ghost'
-                    size='sm'
-                    onClick={(e) => { e.stopPropagation(); setDeleteConfirmOpen(true); }}
-                    className='text-red-500 hover:text-red-600 hover:bg-red-50 font-bold h-9 px-4 rounded-xl'
-                  >
-                    <Trash2 className='w-4 h-4 mr-2' />
-                    Delete
-                  </Button>
-                  <Button size='sm' className='bg-blue-600 hover:bg-blue-700 text-white font-bold h-9 px-6 rounded-xl shadow-md transition-all active:scale-95'>
-                    Resume Editing
-                  </Button>
+                <div className='col-span-2 text-[11px] font-medium text-slate-500 flex flex-col justify-center border-l border-slate-50 pl-3'>
+                  <div className='truncate text-slate-900 font-black'>{profile?.email || 'Drafting User'}</div>
+                  <div className='truncate text-[10px] uppercase tracking-wider text-slate-400 mt-0.5'>{profile?.department || 'Browser Storage'}</div>
                 </div>
-              </button>
+                <div className='col-span-1 text-sm font-black text-slate-700 text-center flex items-center justify-center bg-slate-50/50 rounded-lg mx-2'>
+                  {draft.quantity || draft.serialEntries?.length || 0}
+                </div>
+                <div className='col-span-2 text-[10px] font-black text-slate-400 flex flex-col justify-center pl-3'>
+                   <div className='uppercase tracking-widest'>Local Draft</div>
+                   <div className="text-blue-600 font-bold mt-0.5">Active Session</div>
+                </div>
+                <div className='col-span-1 text-right flex items-center justify-end gap-2'>
+                   <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-all">
+                      <Button
+                        variant='ghost'
+                        size='icon'
+                        onClick={(e) => { e.stopPropagation(); setDeleteConfirmOpen(true); }}
+                        className='text-red-500 hover:text-red-600 hover:bg-red-50 h-8 w-8 rounded-lg'
+                        title="Delete Draft"
+                      >
+                        <Trash2 className='w-4 h-4' />
+                      </Button>
+                   </div>
+                   <Badge className="bg-slate-100 text-slate-500 border-0 capitalize font-black text-[9px] tracking-widest px-3 py-1 rounded-full">
+                    Draft
+                  </Badge>
+                </div>
+              </div>
             </div>
           ) : (
             <div className='px-6 py-40 text-center'>
@@ -339,7 +354,8 @@ export default function RequestsPanel({ focusRequestId, onFocusHandled }: Props)
                   </div>
                   <div className='text-[11px] font-medium text-slate-400 mt-1 truncate'>
                     {r.type ? REQUEST_TYPE_LABELS[r.type] : 'General'}
-                    {r.po_number ? ` · PO ${r.po_number}` : ''}
+                    {r.po_number ? ` · ${r.po_number}` : ''}
+                    {r.warehouse ? ` · ${r.warehouse}` : ''}
                   </div>
                 </div>
                 <div className='col-span-3 flex items-center'>
