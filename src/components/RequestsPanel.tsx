@@ -17,6 +17,8 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Plus, Inbox, User, Layers, Search, FileEdit, Trash2 } from 'lucide-react';
 import { REQUEST_TYPE_LABELS, getFlow, RequestType, RequestStatus } from '@/lib/requestFlows';
+import { hasFullAccess, isLocationScopedDept } from '@/lib/appTabs';
+
 import { formatDistanceToNow } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
