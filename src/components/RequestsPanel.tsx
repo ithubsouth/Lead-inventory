@@ -159,7 +159,9 @@ export default function RequestsPanel({ focusRequestId, onFocusHandled }: Props)
   }, [focusRequestId, onFocusHandled]);
 
   const filtered = rows.filter((r) => {
+    if (!isRelevant(r)) return false;
     if (tab === 'mine' && r.raised_by !== profile?.id) return false;
+
     if (tab === 'inbox') {
       const mine = r.raised_by === profile?.id;
       const forDept = profile?.department && r.current_stage_dept === profile.department;
