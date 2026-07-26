@@ -9,6 +9,8 @@ import { ActiveUsers } from '@/components/ActiveUsers';
 import { NotificationBell } from '@/components/NotificationBell';
 import { Order, Device, OrderSummary, TabletItem, TVItem } from './types';
 import { DateRange } from 'react-day-picker';
+import { useUserProfile } from '@/hooks/useUserProfile';
+
 
 const UnifiedAssetForm = lazy(() => import('./UnifiedAssetForm'));
 const OrdersTable = lazy(() => import('./OrdersTable'));
@@ -65,24 +67,24 @@ const InventoryManagement = () => {
   const [userEmail, setUserEmail] = useState<string | null>(null);
   const [userRole, setUserRole] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<string>('');
+  const { allowedTabs, loading: profileLoading } = useUserProfile();
+  const canSee = (key: string) => allowedTabs.includes(key);
 
   useEffect(() => {
-    if (!userRole) return;
+    if (!userRole || profileLoading || !allowedTabs.length) return;
 
     const saved = sessionStorage.getItem('inventoryActiveTab');
-    const isReporter = userRole === 'Reporter';
+    const fallback = allowedTabs.includes('create') && userRole !== 'Reporter'
+      ? 'create'
+      : allowedTabs[0];
 
-    if (saved) {
-      // Security/Logic check: don't let reporters stay on 'create' tab
-      if (isReporter && saved === 'create') {
-        setActiveTab('view');
-      } else {
-        setActiveTab(saved);
-      }
+    if (saved && allowedTabs.includes(saved) && !(userRole === 'Reporter' && saved === 'create')) {
+      setActiveTab(saved);
     } else {
-      setActiveTab(isReporter ? 'view' : 'create');
+      setActiveTab(fallback);
     }
-  }, [userRole]);
+  }, [userRole, profileLoading, allowedTabs.join(',')]);
+
 
   useEffect(() => {
     if (activeTab) {
@@ -750,36 +752,48 @@ const InventoryManagement = () => {
           <div className='w-full min-h-full flex flex-col'>
             <Tabs value={activeTab} onValueChange={(v) => { if (v) setActiveTab(v); }} className='w-full flex-1 flex flex-col'>
               <TabsList className='flex w-full sticky top-0 z-40 bg-card/95 backdrop-blur-md border-b border-border/50 flex-shrink-0 px-8 h-16 rounded-none shadow-sm gap-2 overflow-x-auto no-scrollbar'>
-                {userRole !== 'Reporter' && (
+                {userRole !== 'Reporter' && canSee('create') && (
                   <TabsTrigger value='create' className='flex-1 min-w-[140px] flex items-center justify-center gap-2 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground font-bold rounded-lg transition-all h-10'>
                     <Package className='w-4 h-4' />
                     Create Order
                   </TabsTrigger>
                 )}
-                <TabsTrigger value='view' className='flex-1 min-w-[140px] flex items-center justify-center gap-2 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground font-bold rounded-lg transition-all h-10'>
-                  <Archive className='w-4 h-4' />
-                  View Orders
-                </TabsTrigger>
-                <TabsTrigger value='order' className='flex-1 min-w-[140px] flex items-center justify-center gap-2 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground font-bold rounded-lg transition-all h-10'>
-                  <BarChart3 className='w-4 h-4' />
-                  Order Summary
-                </TabsTrigger>
-                <TabsTrigger value='devices' className='flex-1 min-w-[140px] flex items-center justify-center gap-2 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground font-bold rounded-lg transition-all h-10'>
-                  <Archive className='w-4 h-4' />
-                  Devices
-                </TabsTrigger>
-                <TabsTrigger value='requests' className='flex-1 min-w-[140px] flex items-center justify-center gap-2 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground font-bold rounded-lg transition-all h-10'>
-                  <Inbox className='w-4 h-4' />
-                  Approvals
-                </TabsTrigger>
-                <TabsTrigger value='audit' className='flex-1 min-w-[140px] flex items-center justify-center gap-2 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground font-bold rounded-lg transition-all h-10'>
-                  <Archive className='w-4 h-4' />
-                  Audit View
-                </TabsTrigger>
-                <TabsTrigger value='activity' className='flex-1 min-w-[140px] flex items-center justify-center gap-2 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground font-bold rounded-lg transition-all h-10'>
-                  <Clock className='w-4 h-4' />
-                  Activity Logs
-                </TabsTrigger>
+                {canSee('view') && (
+                  <TabsTrigger value='view' className='flex-1 min-w-[140px] flex items-center justify-center gap-2 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground font-bold rounded-lg transition-all h-10'>
+                    <Archive className='w-4 h-4' />
+                    View Orders
+                  </TabsTrigger>
+                )}
+                {canSee('order') && (
+                  <TabsTrigger value='order' className='flex-1 min-w-[140px] flex items-center justify-center gap-2 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground font-bold rounded-lg transition-all h-10'>
+                    <BarChart3 className='w-4 h-4' />
+                    Order Summary
+                  </TabsTrigger>
+                )}
+                {canSee('devices') && (
+                  <TabsTrigger value='devices' className='flex-1 min-w-[140px] flex items-center justify-center gap-2 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground font-bold rounded-lg transition-all h-10'>
+                    <Archive className='w-4 h-4' />
+                    Devices
+                  </TabsTrigger>
+                )}
+                {canSee('requests') && (
+                  <TabsTrigger value='requests' className='flex-1 min-w-[140px] flex items-center justify-center gap-2 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground font-bold rounded-lg transition-all h-10'>
+                    <Inbox className='w-4 h-4' />
+                    Approvals
+                  </TabsTrigger>
+                )}
+                {canSee('audit') && (
+                  <TabsTrigger value='audit' className='flex-1 min-w-[140px] flex items-center justify-center gap-2 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground font-bold rounded-lg transition-all h-10'>
+                    <Archive className='w-4 h-4' />
+                    Audit View
+                  </TabsTrigger>
+                )}
+                {canSee('activity') && (
+                  <TabsTrigger value='activity' className='flex-1 min-w-[140px] flex items-center justify-center gap-2 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground font-bold rounded-lg transition-all h-10'>
+                    <Clock className='w-4 h-4' />
+                    Activity Logs
+                  </TabsTrigger>
+                )}
               </TabsList>
               <TabsContent value='requests' className='w-full bg-white'>
                 <RequestsPanel

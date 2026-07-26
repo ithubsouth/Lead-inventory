@@ -6,10 +6,13 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { Textarea } from '@/components/ui/textarea';
+import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
+import { cn } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
 import { useUserProfile } from '@/hooks/useUserProfile';
+import MentionTextarea, { extractMentions } from './MentionTextarea';
+import { isLocationScopedDept } from '@/lib/appTabs';
 import { toast } from 'sonner';
 import {
   REQUEST_TYPE_LABELS,
@@ -24,6 +27,7 @@ import {
 import { format } from 'date-fns';
 import {
   Check,
+  CheckCircle2,
   X,
   RotateCcw,
   Upload,
@@ -44,6 +48,7 @@ interface Props {
   onOpenChange: (o: boolean) => void;
   onChanged?: () => void;
 }
+
 
 interface RequestFull {
   id: string;
@@ -89,7 +94,12 @@ interface SerialRow {
   asset_group: string | null;
   asset_status: string | null;
   asset_code: string | null;
+  verified: boolean | null;
+  verify_result: string | null;
+  verified_by: string | null;
+  verified_at: string | null;
 }
+
 
 interface DocRow {
   id: string;
@@ -176,18 +186,100 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
   const flow = useMemo(() => (req ? getFlow(req.type) : []), [req]);
   const currentIdx = req ? flow.findIndex((s) => s.key === req.current_stage) : -1;
 
+  // Technology Team / Supply Chain Management only handle their own location's stock.
+  const locationBlocked =
+    !!req &&
+    profile?.role !== 'Super Admin' &&
+    profile?.department !== 'Administrators' &&
+    isLocationScopedDept(profile?.department) &&
+    !!profile?.location &&
+    profile.location !== 'General' &&
+    !!req.warehouse &&
+    req.warehouse !== profile.location;
+
   const canAct = !!req &&
     req.status === 'open' &&
+    !locationBlocked &&
     canActOnStage({
       role: profile?.role || null,
       department: profile?.department || null,
       assignedDept: req.current_stage_dept,
     });
 
-  const record = async (action: StageAction, opts: { closeAfter?: boolean; reject?: boolean; revoke?: boolean } = {}) => {
-    if (!req || !profile?.id) return;
+  const isVerifyStage = !!req && req.current_stage === 'tech_verify_serials';
+  const verifiedCount = serials.filter((s) => s.verified).length;
+
+  const notifyMentions = async (text: string) => {
+    if (!req) return;
+    const emails = extractMentions(text);
+    if (!emails.length) return;
+    const { data: tagged } = await supabase
+      .from('users')
+      .select('id, email')
+      .in('email', emails);
+    if (!tagged?.length) return;
+    await supabase.from('notifications').insert(
+      tagged.map((u: any) => ({
+        user_id: u.id,
+        request_id: req.id,
+        kind: 'mention',
+        title: `${profile?.email || 'Someone'} tagged you on: ${req.title || REQUEST_TYPE_LABELS[req.type]}`,
+        body: text,
+      }))
+    );
+  };
+
+  const setSerialVerification = async (ids: string[], verified: boolean, result: string) => {
+    if (!ids.length) return;
+    const { error } = await supabase
+      .from('request_serials')
+      .update({
+        verified,
+        verify_result: verified ? result : null,
+        verified_by: verified ? profile?.email || null : null,
+        verified_at: verified ? new Date().toISOString() : null,
+      })
+      .in('id', ids);
+    if (error) throw error;
+  };
+
+  const toggleSerialVerified = async (s: SerialRow) => {
+    if (!canAct || !isVerifyStage) return;
     setBusy(true);
     try {
+      await setSerialVerification([s.id], !s.verified, 'Matched');
+      await load();
+    } catch (e: any) {
+      toast.error(e.message || 'Could not update verification');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const verifyAllSerials = async () => {
+    if (!canAct || !isVerifyStage) return;
+    setBusy(true);
+    try {
+      await setSerialVerification(serials.map((s) => s.id), true, 'Matched');
+      await load();
+      toast.success('All serials marked verified');
+    } catch (e: any) {
+      toast.error(e.message || 'Could not update verification');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+
+  const record = async (action: StageAction, opts: { closeAfter?: boolean; reject?: boolean; revoke?: boolean } = {}) => {
+    if (!req || !profile?.id) return;
+    if (action === 'approved' && isVerifyStage && serials.length && verifiedCount < serials.length) {
+      toast.error(`Verify all serials first (${verifiedCount}/${serials.length} verified).`);
+      return;
+    }
+    setBusy(true);
+    try {
+
       await supabase.from('request_stages').insert({
         request_id: req.id,
         stage_key: req.current_stage,
@@ -254,6 +346,10 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
           body: notifBody || null,
         });
       }
+
+      await notifyMentions(comment);
+
+
 
       setComment('');
       await load();
@@ -527,8 +623,27 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
         extra.length ? `Extra: ${extra.slice(0, 20).join(', ')}${extra.length > 20 ? '...' : ''}` : null,
         qtyMismatch ? `Qty mismatch: uploaded ${uploaded.length} vs PO qty ${poQty}` : null,
       ].filter(Boolean).join(' | ');
+
+      // Persist per-serial verification so everyone can see who verified and when
+      const matchedIds = serials.filter((s) => uploadedSet.has(s.serial_number)).map((s) => s.id);
+      const missingIds = serials.filter((s) => !uploadedSet.has(s.serial_number)).map((s) => s.id);
+      const stamp = new Date().toISOString();
+      if (matchedIds.length) {
+        await supabase
+          .from('request_serials')
+          .update({ verified: true, verify_result: 'Matched', verified_by: profile?.email || null, verified_at: stamp })
+          .in('id', matchedIds);
+      }
+      if (missingIds.length) {
+        await supabase
+          .from('request_serials')
+          .update({ verified: false, verify_result: 'Not found in upload', verified_by: profile?.email || null, verified_at: stamp })
+          .in('id', missingIds);
+      }
+      await load();
       setComment(summary);
       toast.success(summary || 'Verification complete');
+
     } catch (e: any) {
       toast.error(e.message || 'Verification failed');
     } finally {
@@ -661,6 +776,17 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
                     {req.quantity ? ` / ${req.quantity} PO qty` : ''})
                   </div>
                   <div className='flex items-center gap-2'>
+                    <Badge
+                      variant='outline'
+                      className={cn(
+                        'text-[10px] font-bold',
+                        verifiedCount === serials.length
+                          ? 'bg-green-50 text-green-700 border-green-200'
+                          : 'bg-amber-50 text-amber-700 border-amber-200'
+                      )}
+                    >
+                      {verifiedCount}/{serials.length} verified
+                    </Badge>
                     {dupCount > 0 && (
                       <span className='text-xs text-amber-700 flex items-center gap-1'>
                         <AlertTriangle className='w-3 h-3' /> {dupCount} flagged
@@ -669,7 +795,7 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
                     <Button size='sm' variant='outline' onClick={downloadSerialsCsv} title="Download CSV">
                       <FileDown className='w-3.5 h-3.5' />
                     </Button>
-                    {req.current_stage === 'tech_verify_serials' && canAct && (
+                    {isVerifyStage && canAct && (
                       <>
                         <input
                           ref={verifyRef}
@@ -683,6 +809,9 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
                         />
                         <Button size='sm' variant='outline' onClick={() => verifyRef.current?.click()} disabled={busy}>
                           <Upload className='w-3.5 h-3.5 mr-1' /> Bulk Verify
+                        </Button>
+                        <Button size='sm' variant='outline' onClick={verifyAllSerials} disabled={busy}>
+                          <CheckCircle2 className='w-3.5 h-3.5 mr-1' /> Verify All
                         </Button>
                       </>
                     )}
@@ -721,6 +850,9 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
                         <th className='text-left px-2 py-1.5'>Status</th>
                         <th className='text-left px-2 py-1.5'>Group</th>
                         <th className='text-left px-2 py-1.5'>Asset Code</th>
+                        <th className='text-left px-2 py-1.5'>Verification</th>
+                        <th className='text-left px-2 py-1.5'>Verified By</th>
+                        <th className='text-left px-2 py-1.5'>Verified At</th>
                         <th className='text-left px-2 py-1.5'>Flag</th>
                       </tr>
                     </thead>
@@ -734,6 +866,27 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
                           <td className='px-2 py-1.5'>{s.asset_group || '-'}</td>
                           <td className='px-2 py-1.5 font-mono'>{s.asset_code || '-'}</td>
                           <td className='px-2 py-1.5'>
+                            <button
+                              type='button'
+                              onClick={() => toggleSerialVerified(s)}
+                              disabled={!canAct || !isVerifyStage || busy}
+                              title={isVerifyStage && canAct ? 'Toggle verification' : 'Verification status'}
+                              className={cn(
+                                'px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-widest border',
+                                s.verified
+                                  ? 'bg-green-100 text-green-700 border-green-200'
+                                  : 'bg-slate-100 text-slate-500 border-slate-200',
+                                isVerifyStage && canAct ? 'cursor-pointer hover:opacity-80' : 'cursor-default'
+                              )}
+                            >
+                              {s.verified ? 'Verified' : s.verify_result || 'Pending'}
+                            </button>
+                          </td>
+                          <td className='px-2 py-1.5 text-muted-foreground'>{s.verified_by || '-'}</td>
+                          <td className='px-2 py-1.5 text-muted-foreground'>
+                            {s.verified_at ? format(new Date(s.verified_at), 'MMM d, yyyy, hh:mm a') : '-'}
+                          </td>
+                          <td className='px-2 py-1.5'>
                             {s.exists_in_devices && (
                               <Badge variant='destructive' className='mr-1 text-[9px] h-4'>Exists</Badge>
                             )}
@@ -744,6 +897,7 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
                     </tbody>
                   </table>
                 </div>
+
               </div>
             )}
 
@@ -874,13 +1028,14 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
             {/* Action */}
             {req.status === 'open' && (
               <div className='pt-4 border-t space-y-2'>
-                <Textarea
+                <MentionTextarea
                   value={comment}
-                  onChange={(e) => setComment(e.target.value)}
-                  placeholder={canAct ? 'Add a comment (required for reject/revoke)...' : 'Only assigned department Admins can act.'}
+                  onChange={setComment}
+                  placeholder={canAct ? 'Add a comment — type @ to tag a teammate (e.g. @test@gmail.com)' : 'Only assigned department Admins can act.'}
                   rows={2}
                   disabled={!canAct}
                 />
+
                 <div className='flex flex-wrap gap-2 justify-end'>
                   <Button
                     variant='outline'
@@ -912,9 +1067,12 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
                 </div>
                 {!canAct && (
                   <p className='text-xs text-muted-foreground text-right'>
-                    Action requires being Admin/Super Admin of {req.current_stage_dept}.
+                    {locationBlocked
+                      ? `This request belongs to ${req.warehouse}. You can only act on ${profile?.location} requests.`
+                      : `Action requires being Admin/Super Admin of ${req.current_stage_dept}.`}
                   </p>
                 )}
+
               </div>
             )}
           </div>

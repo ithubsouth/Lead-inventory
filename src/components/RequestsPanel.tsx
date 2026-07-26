@@ -17,6 +17,8 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Plus, Inbox, User, Layers, Search, FileEdit, Trash2 } from 'lucide-react';
 import { REQUEST_TYPE_LABELS, getFlow, RequestType, RequestStatus } from '@/lib/requestFlows';
+import { hasFullAccess, isLocationScopedDept } from '@/lib/appTabs';
+
 import { formatDistanceToNow } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
@@ -66,6 +68,28 @@ export default function RequestsPanel({ focusRequestId, onFocusHandled }: Props)
 
   const isReporter = profile?.role === 'Reporter';
   const isSuperAdmin = profile?.role === 'Super Admin';
+  const seesEverything = hasFullAccess({ role: profile?.role, department: profile?.department });
+  const locationScoped =
+    !seesEverything &&
+    isLocationScopedDept(profile?.department) &&
+    !!profile?.location &&
+    profile.location !== 'General';
+
+  /** Non-administrator departments only see requests they are involved in. */
+  const isRelevant = (r: RequestRow) => {
+    if (seesEverything) return true;
+    if (r.raised_by === profile?.id) return true;
+    const dept = profile?.department;
+    if (!dept) return false;
+    const involved =
+      r.raised_dept === dept ||
+      r.current_stage_dept === dept ||
+      getFlow(r.type).some((s) => s.dept === dept);
+    if (!involved) return false;
+    if (locationScoped && r.warehouse && r.warehouse !== profile?.location) return false;
+    return true;
+  };
+
 
   const STORAGE_KEY = 'nucleus_request_draft';
 
@@ -135,7 +159,9 @@ export default function RequestsPanel({ focusRequestId, onFocusHandled }: Props)
   }, [focusRequestId, onFocusHandled]);
 
   const filtered = rows.filter((r) => {
+    if (!isRelevant(r)) return false;
     if (tab === 'mine' && r.raised_by !== profile?.id) return false;
+
     if (tab === 'inbox') {
       const mine = r.raised_by === profile?.id;
       const forDept = profile?.department && r.current_stage_dept === profile.department;
@@ -221,7 +247,7 @@ export default function RequestsPanel({ focusRequestId, onFocusHandled }: Props)
               {draft && <div className='w-2 h-2 rounded-full bg-blue-500 animate-pulse' />}
             </button>
           )}
-          {isSuperAdmin && (
+          {seesEverything && (
             <button
               onClick={() => setTab('all')}
               className={cn(
