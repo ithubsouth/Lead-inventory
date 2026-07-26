@@ -794,31 +794,6 @@ const InventoryManagement = () => {
                     Activity Logs
                   </TabsTrigger>
                 )}
-
-                <TabsTrigger value='view' className='flex-1 min-w-[140px] flex items-center justify-center gap-2 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground font-bold rounded-lg transition-all h-10'>
-                  <Archive className='w-4 h-4' />
-                  View Orders
-                </TabsTrigger>
-                <TabsTrigger value='order' className='flex-1 min-w-[140px] flex items-center justify-center gap-2 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground font-bold rounded-lg transition-all h-10'>
-                  <BarChart3 className='w-4 h-4' />
-                  Order Summary
-                </TabsTrigger>
-                <TabsTrigger value='devices' className='flex-1 min-w-[140px] flex items-center justify-center gap-2 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground font-bold rounded-lg transition-all h-10'>
-                  <Archive className='w-4 h-4' />
-                  Devices
-                </TabsTrigger>
-                <TabsTrigger value='requests' className='flex-1 min-w-[140px] flex items-center justify-center gap-2 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground font-bold rounded-lg transition-all h-10'>
-                  <Inbox className='w-4 h-4' />
-                  Approvals
-                </TabsTrigger>
-                <TabsTrigger value='audit' className='flex-1 min-w-[140px] flex items-center justify-center gap-2 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground font-bold rounded-lg transition-all h-10'>
-                  <Archive className='w-4 h-4' />
-                  Audit View
-                </TabsTrigger>
-                <TabsTrigger value='activity' className='flex-1 min-w-[140px] flex items-center justify-center gap-2 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground font-bold rounded-lg transition-all h-10'>
-                  <Clock className='w-4 h-4' />
-                  Activity Logs
-                </TabsTrigger>
               </TabsList>
               <TabsContent value='requests' className='w-full bg-white'>
                 <RequestsPanel
