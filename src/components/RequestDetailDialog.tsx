@@ -1028,13 +1028,14 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
             {/* Action */}
             {req.status === 'open' && (
               <div className='pt-4 border-t space-y-2'>
-                <Textarea
+                <MentionTextarea
                   value={comment}
-                  onChange={(e) => setComment(e.target.value)}
-                  placeholder={canAct ? 'Add a comment (required for reject/revoke)...' : 'Only assigned department Admins can act.'}
+                  onChange={setComment}
+                  placeholder={canAct ? 'Add a comment — type @ to tag a teammate (e.g. @test@gmail.com)' : 'Only assigned department Admins can act.'}
                   rows={2}
                   disabled={!canAct}
                 />
+
                 <div className='flex flex-wrap gap-2 justify-end'>
                   <Button
                     variant='outline'
