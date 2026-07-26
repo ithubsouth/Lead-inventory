@@ -469,10 +469,14 @@ export type Database = {
       }
       request_documents: {
         Row: {
+          deleted_at: string | null
+          deleted_by: string | null
+          deleted_by_email: string | null
           file_name: string
           file_path: string
           file_size: number | null
           id: string
+          is_deleted: boolean
           kind: string | null
           mime_type: string | null
           request_id: string
@@ -482,10 +486,14 @@ export type Database = {
           uploaded_by_email: string | null
         }
         Insert: {
+          deleted_at?: string | null
+          deleted_by?: string | null
+          deleted_by_email?: string | null
           file_name: string
           file_path: string
           file_size?: number | null
           id?: string
+          is_deleted?: boolean
           kind?: string | null
           mime_type?: string | null
           request_id: string
@@ -495,10 +503,14 @@ export type Database = {
           uploaded_by_email?: string | null
         }
         Update: {
+          deleted_at?: string | null
+          deleted_by?: string | null
+          deleted_by_email?: string | null
           file_name?: string
           file_path?: string
           file_size?: number | null
           id?: string
+          is_deleted?: boolean
           kind?: string | null
           mime_type?: string | null
           request_id?: string
@@ -519,7 +531,10 @@ export type Database = {
       }
       request_serials: {
         Row: {
+          asset_code: string | null
+          asset_condition: string | null
           asset_group: string | null
+          asset_status: string | null
           created_at: string
           exists_in_devices: boolean | null
           id: string
@@ -527,10 +542,17 @@ export type Database = {
           notes: string | null
           request_id: string
           serial_number: string
+          verified: boolean
+          verified_at: string | null
+          verified_by: string | null
+          verify_result: string | null
           warehouse: string | null
         }
         Insert: {
+          asset_code?: string | null
+          asset_condition?: string | null
           asset_group?: string | null
+          asset_status?: string | null
           created_at?: string
           exists_in_devices?: boolean | null
           id?: string
@@ -538,10 +560,17 @@ export type Database = {
           notes?: string | null
           request_id: string
           serial_number: string
+          verified?: boolean
+          verified_at?: string | null
+          verified_by?: string | null
+          verify_result?: string | null
           warehouse?: string | null
         }
         Update: {
+          asset_code?: string | null
+          asset_condition?: string | null
           asset_group?: string | null
+          asset_status?: string | null
           created_at?: string
           exists_in_devices?: boolean | null
           id?: string
@@ -549,6 +578,10 @@ export type Database = {
           notes?: string | null
           request_id?: string
           serial_number?: string
+          verified?: boolean
+          verified_at?: string | null
+          verified_by?: string | null
+          verify_result?: string | null
           warehouse?: string | null
         }
         Relationships: [
@@ -621,6 +654,7 @@ export type Database = {
         Row: {
           agreement_type: string | null
           asset_group: string | null
+          asset_status: string | null
           asset_type: string | null
           configuration: string | null
           created_at: string
@@ -644,6 +678,7 @@ export type Database = {
         Insert: {
           agreement_type?: string | null
           asset_group?: string | null
+          asset_status?: string | null
           asset_type?: string | null
           configuration?: string | null
           created_at?: string
@@ -667,6 +702,7 @@ export type Database = {
         Update: {
           agreement_type?: string | null
           asset_group?: string | null
+          asset_status?: string | null
           asset_type?: string | null
           configuration?: string | null
           created_at?: string
@@ -699,6 +735,7 @@ export type Database = {
           id: string
           location: string | null
           role: string | null
+          tab_access: string[] | null
         }
         Insert: {
           account_type?: string | null
@@ -709,6 +746,7 @@ export type Database = {
           id: string
           location?: string | null
           role?: string | null
+          tab_access?: string[] | null
         }
         Update: {
           account_type?: string | null
@@ -719,6 +757,7 @@ export type Database = {
           id?: string
           location?: string | null
           role?: string | null
+          tab_access?: string[] | null
         }
         Relationships: []
       }
