@@ -1067,9 +1067,12 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
                 </div>
                 {!canAct && (
                   <p className='text-xs text-muted-foreground text-right'>
-                    Action requires being Admin/Super Admin of {req.current_stage_dept}.
+                    {locationBlocked
+                      ? `This request belongs to ${req.warehouse}. You can only act on ${profile?.location} requests.`
+                      : `Action requires being Admin/Super Admin of ${req.current_stage_dept}.`}
                   </p>
                 )}
+
               </div>
             )}
           </div>
