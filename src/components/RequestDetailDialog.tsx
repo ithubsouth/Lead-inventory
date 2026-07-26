@@ -347,6 +347,10 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
         });
       }
 
+      await notifyMentions(comment);
+
+
+
       setComment('');
       await load();
       onChanged?.();
