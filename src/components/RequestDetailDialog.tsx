@@ -6,10 +6,13 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { Textarea } from '@/components/ui/textarea';
+import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
+import { cn } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
 import { useUserProfile } from '@/hooks/useUserProfile';
+import MentionTextarea, { extractMentions } from './MentionTextarea';
+import { isLocationScopedDept } from '@/lib/appTabs';
 import { toast } from 'sonner';
 import {
   REQUEST_TYPE_LABELS,
@@ -24,6 +27,7 @@ import {
 import { format } from 'date-fns';
 import {
   Check,
+  CheckCircle2,
   X,
   RotateCcw,
   Upload,
@@ -44,6 +48,7 @@ interface Props {
   onOpenChange: (o: boolean) => void;
   onChanged?: () => void;
 }
+
 
 interface RequestFull {
   id: string;
