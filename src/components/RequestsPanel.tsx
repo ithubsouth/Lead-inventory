@@ -247,7 +247,7 @@ export default function RequestsPanel({ focusRequestId, onFocusHandled }: Props)
               {draft && <div className='w-2 h-2 rounded-full bg-blue-500 animate-pulse' />}
             </button>
           )}
-          {isSuperAdmin && (
+          {seesEverything && (
             <button
               onClick={() => setTab('all')}
               className={cn(
