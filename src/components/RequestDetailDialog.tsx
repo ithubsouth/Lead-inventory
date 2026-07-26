@@ -776,6 +776,17 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
                     {req.quantity ? ` / ${req.quantity} PO qty` : ''})
                   </div>
                   <div className='flex items-center gap-2'>
+                    <Badge
+                      variant='outline'
+                      className={cn(
+                        'text-[10px] font-bold',
+                        verifiedCount === serials.length
+                          ? 'bg-green-50 text-green-700 border-green-200'
+                          : 'bg-amber-50 text-amber-700 border-amber-200'
+                      )}
+                    >
+                      {verifiedCount}/{serials.length} verified
+                    </Badge>
                     {dupCount > 0 && (
                       <span className='text-xs text-amber-700 flex items-center gap-1'>
                         <AlertTriangle className='w-3 h-3' /> {dupCount} flagged
@@ -784,7 +795,7 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
                     <Button size='sm' variant='outline' onClick={downloadSerialsCsv} title="Download CSV">
                       <FileDown className='w-3.5 h-3.5' />
                     </Button>
-                    {req.current_stage === 'tech_verify_serials' && canAct && (
+                    {isVerifyStage && canAct && (
                       <>
                         <input
                           ref={verifyRef}
@@ -798,6 +809,9 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
                         />
                         <Button size='sm' variant='outline' onClick={() => verifyRef.current?.click()} disabled={busy}>
                           <Upload className='w-3.5 h-3.5 mr-1' /> Bulk Verify
+                        </Button>
+                        <Button size='sm' variant='outline' onClick={verifyAllSerials} disabled={busy}>
+                          <CheckCircle2 className='w-3.5 h-3.5 mr-1' /> Verify All
                         </Button>
                       </>
                     )}
@@ -836,6 +850,9 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
                         <th className='text-left px-2 py-1.5'>Status</th>
                         <th className='text-left px-2 py-1.5'>Group</th>
                         <th className='text-left px-2 py-1.5'>Asset Code</th>
+                        <th className='text-left px-2 py-1.5'>Verification</th>
+                        <th className='text-left px-2 py-1.5'>Verified By</th>
+                        <th className='text-left px-2 py-1.5'>Verified At</th>
                         <th className='text-left px-2 py-1.5'>Flag</th>
                       </tr>
                     </thead>
@@ -849,6 +866,27 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
                           <td className='px-2 py-1.5'>{s.asset_group || '-'}</td>
                           <td className='px-2 py-1.5 font-mono'>{s.asset_code || '-'}</td>
                           <td className='px-2 py-1.5'>
+                            <button
+                              type='button'
+                              onClick={() => toggleSerialVerified(s)}
+                              disabled={!canAct || !isVerifyStage || busy}
+                              title={isVerifyStage && canAct ? 'Toggle verification' : 'Verification status'}
+                              className={cn(
+                                'px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-widest border',
+                                s.verified
+                                  ? 'bg-green-100 text-green-700 border-green-200'
+                                  : 'bg-slate-100 text-slate-500 border-slate-200',
+                                isVerifyStage && canAct ? 'cursor-pointer hover:opacity-80' : 'cursor-default'
+                              )}
+                            >
+                              {s.verified ? 'Verified' : s.verify_result || 'Pending'}
+                            </button>
+                          </td>
+                          <td className='px-2 py-1.5 text-muted-foreground'>{s.verified_by || '-'}</td>
+                          <td className='px-2 py-1.5 text-muted-foreground'>
+                            {s.verified_at ? format(new Date(s.verified_at), 'MMM d, yyyy, hh:mm a') : '-'}
+                          </td>
+                          <td className='px-2 py-1.5'>
                             {s.exists_in_devices && (
                               <Badge variant='destructive' className='mr-1 text-[9px] h-4'>Exists</Badge>
                             )}
@@ -859,6 +897,7 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
                     </tbody>
                   </table>
                 </div>
+
               </div>
             )}
 
