@@ -186,13 +186,90 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
   const flow = useMemo(() => (req ? getFlow(req.type) : []), [req]);
   const currentIdx = req ? flow.findIndex((s) => s.key === req.current_stage) : -1;
 
+  // Technology Team / Supply Chain Management only handle their own location's stock.
+  const locationBlocked =
+    !!req &&
+    profile?.role !== 'Super Admin' &&
+    profile?.department !== 'Administrators' &&
+    isLocationScopedDept(profile?.department) &&
+    !!profile?.location &&
+    profile.location !== 'General' &&
+    !!req.warehouse &&
+    req.warehouse !== profile.location;
+
   const canAct = !!req &&
     req.status === 'open' &&
+    !locationBlocked &&
     canActOnStage({
       role: profile?.role || null,
       department: profile?.department || null,
       assignedDept: req.current_stage_dept,
     });
+
+  const isVerifyStage = !!req && req.current_stage === 'tech_verify_serials';
+  const verifiedCount = serials.filter((s) => s.verified).length;
+
+  const notifyMentions = async (text: string) => {
+    if (!req) return;
+    const emails = extractMentions(text);
+    if (!emails.length) return;
+    const { data: tagged } = await supabase
+      .from('users')
+      .select('id, email')
+      .in('email', emails);
+    if (!tagged?.length) return;
+    await supabase.from('notifications').insert(
+      tagged.map((u: any) => ({
+        user_id: u.id,
+        request_id: req.id,
+        kind: 'mention',
+        title: `${profile?.email || 'Someone'} tagged you on: ${req.title || REQUEST_TYPE_LABELS[req.type]}`,
+        body: text,
+      }))
+    );
+  };
+
+  const setSerialVerification = async (ids: string[], verified: boolean, result: string) => {
+    if (!ids.length) return;
+    const { error } = await supabase
+      .from('request_serials')
+      .update({
+        verified,
+        verify_result: verified ? result : null,
+        verified_by: verified ? profile?.email || null : null,
+        verified_at: verified ? new Date().toISOString() : null,
+      })
+      .in('id', ids);
+    if (error) throw error;
+  };
+
+  const toggleSerialVerified = async (s: SerialRow) => {
+    if (!canAct || !isVerifyStage) return;
+    setBusy(true);
+    try {
+      await setSerialVerification([s.id], !s.verified, 'Matched');
+      await load();
+    } catch (e: any) {
+      toast.error(e.message || 'Could not update verification');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const verifyAllSerials = async () => {
+    if (!canAct || !isVerifyStage) return;
+    setBusy(true);
+    try {
+      await setSerialVerification(serials.map((s) => s.id), true, 'Matched');
+      await load();
+      toast.success('All serials marked verified');
+    } catch (e: any) {
+      toast.error(e.message || 'Could not update verification');
+    } finally {
+      setBusy(false);
+    }
+  };
+
 
   const record = async (action: StageAction, opts: { closeAfter?: boolean; reject?: boolean; revoke?: boolean } = {}) => {
     if (!req || !profile?.id) return;
