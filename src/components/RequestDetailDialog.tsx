@@ -623,8 +623,27 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
         extra.length ? `Extra: ${extra.slice(0, 20).join(', ')}${extra.length > 20 ? '...' : ''}` : null,
         qtyMismatch ? `Qty mismatch: uploaded ${uploaded.length} vs PO qty ${poQty}` : null,
       ].filter(Boolean).join(' | ');
+
+      // Persist per-serial verification so everyone can see who verified and when
+      const matchedIds = serials.filter((s) => uploadedSet.has(s.serial_number)).map((s) => s.id);
+      const missingIds = serials.filter((s) => !uploadedSet.has(s.serial_number)).map((s) => s.id);
+      const stamp = new Date().toISOString();
+      if (matchedIds.length) {
+        await supabase
+          .from('request_serials')
+          .update({ verified: true, verify_result: 'Matched', verified_by: profile?.email || null, verified_at: stamp })
+          .in('id', matchedIds);
+      }
+      if (missingIds.length) {
+        await supabase
+          .from('request_serials')
+          .update({ verified: false, verify_result: 'Not found in upload', verified_by: profile?.email || null, verified_at: stamp })
+          .in('id', missingIds);
+      }
+      await load();
       setComment(summary);
       toast.success(summary || 'Verification complete');
+
     } catch (e: any) {
       toast.error(e.message || 'Verification failed');
     } finally {
