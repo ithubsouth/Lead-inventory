@@ -94,7 +94,12 @@ interface SerialRow {
   asset_group: string | null;
   asset_status: string | null;
   asset_code: string | null;
+  verified: boolean | null;
+  verify_result: string | null;
+  verified_by: string | null;
+  verified_at: string | null;
 }
+
 
 interface DocRow {
   id: string;
