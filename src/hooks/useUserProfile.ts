@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
+import { resolveTabAccess } from '@/lib/appTabs';
 
 export interface UserProfile {
   id: string;
@@ -8,6 +9,8 @@ export interface UserProfile {
   role: string | null;
   department: string | null;
   full_name: string | null;
+  location: string | null;
+  tab_access: string[] | null;
 }
 
 export function useUserProfile() {
@@ -27,11 +30,11 @@ export function useUserProfile() {
       setLoading(true);
       const { data } = await supabase
         .from('users')
-        .select('id, email, role, department, full_name')
+        .select('id, email, role, department, full_name, location, tab_access')
         .eq('id', user.id)
         .maybeSingle();
       if (cancelled) return;
-      setProfile(data as UserProfile | null);
+      setProfile((data as UserProfile) || null);
       setLoading(false);
     })();
     return () => {
@@ -39,5 +42,11 @@ export function useUserProfile() {
     };
   }, [user?.id, authLoading]);
 
-  return { profile, loading };
+  const allowedTabs = resolveTabAccess({
+    role: profile?.role,
+    department: profile?.department,
+    tabAccess: profile?.tab_access,
+  });
+
+  return { profile, loading, allowedTabs };
 }
