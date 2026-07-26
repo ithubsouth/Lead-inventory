@@ -9,6 +9,8 @@ import { ActiveUsers } from '@/components/ActiveUsers';
 import { NotificationBell } from '@/components/NotificationBell';
 import { Order, Device, OrderSummary, TabletItem, TVItem } from './types';
 import { DateRange } from 'react-day-picker';
+import { useUserProfile } from '@/hooks/useUserProfile';
+
 
 const UnifiedAssetForm = lazy(() => import('./UnifiedAssetForm'));
 const OrdersTable = lazy(() => import('./OrdersTable'));
