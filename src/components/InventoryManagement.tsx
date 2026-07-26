@@ -67,24 +67,24 @@ const InventoryManagement = () => {
   const [userEmail, setUserEmail] = useState<string | null>(null);
   const [userRole, setUserRole] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<string>('');
+  const { allowedTabs, loading: profileLoading } = useUserProfile();
+  const canSee = (key: string) => allowedTabs.includes(key);
 
   useEffect(() => {
-    if (!userRole) return;
+    if (!userRole || profileLoading || !allowedTabs.length) return;
 
     const saved = sessionStorage.getItem('inventoryActiveTab');
-    const isReporter = userRole === 'Reporter';
+    const fallback = allowedTabs.includes('create') && userRole !== 'Reporter'
+      ? 'create'
+      : allowedTabs[0];
 
-    if (saved) {
-      // Security/Logic check: don't let reporters stay on 'create' tab
-      if (isReporter && saved === 'create') {
-        setActiveTab('view');
-      } else {
-        setActiveTab(saved);
-      }
+    if (saved && allowedTabs.includes(saved) && !(userRole === 'Reporter' && saved === 'create')) {
+      setActiveTab(saved);
     } else {
-      setActiveTab(isReporter ? 'view' : 'create');
+      setActiveTab(fallback);
     }
-  }, [userRole]);
+  }, [userRole, profileLoading, allowedTabs.join(',')]);
+
 
   useEffect(() => {
     if (activeTab) {
