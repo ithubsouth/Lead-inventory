@@ -273,8 +273,13 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
 
   const record = async (action: StageAction, opts: { closeAfter?: boolean; reject?: boolean; revoke?: boolean } = {}) => {
     if (!req || !profile?.id) return;
+    if (action === 'approved' && isVerifyStage && serials.length && verifiedCount < serials.length) {
+      toast.error(`Verify all serials first (${verifiedCount}/${serials.length} verified).`);
+      return;
+    }
     setBusy(true);
     try {
+
       await supabase.from('request_stages').insert({
         request_id: req.id,
         stage_key: req.current_stage,
