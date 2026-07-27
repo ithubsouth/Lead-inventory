@@ -10,11 +10,12 @@ export interface StageDef {
 }
 
 export const NEW_HARDWARE_FLOW: StageDef[] = [
-  { key: 'proc_add_serials', label: 'Add serials, PO/SO, warehouse, invoice', dept: 'Procurement Team' },
-  { key: 'tech_verify_serials', label: 'Verify serials', dept: 'Technology Team' },
+  { key: 'proc_add_serials', label: 'Created', dept: 'Procurement Team' },
+  { key: 'tech_verify_serials', label: 'Verify Serial Numbers with Physical Assets', dept: 'Technology Team' },
   { key: 'scm_take_grn', label: 'Take GRN', dept: 'Supply Chain Management' },
-  { key: 'finance_approve', label: 'Finance approval + generate Asset Code', dept: 'Finance' },
+  { key: 'finance_approve', label: 'Generate Asset Code', dept: 'Finance' },
 ];
+
 
 export const ASSET_MOVEMENT_FLOW: StageDef[] = [
   { key: 'planning_raise_sto', label: 'Raise STO request', dept: 'Planning Team' },
