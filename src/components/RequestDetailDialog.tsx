@@ -25,6 +25,7 @@ import {
   isTerminalStage,
 } from '@/lib/requestFlows';
 import { format } from 'date-fns';
+import { fmtDateTime } from '@/lib/dateFormat';
 import {
   Check,
   CheckCircle2,
@@ -40,6 +41,8 @@ import {
   Loader2,
   History,
   Search,
+  Pencil,
+  ScanLine,
 } from 'lucide-react';
 
 interface Props {
@@ -215,6 +218,13 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
       department: profile?.department || null,
       assignedDept: req.current_stage_dept,
     });
+
+  const canEditSubject =
+    !!req &&
+    (profile?.role === 'Super Admin' ||
+      profile?.department === 'Administrators' ||
+      req.raised_by === profile?.id ||
+      req.current_stage_dept === profile?.department);
 
   const isVerifyStage = !!req && req.current_stage === 'tech_verify_serials';
   const isGrnStage = !!req && req.current_stage === 'scm_take_grn';
