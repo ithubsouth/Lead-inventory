@@ -139,7 +139,7 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
         .from('request_stages')
         .select('*')
         .eq('request_id', requestId)
-        .order('acted_at', { ascending: true }),
+        .order('acted_at', { ascending: false }),
       supabase.from('request_serials').select('*').eq('request_id', requestId),
       supabase
         .from('request_documents')
@@ -148,9 +148,12 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
         .order('uploaded_at', { ascending: false }),
     ]);
     setReq(r as any);
+    setGrnInput(((r as any)?.grn_number as string) || '');
+    setSubjectDraft(((r as any)?.title as string) || '');
     setStages((s as StageRow[]) || []);
     setSerials((sn as SerialRow[]) || []);
     setDocs((d as DocRow[]) || []);
+
   };
 
   useEffect(() => {
