@@ -605,23 +605,45 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
     }
     const byS = new Map(devs.map((d) => [d.serial_number, d]));
     const rows = [
-      ['Serial Number', 'Asset Code', 'Model', 'Configuration', 'Warehouse', 'Asset Group', 'Status', 'PO/SO', 'Duplicate', 'Existed Before'],
+      [
+        'Subject', 'Request Type', 'PO Number', 'GRN Number', 'Warehouse', 'Asset Type', 'Model', 'Configuration',
+        'Quantity', 'Serial Number', 'Asset Status', 'Asset Group', 'Asset Code', 'Asset Condition',
+        'Verified', 'Verification Result', 'Verified By', 'Verified At',
+        'Duplicate', 'Existed Before', 'Current Stage', 'Pending At', 'Request Status',
+        'Requested By', 'Requested At',
+      ],
       ...serials.map((s) => {
-        const d = byS.get(s.serial_number) || {};
+        const d: any = byS.get(s.serial_number) || {};
         return [
-          s.serial_number,
-          (s.asset_code || d.far_code) ?? '',
+          req.title ?? '',
+          REQUEST_TYPE_LABELS[req.type],
+          req.po_number ?? '',
+          req.grn_number ?? '',
+          s.warehouse ?? req.warehouse ?? '',
+          req.asset_type ?? '',
           d.model ?? req.model ?? '',
           d.configuration ?? req.configuration ?? '',
-          s.warehouse ?? req.warehouse ?? '',
+          req.quantity ?? serials.length,
+          s.serial_number,
+          s.asset_status || d.asset_status || req.asset_status || '',
           s.asset_group ?? req.asset_group ?? '',
-          s.asset_status || d.asset_status || '',
-          d.sales_order ?? req.po_number ?? '',
+          (s.asset_code || d.far_code) ?? '',
+          d.asset_condition ?? '',
+          s.verified ? 'Yes' : 'No',
+          s.verify_result ?? '',
+          s.verified_by ?? '',
+          s.verified_at ? fmtDateTime(s.verified_at) : '',
           s.is_duplicate ? 'Yes' : 'No',
           s.exists_in_devices ? 'Yes' : 'No',
+          flow.find((f) => f.key === req.current_stage)?.label ?? req.current_stage,
+          req.status === 'open' ? req.current_stage_dept : '',
+          req.status,
+          req.raised_by_email ?? '',
+          fmtDateTime(req.created_at),
         ];
       }),
     ];
+
     const csv = rows.map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(',')).join('\n');
     const blob = new Blob([csv], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);
