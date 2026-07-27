@@ -422,6 +422,7 @@ export const UserProfile = () => {
           data: {
             full_name: fullName || null,
             department: department || null,
+            tab_access: tabAccess.length ? tabAccess : null,
             role: role || null,
             location: location || 'General',
           },
