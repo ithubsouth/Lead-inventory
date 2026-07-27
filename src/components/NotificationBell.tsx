@@ -177,7 +177,7 @@ export function NotificationBell({ onOpenRequest }: Props) {
               </div>
             </button>
           ))}
-        </ScrollArea>
+        </div>
       </PopoverContent>
     </Popover>
   );
