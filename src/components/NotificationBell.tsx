@@ -44,7 +44,7 @@ export function NotificationBell({ onOpenRequest }: Props) {
       .from('notifications')
       .select('*')
       .order('created_at', { ascending: false })
-      .limit(30);
+      .limit(100);
     setItems((data as Notification[]) || []);
   };
 
@@ -62,7 +62,7 @@ export function NotificationBell({ onOpenRequest }: Props) {
             n.user_id === profile.id ||
             (n.target_dept && n.target_dept === profile.department);
           if (forMe) {
-            setItems((prev) => [n, ...prev].slice(0, 30));
+            setItems((prev) => [n, ...prev].slice(0, 100));
             toast(n.title, { description: n.body || undefined });
           }
         }
