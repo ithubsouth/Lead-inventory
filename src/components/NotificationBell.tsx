@@ -116,7 +116,7 @@ export function NotificationBell({ onOpenRequest }: Props) {
           )}
         </Button>
       </PopoverTrigger>
-      <PopoverContent align='end' className='w-80 p-0'>
+      <PopoverContent align='end' className='w-96 p-0'>
         <div className='flex items-center justify-between px-3 py-2 border-b'>
           <div className='font-semibold text-sm'>Notifications</div>
           {unread > 0 && (
@@ -128,13 +128,32 @@ export function NotificationBell({ onOpenRequest }: Props) {
             </button>
           )}
         </div>
-        <ScrollArea className='max-h-80'>
-          {items.length === 0 && (
+        <div className='flex items-center gap-1 px-3 py-2 border-b bg-muted/30'>
+          <button
+            onClick={() => setOnlyUnread(false)}
+            className={`px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-widest ${
+              !onlyUnread ? 'bg-primary text-primary-foreground' : 'bg-background text-muted-foreground border'
+            }`}
+          >
+            All
+          </button>
+          <button
+            onClick={() => setOnlyUnread(true)}
+            className={`px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-widest ${
+              onlyUnread ? 'bg-primary text-primary-foreground' : 'bg-background text-muted-foreground border'
+            }`}
+          >
+            Unread{unread > 0 ? ` (${unread})` : ''}
+          </button>
+        </div>
+        <div className='max-h-[26rem] overflow-y-auto overscroll-contain'>
+          {visible.length === 0 && (
             <div className='px-3 py-6 text-center text-sm text-muted-foreground'>
-              No notifications yet
+              {onlyUnread ? 'No unread notifications' : 'No notifications yet'}
             </div>
           )}
-          {items.map((n) => (
+          {visible.map((n) => (
+
             <button
               key={n.id}
               onClick={() => markRead(n)}
