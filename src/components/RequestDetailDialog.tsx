@@ -872,17 +872,48 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
       <DialogContent className='max-w-[98vw] w-full max-h-[95vh] overflow-hidden flex flex-col p-0'>
         <DialogHeader className='px-6 pt-6 pb-4 border-b'>
           <div className='flex items-start justify-between gap-4'>
-            <div>
-              <DialogTitle className='text-xl'>
-                {req.title || REQUEST_TYPE_LABELS[req.type]}
-              </DialogTitle>
-              <div className='text-xs text-muted-foreground mt-1'>
+            <div className='min-w-0 flex-1'>
+              {editingSubject ? (
+                <div className='flex items-center gap-2'>
+                  <Input
+                    value={subjectDraft}
+                    onChange={(e) => setSubjectDraft(e.target.value)}
+                    className='h-9 text-base font-semibold'
+                    autoFocus
+                  />
+                  <Button size='sm' onClick={saveSubject} disabled={busy}>Save</Button>
+                  <Button size='sm' variant='ghost' onClick={() => { setEditingSubject(false); setSubjectDraft(req.title || ''); }}>
+                    Cancel
+                  </Button>
+                </div>
+              ) : (
+                <DialogTitle className='text-xl flex items-center gap-2 min-w-0'>
+                  <span className='truncate'>{req.title || REQUEST_TYPE_LABELS[req.type]}</span>
+                  {req.status !== 'closed' && canEditSubject && (
+                    <button
+                      type='button'
+                      onClick={() => setEditingSubject(true)}
+                      className='text-muted-foreground hover:text-primary shrink-0'
+                      title='Edit subject'
+                    >
+                      <Pencil className='w-4 h-4' />
+                    </button>
+                  )}
+                </DialogTitle>
+              )}
+              <div className='text-xs text-muted-foreground mt-1 break-words'>
                 {REQUEST_TYPE_LABELS[req.type]}
-                {req.po_number ? ` · PO ${req.po_number}` : ''} · Raised by {req.raised_by_email} ({req.raised_dept})
+                {req.po_number ? ` · PO ${req.po_number}` : ''} · Raised by {req.raised_by_email} ({req.raised_dept}) · {fmtDateTime(req.created_at)}
               </div>
             </div>
-            <div className='flex items-center gap-2'>
+            <div className='flex items-center gap-2 shrink-0'>
+              <Badge variant='outline' className='font-bold text-[10px]'>
+                Pending at: {req.status === 'open' ? req.current_stage_dept : '—'}
+              </Badge>
               <Badge className='capitalize'>{req.status}</Badge>
+              <Button size='sm' variant='outline' onClick={downloadSerialsCsv} disabled={busy}>
+                <FileDown className='w-3.5 h-3.5 mr-1' /> CSV
+              </Button>
               {profile?.role === 'Super Admin' && (
                 <Button size='sm' variant='destructive' onClick={deleteRequest} disabled={busy}>
                   <Trash2 className='w-3.5 h-3.5 mr-1' /> Delete
@@ -890,6 +921,7 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
               )}
             </div>
           </div>
+
         </DialogHeader>
 
         <div className='grid grid-cols-12 gap-6 px-6 py-4 overflow-y-auto flex-1'>
