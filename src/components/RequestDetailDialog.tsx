@@ -1025,9 +1025,56 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
             )}
           </div>
 
+            {/* Stage specific inputs */}
+            {req.status === 'open' && isGrnStage && canAct && (
+              <div className='p-3 rounded-xl border border-blue-100 bg-blue-50/40 space-y-2'>
+                <div className='text-xs font-black uppercase tracking-widest text-blue-700'>Take GRN</div>
+                <div className='flex gap-2'>
+                  <Input
+                    value={grnInput}
+                    onChange={(e) => setGrnInput(e.target.value)}
+                    placeholder='Enter GRN number'
+                    className='h-9 text-sm'
+                  />
+                  <Button size='sm' onClick={saveGrn} disabled={busy || !grnInput.trim()}>
+                    Save GRN
+                  </Button>
+                </div>
+                <p className='text-[10px] text-muted-foreground'>GRN number is required before approving this stage.</p>
+              </div>
+            )}
+
+            {req.status === 'open' && isAssetCodeStage && canAct && (
+              <div className='p-3 rounded-xl border border-emerald-100 bg-emerald-50/40 space-y-2'>
+                <div className='text-xs font-black uppercase tracking-widest text-emerald-700'>Generate Asset Code</div>
+                <div className='flex flex-wrap gap-2'>
+                  <Button size='sm' variant='outline' onClick={autoGenerateAssetCodes} disabled={busy}>
+                    Auto-generate for missing
+                  </Button>
+                  <input
+                    ref={codeRef}
+                    type='file'
+                    accept='.csv,.txt'
+                    className='hidden'
+                    onChange={(e) => {
+                      const f = e.target.files?.[0];
+                      if (f) bulkAssetCodes(f);
+                    }}
+                  />
+                  <Button size='sm' variant='outline' onClick={() => codeRef.current?.click()} disabled={busy}>
+                    <Upload className='w-3.5 h-3.5 mr-1' /> Bulk upload asset codes
+                  </Button>
+                </div>
+                <p className='text-[10px] text-muted-foreground'>
+                  CSV format: <span className='font-mono'>serial_number,asset_code</span>. Asset codes must be unique; you can also edit them one by one in the table above.
+                </p>
+              </div>
+            )}
+
             {/* Action */}
             {req.status === 'open' && (
               <div className='pt-4 border-t space-y-2'>
+
                 <MentionTextarea
                   value={comment}
                   onChange={setComment}
