@@ -1147,7 +1147,23 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
                           <td className='px-2 py-1.5 font-mono'>{s.serial_number}</td>
                           <td className='px-2 py-1.5'>{s.asset_status || req.asset_status || '-'}</td>
                           <td className='px-2 py-1.5'>{s.asset_group || '-'}</td>
-                          <td className='px-2 py-1.5 font-mono'>{s.asset_code || '-'}</td>
+                          <td className='px-2 py-1.5 font-mono'>
+                            {isAssetCodeStage && canAct ? (
+                              <Input
+                                defaultValue={s.asset_code || ''}
+                                onBlur={(e) => {
+                                  if ((e.target.value || '') !== (s.asset_code || '')) {
+                                    setAssetCode(s.id, e.target.value);
+                                  }
+                                }}
+                                placeholder='—'
+                                className='h-7 w-28 text-[11px] font-mono'
+                              />
+                            ) : (
+                              s.asset_code || '-'
+                            )}
+                          </td>
+
                           <td className='px-2 py-1.5'>
                             <button
                               type='button'
