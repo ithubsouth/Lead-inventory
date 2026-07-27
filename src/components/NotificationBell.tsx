@@ -32,8 +32,11 @@ export function NotificationBell({ onOpenRequest }: Props) {
   const { profile } = useUserProfile();
   const [items, setItems] = useState<Notification[]>([]);
   const [open, setOpen] = useState(false);
+  const [onlyUnread, setOnlyUnread] = useState(false);
 
   const unread = items.filter((n) => !n.read_at).length;
+  const visible = onlyUnread ? items.filter((n) => !n.read_at) : items;
+
 
   const load = async () => {
     if (!profile?.id) return;
