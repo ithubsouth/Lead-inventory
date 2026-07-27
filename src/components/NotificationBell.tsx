@@ -6,7 +6,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from '@/components/ui/popover';
-import { ScrollArea } from '@/components/ui/scroll-area';
+
 import { supabase } from '@/integrations/supabase/client';
 import { useUserProfile } from '@/hooks/useUserProfile';
 import { toast } from 'sonner';
@@ -32,8 +32,11 @@ export function NotificationBell({ onOpenRequest }: Props) {
   const { profile } = useUserProfile();
   const [items, setItems] = useState<Notification[]>([]);
   const [open, setOpen] = useState(false);
+  const [onlyUnread, setOnlyUnread] = useState(false);
 
   const unread = items.filter((n) => !n.read_at).length;
+  const visible = onlyUnread ? items.filter((n) => !n.read_at) : items;
+
 
   const load = async () => {
     if (!profile?.id) return;
@@ -41,7 +44,7 @@ export function NotificationBell({ onOpenRequest }: Props) {
       .from('notifications')
       .select('*')
       .order('created_at', { ascending: false })
-      .limit(30);
+      .limit(100);
     setItems((data as Notification[]) || []);
   };
 
@@ -59,7 +62,7 @@ export function NotificationBell({ onOpenRequest }: Props) {
             n.user_id === profile.id ||
             (n.target_dept && n.target_dept === profile.department);
           if (forMe) {
-            setItems((prev) => [n, ...prev].slice(0, 30));
+            setItems((prev) => [n, ...prev].slice(0, 100));
             toast(n.title, { description: n.body || undefined });
           }
         }
@@ -113,7 +116,7 @@ export function NotificationBell({ onOpenRequest }: Props) {
           )}
         </Button>
       </PopoverTrigger>
-      <PopoverContent align='end' className='w-80 p-0'>
+      <PopoverContent align='end' className='w-96 p-0'>
         <div className='flex items-center justify-between px-3 py-2 border-b'>
           <div className='font-semibold text-sm'>Notifications</div>
           {unread > 0 && (
@@ -125,13 +128,32 @@ export function NotificationBell({ onOpenRequest }: Props) {
             </button>
           )}
         </div>
-        <ScrollArea className='max-h-80'>
-          {items.length === 0 && (
+        <div className='flex items-center gap-1 px-3 py-2 border-b bg-muted/30'>
+          <button
+            onClick={() => setOnlyUnread(false)}
+            className={`px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-widest ${
+              !onlyUnread ? 'bg-primary text-primary-foreground' : 'bg-background text-muted-foreground border'
+            }`}
+          >
+            All
+          </button>
+          <button
+            onClick={() => setOnlyUnread(true)}
+            className={`px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-widest ${
+              onlyUnread ? 'bg-primary text-primary-foreground' : 'bg-background text-muted-foreground border'
+            }`}
+          >
+            Unread{unread > 0 ? ` (${unread})` : ''}
+          </button>
+        </div>
+        <div className='max-h-[26rem] overflow-y-auto overscroll-contain'>
+          {visible.length === 0 && (
             <div className='px-3 py-6 text-center text-sm text-muted-foreground'>
-              No notifications yet
+              {onlyUnread ? 'No unread notifications' : 'No notifications yet'}
             </div>
           )}
-          {items.map((n) => (
+          {visible.map((n) => (
+
             <button
               key={n.id}
               onClick={() => markRead(n)}
@@ -155,7 +177,7 @@ export function NotificationBell({ onOpenRequest }: Props) {
               </div>
             </button>
           ))}
-        </ScrollArea>
+        </div>
       </PopoverContent>
     </Popover>
   );

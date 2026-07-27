@@ -20,6 +20,8 @@ import { REQUEST_TYPE_LABELS, getFlow, RequestType, RequestStatus } from '@/lib/
 import { hasFullAccess, isLocationScopedDept } from '@/lib/appTabs';
 
 import { formatDistanceToNow } from 'date-fns';
+import { fmtDateTime } from '@/lib/dateFormat';
+
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import CreateRequestDialog from './CreateRequestDialog';
@@ -283,15 +285,20 @@ export default function RequestsPanel({ focusRequestId, onFocusHandled }: Props)
         </div>
       </div>
 
-      <div className='bg-white border-y border-slate-100 overflow-hidden relative'>
-        <div className='sticky top-0 z-20 grid grid-cols-12 gap-3 px-8 py-4 text-[10px] font-black uppercase tracking-[0.15em] text-slate-400 border-b bg-slate-50/80 backdrop-blur-md shadow-sm'>
-          <div className='col-span-3'>Request Details</div>
-          <div className='col-span-3'>Workflow Stage</div>
-          <div className='col-span-2'>Raiser Information</div>
+      <div className='bg-white border-y border-slate-100 overflow-x-auto relative'>
+        <div className='min-w-[1180px]'>
+        <div className='sticky top-0 z-20 grid grid-cols-12 gap-3 px-6 py-4 text-[10px] font-black uppercase tracking-[0.15em] text-slate-400 border-b bg-slate-50/80 backdrop-blur-md shadow-sm'>
+          <div className='col-span-3'>Subject</div>
+          <div className='col-span-1'>PO Number</div>
+          <div className='col-span-1'>Warehouse</div>
+          <div className='col-span-1'>Asset Type</div>
           <div className='col-span-1 text-center'>Qty</div>
-          <div className='col-span-2'>Activity</div>
+          <div className='col-span-2'>Requested By</div>
+          <div className='col-span-1'>Requested At</div>
+          <div className='col-span-1'>Pending At</div>
           <div className='col-span-1 text-right'>Status</div>
         </div>
+
 
         {loading ? (
           <div className='px-6 py-32 text-center'>
@@ -372,32 +379,48 @@ export default function RequestsPanel({ focusRequestId, onFocusHandled }: Props)
               <button
                 key={r.id || Math.random()}
                 onClick={() => setDetailId(r.id)}
-                className='w-full text-left grid grid-cols-12 gap-3 px-8 py-5 hover:bg-blue-50/30 transition-all group border-l-4 border-l-transparent hover:border-l-blue-500'
+                className='w-full text-left grid grid-cols-12 gap-3 px-6 py-4 hover:bg-blue-50/30 transition-all group border-l-4 border-l-transparent hover:border-l-blue-500'
               >
                 <div className='col-span-3 min-w-0'>
                   <div className='font-bold text-sm text-slate-700 truncate group-hover:text-blue-600 transition-colors'>
                     {r.title || (r.type ? REQUEST_TYPE_LABELS[r.type] : 'Untitled Request')}
                   </div>
-                  <div className='text-[11px] font-medium text-slate-400 mt-1 truncate'>
+                  <div className='text-[11px] font-medium text-slate-400 mt-0.5 truncate'>
                     {r.type ? REQUEST_TYPE_LABELS[r.type] : 'General'}
-                    {r.po_number ? ` · ${r.po_number}` : ''}
-                    {r.warehouse ? ` · ${r.warehouse}` : ''}
                   </div>
                 </div>
-                <div className='col-span-3 flex items-center'>
-                   <Badge variant='outline' className='bg-slate-50 text-slate-600 border-slate-200 font-bold text-[10px] px-3 py-1 rounded-lg'>
-                     {stageLabel(r)}
-                   </Badge>
+                <div className='col-span-1 min-w-0 text-xs font-semibold text-slate-600 flex items-center truncate'>
+                  <span className='truncate'>{r.po_number || '-'}</span>
                 </div>
-                <div className='col-span-2 text-[11px] font-medium text-slate-500 flex flex-col justify-center'>
-                  <div className='truncate text-slate-700 font-bold'>{r.raised_by_email || 'Unknown User'}</div>
-                  <div className='truncate text-[10px] uppercase tracking-widest opacity-60 mt-0.5'>{r.raised_dept || 'General'}</div>
+                <div className='col-span-1 min-w-0 text-xs text-slate-600 flex items-center'>
+                  <span className='truncate'>{r.warehouse || '-'}</span>
+                </div>
+                <div className='col-span-1 min-w-0 text-xs text-slate-600 flex items-center'>
+                  <span className='truncate'>{r.asset_type || '-'}</span>
                 </div>
                 <div className='col-span-1 text-sm font-black text-slate-600 text-center flex items-center justify-center'>
                   {r.quantity ?? '-'}
                 </div>
-                <div className='col-span-2 text-[11px] font-medium text-slate-400 flex items-center'>
-                  {safeFormatDistance(r.created_at)}
+                <div className='col-span-2 min-w-0 text-[11px] font-medium text-slate-500 flex flex-col justify-center'>
+                  <div className='truncate text-slate-700 font-bold'>{r.raised_by_email || 'Unknown User'}</div>
+                  <div className='truncate text-[10px] uppercase tracking-widest opacity-60 mt-0.5'>{r.raised_dept || 'General'}</div>
+                </div>
+                <div className='col-span-1 min-w-0 text-[11px] font-medium text-slate-500 flex flex-col justify-center'>
+                  <div className='truncate'>{fmtDateTime(r.created_at)}</div>
+                  <div className='truncate text-[10px] text-slate-400'>{safeFormatDistance(r.created_at)}</div>
+                </div>
+                <div className='col-span-1 min-w-0 flex items-center'>
+                  {r.status === 'open' ? (
+                    <Badge
+                      variant='outline'
+                      className='bg-amber-50 text-amber-700 border-amber-200 font-bold text-[10px] px-2 py-1 rounded-lg max-w-full'
+                      title={stageLabel(r)}
+                    >
+                      <span className='truncate block max-w-[110px]'>{r.current_stage_dept || '-'}</span>
+                    </Badge>
+                  ) : (
+                    <span className='text-[11px] text-slate-400'>—</span>
+                  )}
                 </div>
                 <div className='col-span-1 text-right flex items-center justify-end'>
                   <Badge className={cn(
@@ -414,7 +437,9 @@ export default function RequestsPanel({ focusRequestId, onFocusHandled }: Props)
             ))}
           </div>
         )}
+        </div>
       </div>
+
 
       {createOpen && (
         <CreateRequestDialog

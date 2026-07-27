@@ -25,6 +25,7 @@ import {
   isTerminalStage,
 } from '@/lib/requestFlows';
 import { format } from 'date-fns';
+import { fmtDateTime } from '@/lib/dateFormat';
 import {
   Check,
   CheckCircle2,
@@ -40,6 +41,8 @@ import {
   Loader2,
   History,
   Search,
+  Pencil,
+  ScanLine,
 } from 'lucide-react';
 
 interface Props {
@@ -58,6 +61,8 @@ interface RequestFull {
   current_stage: string;
   current_stage_dept: string;
   po_number: string | null;
+  grn_number: string | null;
+
   warehouse: string | null;
   asset_type: string | null;
   model: string | null;
@@ -125,7 +130,12 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
   const [serialSearchQuery, setSerialSearchQuery] = useState('');
   const [comment, setComment] = useState('');
   const [busy, setBusy] = useState(false);
+  const [grnInput, setGrnInput] = useState('');
+  const [scanInput, setScanInput] = useState('');
+  const [editingSubject, setEditingSubject] = useState(false);
+  const [subjectDraft, setSubjectDraft] = useState('');
   const fileRef = useRef<HTMLInputElement>(null);
+
 
   const load = async () => {
     const [{ data: r }, { data: s }, { data: sn }, { data: d }] = await Promise.all([
@@ -134,7 +144,7 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
         .from('request_stages')
         .select('*')
         .eq('request_id', requestId)
-        .order('acted_at', { ascending: true }),
+        .order('acted_at', { ascending: false }),
       supabase.from('request_serials').select('*').eq('request_id', requestId),
       supabase
         .from('request_documents')
@@ -143,9 +153,12 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
         .order('uploaded_at', { ascending: false }),
     ]);
     setReq(r as any);
+    setGrnInput(((r as any)?.grn_number as string) || '');
+    setSubjectDraft(((r as any)?.title as string) || '');
     setStages((s as StageRow[]) || []);
     setSerials((sn as SerialRow[]) || []);
     setDocs((d as DocRow[]) || []);
+
   };
 
   useEffect(() => {
@@ -206,8 +219,18 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
       assignedDept: req.current_stage_dept,
     });
 
+  const canEditSubject =
+    !!req &&
+    (profile?.role === 'Super Admin' ||
+      profile?.department === 'Administrators' ||
+      req.raised_by === profile?.id ||
+      req.current_stage_dept === profile?.department);
+
   const isVerifyStage = !!req && req.current_stage === 'tech_verify_serials';
+  const isGrnStage = !!req && req.current_stage === 'scm_take_grn';
+  const isAssetCodeStage = !!req && req.current_stage === 'finance_approve';
   const verifiedCount = serials.filter((s) => s.verified).length;
+
 
   const notifyMentions = async (text: string) => {
     if (!req) return;
@@ -277,6 +300,15 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
       toast.error(`Verify all serials first (${verifiedCount}/${serials.length} verified).`);
       return;
     }
+    if (action === 'approved' && isGrnStage && !opts.reject && !opts.revoke && !req.grn_number) {
+      toast.error('Enter and save the GRN number before approving.');
+      return;
+    }
+    if (action === 'approved' && isAssetCodeStage && !opts.reject && !opts.revoke && serials.length && serials.some((s) => !s.asset_code)) {
+      toast.error('Every serial needs a unique Asset Code before final approval.');
+      return;
+    }
+
     setBusy(true);
     try {
 
@@ -567,29 +599,51 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
     if (sns.length) {
       const { data } = await supabase
         .from('devices')
-        .select('serial_number,far_code,asset_group,warehouse,asset_status,status,model,configuration,sales_order')
+        .select('serial_number,far_code,asset_group,warehouse,asset_status,status,model,configuration,sales_order,asset_condition')
         .in('serial_number', sns);
       devs = data || [];
     }
     const byS = new Map(devs.map((d) => [d.serial_number, d]));
     const rows = [
-      ['Serial Number', 'Asset Code', 'Model', 'Configuration', 'Warehouse', 'Asset Group', 'Status', 'PO/SO', 'Duplicate', 'Existed Before'],
+      [
+        'Subject', 'Request Type', 'PO Number', 'GRN Number', 'Warehouse', 'Asset Type', 'Model', 'Configuration',
+        'Quantity', 'Serial Number', 'Asset Status', 'Asset Group', 'Asset Code', 'Asset Condition',
+        'Verified', 'Verification Result', 'Verified By', 'Verified At',
+        'Duplicate', 'Existed Before', 'Current Stage', 'Pending At', 'Request Status',
+        'Requested By', 'Requested At',
+      ],
       ...serials.map((s) => {
-        const d = byS.get(s.serial_number) || {};
+        const d: any = byS.get(s.serial_number) || {};
         return [
-          s.serial_number,
-          (s.asset_code || d.far_code) ?? '',
+          req.title ?? '',
+          REQUEST_TYPE_LABELS[req.type],
+          req.po_number ?? '',
+          req.grn_number ?? '',
+          s.warehouse ?? req.warehouse ?? '',
+          req.asset_type ?? '',
           d.model ?? req.model ?? '',
           d.configuration ?? req.configuration ?? '',
-          s.warehouse ?? req.warehouse ?? '',
+          req.quantity ?? serials.length,
+          s.serial_number,
+          s.asset_status || d.asset_status || req.asset_status || '',
           s.asset_group ?? req.asset_group ?? '',
-          s.asset_status || d.asset_status || '',
-          d.sales_order ?? req.po_number ?? '',
+          (s.asset_code || d.far_code) ?? '',
+          d.asset_condition ?? '',
+          s.verified ? 'Yes' : 'No',
+          s.verify_result ?? '',
+          s.verified_by ?? '',
+          s.verified_at ? fmtDateTime(s.verified_at) : '',
           s.is_duplicate ? 'Yes' : 'No',
           s.exists_in_devices ? 'Yes' : 'No',
+          flow.find((f) => f.key === req.current_stage)?.label ?? req.current_stage,
+          req.status === 'open' ? req.current_stage_dept : '',
+          req.status,
+          req.raised_by_email ?? '',
+          fmtDateTime(req.created_at),
         ];
       }),
     ];
+
     const csv = rows.map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(',')).join('\n');
     const blob = new Blob([csv], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);
@@ -652,6 +706,187 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
     }
   };
 
+  /** ---- Stage helpers: GRN + Asset Code ---- */
+  const codeRef = useRef<HTMLInputElement>(null);
+
+  const saveGrn = async () => {
+    if (!req) return;
+    setBusy(true);
+    try {
+      const { error } = await supabase
+        .from('requests')
+        .update({ grn_number: grnInput.trim() })
+        .eq('id', req.id);
+      if (error) throw error;
+      await supabase.from('request_stages').insert({
+        request_id: req.id,
+        stage_key: req.current_stage,
+        stage_label: `GRN recorded: ${grnInput.trim()}`,
+        order_index: currentIdx,
+        assigned_dept: req.current_stage_dept,
+        action: 'commented',
+        actor_id: profile?.id,
+        actor_email: profile?.email,
+        actor_dept: profile?.department,
+        comment: `GRN Number: ${grnInput.trim()}`,
+      });
+      toast.success('GRN saved');
+      await load();
+    } catch (e: any) {
+      toast.error(e.message || 'Could not save GRN');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const nextFreeAssetCode = async (): Promise<number> => {
+    const { data } = await supabase
+      .from('devices')
+      .select('far_code')
+      .not('far_code', 'is', null)
+      .order('far_code', { ascending: false })
+      .limit(1);
+    const { data: used } = await supabase
+      .from('request_serials')
+      .select('asset_code')
+      .not('asset_code', 'is', null);
+    const maxUsed = (used || []).reduce((m: number, r: any) => {
+      const n = Number(r.asset_code);
+      return isNaN(n) ? m : Math.max(m, n);
+    }, 0);
+    return Math.max(Number(data?.[0]?.far_code || 100000), maxUsed, 100000) + 1;
+  };
+
+  const autoGenerateAssetCodes = async () => {
+    if (!req) return;
+    setBusy(true);
+    try {
+      let code = await nextFreeAssetCode();
+      const targets = serials.filter((s) => !s.asset_code);
+      if (!targets.length) {
+        toast.info('All serials already have an asset code');
+        return;
+      }
+      for (const s of targets) {
+        const { error } = await supabase
+          .from('request_serials')
+          .update({ asset_code: String(code++) })
+          .eq('id', s.id);
+        if (error) throw error;
+      }
+      toast.success(`Generated ${targets.length} asset codes`);
+      await load();
+    } catch (e: any) {
+      toast.error(e.message || 'Could not generate asset codes');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const setAssetCode = async (id: string, value: string) => {
+    const v = value.trim();
+    if (v && serials.some((s) => s.id !== id && s.asset_code === v)) {
+      toast.error(`Asset code ${v} is already used in this request`);
+      return;
+    }
+    const { error } = await supabase
+      .from('request_serials')
+      .update({ asset_code: v || null })
+      .eq('id', id);
+    if (error) toast.error(error.message);
+    else await load();
+  };
+
+  const bulkAssetCodes = async (file: File) => {
+    setBusy(true);
+    try {
+      const text = await file.text();
+      const map = new Map<string, string>();
+      text.split(/\r?\n/).forEach((line) => {
+        const [a, b] = line.split(',').map((c) => (c || '').trim().replace(/^"|"$/g, ''));
+        if (!a || !b) return;
+        if (/serial/i.test(a)) return;
+        map.set(a, b);
+      });
+      let n = 0;
+      for (const s of serials) {
+        const code = map.get(s.serial_number);
+        if (code && code !== s.asset_code) {
+          const { error } = await supabase
+            .from('request_serials')
+            .update({ asset_code: code })
+            .eq('id', s.id);
+          if (error) throw error;
+          n++;
+        }
+      }
+      toast.success(`Updated ${n} asset codes`);
+      await load();
+    } catch (e: any) {
+      toast.error(e.message || 'Bulk asset code upload failed');
+    } finally {
+      setBusy(false);
+      if (codeRef.current) codeRef.current.value = '';
+    }
+  };
+
+  /** ---- Manual serial verification entry (audit-table style) ---- */
+  const checkSerialEntry = async (raw?: string) => {
+    const value = (raw ?? scanInput).trim();
+    if (!value) return;
+    const match = serials.find((s) => s.serial_number.toLowerCase() === value.toLowerCase());
+    if (!match) {
+      toast.error(`${value} is not part of this request`);
+      setScanInput('');
+      return;
+    }
+    setBusy(true);
+    try {
+      await setSerialVerification([match.id], true, 'Matched');
+      await load();
+      toast.success(`${value} verified`);
+      setScanInput('');
+    } catch (e: any) {
+      toast.error(e.message || 'Could not verify');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const clearAllVerification = async () => {
+    if (!serials.length) return;
+    setBusy(true);
+    try {
+      await supabase
+        .from('request_serials')
+        .update({ verified: false, verify_result: null, verified_by: null, verified_at: null })
+        .in('id', serials.map((s) => s.id));
+      await load();
+      toast.success('Verification cleared');
+    } catch (e: any) {
+      toast.error(e.message || 'Could not clear');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const saveSubject = async () => {
+    if (!req) return;
+    const v = subjectDraft.trim();
+    if (!v || v === req.title) {
+      setEditingSubject(false);
+      return;
+    }
+    const { error } = await supabase.from('requests').update({ title: v }).eq('id', req.id);
+    if (error) toast.error(error.message);
+    else {
+      toast.success('Subject updated');
+      await load();
+    }
+    setEditingSubject(false);
+  };
+
+
   if (!req) {
     return (
       <Dialog open={open} onOpenChange={onOpenChange}>
@@ -669,17 +904,48 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
       <DialogContent className='max-w-[98vw] w-full max-h-[95vh] overflow-hidden flex flex-col p-0'>
         <DialogHeader className='px-6 pt-6 pb-4 border-b'>
           <div className='flex items-start justify-between gap-4'>
-            <div>
-              <DialogTitle className='text-xl'>
-                {req.title || REQUEST_TYPE_LABELS[req.type]}
-              </DialogTitle>
-              <div className='text-xs text-muted-foreground mt-1'>
+            <div className='min-w-0 flex-1'>
+              {editingSubject ? (
+                <div className='flex items-center gap-2'>
+                  <Input
+                    value={subjectDraft}
+                    onChange={(e) => setSubjectDraft(e.target.value)}
+                    className='h-9 text-base font-semibold'
+                    autoFocus
+                  />
+                  <Button size='sm' onClick={saveSubject} disabled={busy}>Save</Button>
+                  <Button size='sm' variant='ghost' onClick={() => { setEditingSubject(false); setSubjectDraft(req.title || ''); }}>
+                    Cancel
+                  </Button>
+                </div>
+              ) : (
+                <DialogTitle className='text-xl flex items-center gap-2 min-w-0'>
+                  <span className='truncate'>{req.title || REQUEST_TYPE_LABELS[req.type]}</span>
+                  {req.status !== 'closed' && canEditSubject && (
+                    <button
+                      type='button'
+                      onClick={() => setEditingSubject(true)}
+                      className='text-muted-foreground hover:text-primary shrink-0'
+                      title='Edit subject'
+                    >
+                      <Pencil className='w-4 h-4' />
+                    </button>
+                  )}
+                </DialogTitle>
+              )}
+              <div className='text-xs text-muted-foreground mt-1 break-words'>
                 {REQUEST_TYPE_LABELS[req.type]}
-                {req.po_number ? ` · PO ${req.po_number}` : ''} · Raised by {req.raised_by_email} ({req.raised_dept})
+                {req.po_number ? ` · PO ${req.po_number}` : ''} · Raised by {req.raised_by_email} ({req.raised_dept}) · {fmtDateTime(req.created_at)}
               </div>
             </div>
-            <div className='flex items-center gap-2'>
+            <div className='flex items-center gap-2 shrink-0'>
+              <Badge variant='outline' className='font-bold text-[10px]'>
+                Pending at: {req.status === 'open' ? req.current_stage_dept : '—'}
+              </Badge>
               <Badge className='capitalize'>{req.status}</Badge>
+              <Button size='sm' variant='outline' onClick={downloadSerialsCsv} disabled={busy}>
+                <FileDown className='w-3.5 h-3.5 mr-1' /> CSV
+              </Button>
               {profile?.role === 'Super Admin' && (
                 <Button size='sm' variant='destructive' onClick={deleteRequest} disabled={busy}>
                   <Trash2 className='w-3.5 h-3.5 mr-1' /> Delete
@@ -687,6 +953,7 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
               )}
             </div>
           </div>
+
         </DialogHeader>
 
         <div className='grid grid-cols-12 gap-6 px-6 py-4 overflow-y-auto flex-1'>
@@ -720,28 +987,29 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
               })}
             </ol>
 
-            <div className='text-sm font-semibold pt-4 border-t'>History</div>
-            <div className='space-y-2 max-h-64 overflow-y-auto pr-1'>
+            <div className='text-sm font-semibold pt-4 border-t'>History <span className='text-[10px] font-normal text-muted-foreground'>(latest first)</span></div>
+            <div className='space-y-2 max-h-80 overflow-y-auto pr-1'>
+              {stages.length === 0 && (
+                <div className='text-xs text-muted-foreground italic'>No activity recorded yet.</div>
+              )}
               {stages.map((s) => (
-                <div key={s.id} className='text-xs p-2 rounded border bg-muted/30'>
-                  <div className='flex items-center justify-between'>
+                <div key={s.id} className='text-xs p-2 rounded border bg-muted/30 break-words'>
+                  <div className='flex items-start justify-between gap-2'>
                     <span className='font-medium capitalize'>{s.action}</span>
-                    <span className='text-muted-foreground'>
-                      {format(new Date(s.acted_at), 'MMM d, HH:mm')}
-                    </span>
+                    <span className='text-muted-foreground shrink-0'>{fmtDateTime(s.acted_at)}</span>
                   </div>
-                  <div className='text-muted-foreground mt-0.5'>{s.stage_label}</div>
-                  <div className='text-muted-foreground'>
+                  <div className='text-muted-foreground mt-0.5 break-words'>{s.stage_label}</div>
+                  <div className='text-muted-foreground break-all'>
                     {s.actor_email} · {s.actor_dept}
                   </div>
-                  {s.comment && <div className='mt-1 italic'>"{s.comment}"</div>}
+                  {s.comment && <div className='mt-1 italic break-words'>"{s.comment}"</div>}
                 </div>
               ))}
             </div>
           </div>
 
           {/* Right: details */}
-          <div className='col-span-8 space-y-4'>
+          <div className='col-span-8 space-y-4 min-w-0'>
             <div className='grid grid-cols-3 gap-3 text-sm'>
               {[
                 ['PO Number', req.po_number],
@@ -749,17 +1017,21 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
                 ['Asset Type', req.asset_type],
                 ['Model', req.model],
                 ['Configuration', req.configuration],
-                ['Quantity', req.quantity],
-                ['Status', req.asset_status],
-                ['Asset Group', req.asset_group],
-                ['Created', format(new Date(req.created_at), 'MMM d, yyyy HH:mm')],
+                ['Quantity', req.quantity ?? serials.length],
+                ['Asset Status', req.asset_status || serials.find((s) => s.asset_status)?.asset_status],
+                ['Asset Group', req.asset_group || serials.find((s) => s.asset_group)?.asset_group],
+                ['GRN Number', req.grn_number],
+                ['Pending At', req.status === 'open' ? req.current_stage_dept : '—'],
+                ['Requested By', req.raised_by_email],
+                ['Requested At', fmtDateTime(req.created_at)],
               ].map(([k, v]) => (
-                <div key={k as string} className='p-2 rounded border bg-muted/30'>
+                <div key={k as string} className='p-2 rounded border bg-muted/30 min-w-0'>
                   <div className='text-[10px] uppercase text-muted-foreground'>{k}</div>
-                  <div className='truncate'>{v || '-'}</div>
+                  <div className='truncate' title={v ? String(v) : '-'}>{v || '-'}</div>
                 </div>
               ))}
             </div>
+
             {req.notes && (
               <div className='p-3 rounded border bg-muted/30 text-sm'>
                 <div className='text-[10px] uppercase text-muted-foreground mb-1'>Notes</div>
@@ -813,10 +1085,43 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
                         <Button size='sm' variant='outline' onClick={verifyAllSerials} disabled={busy}>
                           <CheckCircle2 className='w-3.5 h-3.5 mr-1' /> Verify All
                         </Button>
+                        <Button size='sm' variant='ghost' onClick={clearAllVerification} disabled={busy}>
+                          <X className='w-3.5 h-3.5 mr-1' /> Clear All
+                        </Button>
                       </>
                     )}
                   </div>
                 </div>
+
+                {isVerifyStage && canAct && (
+                  <div className='p-3 rounded-xl border border-amber-100 bg-amber-50/40 space-y-2'>
+                    <div className='text-xs font-black uppercase tracking-widest text-amber-700 flex items-center gap-2'>
+                      <ScanLine className='w-4 h-4' /> Verify received serial numbers physically
+                    </div>
+                    <div className='flex flex-wrap gap-2'>
+                      <Input
+                        value={scanInput}
+                        onChange={(e) => setScanInput(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            checkSerialEntry();
+                          }
+                        }}
+                        placeholder='Scan or type a serial number, then press Enter'
+                        className='h-9 text-sm flex-1 min-w-[240px] font-mono'
+                        autoComplete='off'
+                      />
+                      <Button size='sm' onClick={() => checkSerialEntry()} disabled={busy || !scanInput.trim()}>
+                        <Check className='w-3.5 h-3.5 mr-1' /> Check
+                      </Button>
+                    </div>
+                    <p className='text-[10px] text-muted-foreground'>
+                      Scanner-friendly: each scan verifies the serial instantly. Use Bulk Verify to upload a CSV of physically received serials.
+                    </p>
+                  </div>
+                )}
+
 
                 <div className='relative'>
                   <Search className='absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400' />
@@ -864,7 +1169,23 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
                           <td className='px-2 py-1.5 font-mono'>{s.serial_number}</td>
                           <td className='px-2 py-1.5'>{s.asset_status || req.asset_status || '-'}</td>
                           <td className='px-2 py-1.5'>{s.asset_group || '-'}</td>
-                          <td className='px-2 py-1.5 font-mono'>{s.asset_code || '-'}</td>
+                          <td className='px-2 py-1.5 font-mono'>
+                            {isAssetCodeStage && canAct ? (
+                              <Input
+                                defaultValue={s.asset_code || ''}
+                                onBlur={(e) => {
+                                  if ((e.target.value || '') !== (s.asset_code || '')) {
+                                    setAssetCode(s.id, e.target.value);
+                                  }
+                                }}
+                                placeholder='—'
+                                className='h-7 w-28 text-[11px] font-mono'
+                              />
+                            ) : (
+                              s.asset_code || '-'
+                            )}
+                          </td>
+
                           <td className='px-2 py-1.5'>
                             <button
                               type='button'
@@ -884,7 +1205,7 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
                           </td>
                           <td className='px-2 py-1.5 text-muted-foreground'>{s.verified_by || '-'}</td>
                           <td className='px-2 py-1.5 text-muted-foreground'>
-                            {s.verified_at ? format(new Date(s.verified_at), 'MMM d, yyyy, hh:mm a') : '-'}
+                            {s.verified_at ? fmtDateTime(s.verified_at) : '-'}
                           </td>
                           <td className='px-2 py-1.5'>
                             {s.exists_in_devices && (
@@ -965,7 +1286,7 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
                             <div className='truncate flex flex-col'>
                               <div className='font-bold text-slate-600 truncate line-through'>{d.file_name}</div>
                               <div className='text-[9px] text-slate-400 font-medium'>
-                                Deleted by {d.deleted_by_email} · {d.deleted_at ? format(new Date(d.deleted_at), 'MMM d, HH:mm') : ''}
+                                Deleted by {d.deleted_by_email} · {d.deleted_at ? fmtDateTime(d.deleted_at) : ''}
                               </div>
                             </div>
                           </div>
@@ -1002,7 +1323,7 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
                       <div className='truncate flex flex-col'>
                         <div className='font-bold text-slate-700 truncate'>{d.file_name}</div>
                         <div className='text-[10px] text-slate-400 font-medium'>
-                          {d.uploaded_by_email} · {format(new Date(d.uploaded_at), 'MMM d, HH:mm')}
+                          {d.uploaded_by_email} · {fmtDateTime(d.uploaded_at)}
                         </div>
                       </div>
                     </div>
@@ -1025,9 +1346,56 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
             )}
           </div>
 
+            {/* Stage specific inputs */}
+            {req.status === 'open' && isGrnStage && canAct && (
+              <div className='p-3 rounded-xl border border-blue-100 bg-blue-50/40 space-y-2'>
+                <div className='text-xs font-black uppercase tracking-widest text-blue-700'>Take GRN</div>
+                <div className='flex gap-2'>
+                  <Input
+                    value={grnInput}
+                    onChange={(e) => setGrnInput(e.target.value)}
+                    placeholder='Enter GRN number'
+                    className='h-9 text-sm'
+                  />
+                  <Button size='sm' onClick={saveGrn} disabled={busy || !grnInput.trim()}>
+                    Save GRN
+                  </Button>
+                </div>
+                <p className='text-[10px] text-muted-foreground'>GRN number is required before approving this stage.</p>
+              </div>
+            )}
+
+            {req.status === 'open' && isAssetCodeStage && canAct && (
+              <div className='p-3 rounded-xl border border-emerald-100 bg-emerald-50/40 space-y-2'>
+                <div className='text-xs font-black uppercase tracking-widest text-emerald-700'>Generate Asset Code</div>
+                <div className='flex flex-wrap gap-2'>
+                  <Button size='sm' variant='outline' onClick={autoGenerateAssetCodes} disabled={busy}>
+                    Auto-generate for missing
+                  </Button>
+                  <input
+                    ref={codeRef}
+                    type='file'
+                    accept='.csv,.txt'
+                    className='hidden'
+                    onChange={(e) => {
+                      const f = e.target.files?.[0];
+                      if (f) bulkAssetCodes(f);
+                    }}
+                  />
+                  <Button size='sm' variant='outline' onClick={() => codeRef.current?.click()} disabled={busy}>
+                    <Upload className='w-3.5 h-3.5 mr-1' /> Bulk upload asset codes
+                  </Button>
+                </div>
+                <p className='text-[10px] text-muted-foreground'>
+                  CSV format: <span className='font-mono'>serial_number,asset_code</span>. Asset codes must be unique; you can also edit them one by one in the table above.
+                </p>
+              </div>
+            )}
+
             {/* Action */}
             {req.status === 'open' && (
               <div className='pt-4 border-t space-y-2'>
+
                 <MentionTextarea
                   value={comment}
                   onChange={setComment}

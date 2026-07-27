@@ -660,6 +660,7 @@ export type Database = {
           created_at: string
           current_stage: string
           current_stage_dept: string
+          grn_number: string | null
           id: string
           model: string | null
           notes: string | null
@@ -684,6 +685,7 @@ export type Database = {
           created_at?: string
           current_stage: string
           current_stage_dept: string
+          grn_number?: string | null
           id?: string
           model?: string | null
           notes?: string | null
@@ -708,6 +710,7 @@ export type Database = {
           created_at?: string
           current_stage?: string
           current_stage_dept?: string
+          grn_number?: string | null
           id?: string
           model?: string | null
           notes?: string | null
