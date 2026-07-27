@@ -965,28 +965,29 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
               })}
             </ol>
 
-            <div className='text-sm font-semibold pt-4 border-t'>History</div>
-            <div className='space-y-2 max-h-64 overflow-y-auto pr-1'>
+            <div className='text-sm font-semibold pt-4 border-t'>History <span className='text-[10px] font-normal text-muted-foreground'>(latest first)</span></div>
+            <div className='space-y-2 max-h-80 overflow-y-auto pr-1'>
+              {stages.length === 0 && (
+                <div className='text-xs text-muted-foreground italic'>No activity recorded yet.</div>
+              )}
               {stages.map((s) => (
-                <div key={s.id} className='text-xs p-2 rounded border bg-muted/30'>
-                  <div className='flex items-center justify-between'>
+                <div key={s.id} className='text-xs p-2 rounded border bg-muted/30 break-words'>
+                  <div className='flex items-start justify-between gap-2'>
                     <span className='font-medium capitalize'>{s.action}</span>
-                    <span className='text-muted-foreground'>
-                      {format(new Date(s.acted_at), 'MMM d, HH:mm')}
-                    </span>
+                    <span className='text-muted-foreground shrink-0'>{fmtDateTime(s.acted_at)}</span>
                   </div>
-                  <div className='text-muted-foreground mt-0.5'>{s.stage_label}</div>
-                  <div className='text-muted-foreground'>
+                  <div className='text-muted-foreground mt-0.5 break-words'>{s.stage_label}</div>
+                  <div className='text-muted-foreground break-all'>
                     {s.actor_email} · {s.actor_dept}
                   </div>
-                  {s.comment && <div className='mt-1 italic'>"{s.comment}"</div>}
+                  {s.comment && <div className='mt-1 italic break-words'>"{s.comment}"</div>}
                 </div>
               ))}
             </div>
           </div>
 
           {/* Right: details */}
-          <div className='col-span-8 space-y-4'>
+          <div className='col-span-8 space-y-4 min-w-0'>
             <div className='grid grid-cols-3 gap-3 text-sm'>
               {[
                 ['PO Number', req.po_number],
@@ -994,17 +995,21 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
                 ['Asset Type', req.asset_type],
                 ['Model', req.model],
                 ['Configuration', req.configuration],
-                ['Quantity', req.quantity],
-                ['Status', req.asset_status],
-                ['Asset Group', req.asset_group],
-                ['Created', format(new Date(req.created_at), 'MMM d, yyyy HH:mm')],
+                ['Quantity', req.quantity ?? serials.length],
+                ['Asset Status', req.asset_status || serials.find((s) => s.asset_status)?.asset_status],
+                ['Asset Group', req.asset_group || serials.find((s) => s.asset_group)?.asset_group],
+                ['GRN Number', req.grn_number],
+                ['Pending At', req.status === 'open' ? req.current_stage_dept : '—'],
+                ['Requested By', req.raised_by_email],
+                ['Requested At', fmtDateTime(req.created_at)],
               ].map(([k, v]) => (
-                <div key={k as string} className='p-2 rounded border bg-muted/30'>
+                <div key={k as string} className='p-2 rounded border bg-muted/30 min-w-0'>
                   <div className='text-[10px] uppercase text-muted-foreground'>{k}</div>
-                  <div className='truncate'>{v || '-'}</div>
+                  <div className='truncate' title={v ? String(v) : '-'}>{v || '-'}</div>
                 </div>
               ))}
             </div>
+
             {req.notes && (
               <div className='p-3 rounded border bg-muted/30 text-sm'>
                 <div className='text-[10px] uppercase text-muted-foreground mb-1'>Notes</div>
