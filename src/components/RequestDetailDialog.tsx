@@ -599,7 +599,7 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
     if (sns.length) {
       const { data } = await supabase
         .from('devices')
-        .select('serial_number,far_code,asset_group,warehouse,asset_status,status,model,configuration,sales_order')
+        .select('serial_number,far_code,asset_group,warehouse,asset_status,status,model,configuration,sales_order,asset_condition')
         .in('serial_number', sns);
       devs = data || [];
     }
@@ -1205,7 +1205,7 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
                           </td>
                           <td className='px-2 py-1.5 text-muted-foreground'>{s.verified_by || '-'}</td>
                           <td className='px-2 py-1.5 text-muted-foreground'>
-                            {s.verified_at ? format(new Date(s.verified_at), 'MMM d, yyyy, hh:mm a') : '-'}
+                            {s.verified_at ? fmtDateTime(s.verified_at) : '-'}
                           </td>
                           <td className='px-2 py-1.5'>
                             {s.exists_in_devices && (
@@ -1286,7 +1286,7 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
                             <div className='truncate flex flex-col'>
                               <div className='font-bold text-slate-600 truncate line-through'>{d.file_name}</div>
                               <div className='text-[9px] text-slate-400 font-medium'>
-                                Deleted by {d.deleted_by_email} · {d.deleted_at ? format(new Date(d.deleted_at), 'MMM d, HH:mm') : ''}
+                                Deleted by {d.deleted_by_email} · {d.deleted_at ? fmtDateTime(d.deleted_at) : ''}
                               </div>
                             </div>
                           </div>
@@ -1323,7 +1323,7 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
                       <div className='truncate flex flex-col'>
                         <div className='font-bold text-slate-700 truncate'>{d.file_name}</div>
                         <div className='text-[10px] text-slate-400 font-medium'>
-                          {d.uploaded_by_email} · {format(new Date(d.uploaded_at), 'MMM d, HH:mm')}
+                          {d.uploaded_by_email} · {fmtDateTime(d.uploaded_at)}
                         </div>
                       </div>
                     </div>
