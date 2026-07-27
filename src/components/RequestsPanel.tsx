@@ -20,6 +20,8 @@ import { REQUEST_TYPE_LABELS, getFlow, RequestType, RequestStatus } from '@/lib/
 import { hasFullAccess, isLocationScopedDept } from '@/lib/appTabs';
 
 import { formatDistanceToNow } from 'date-fns';
+import { fmtDateTime } from '@/lib/dateFormat';
+
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import CreateRequestDialog from './CreateRequestDialog';
