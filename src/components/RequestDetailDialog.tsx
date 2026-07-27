@@ -1063,10 +1063,43 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
                         <Button size='sm' variant='outline' onClick={verifyAllSerials} disabled={busy}>
                           <CheckCircle2 className='w-3.5 h-3.5 mr-1' /> Verify All
                         </Button>
+                        <Button size='sm' variant='ghost' onClick={clearAllVerification} disabled={busy}>
+                          <X className='w-3.5 h-3.5 mr-1' /> Clear All
+                        </Button>
                       </>
                     )}
                   </div>
                 </div>
+
+                {isVerifyStage && canAct && (
+                  <div className='p-3 rounded-xl border border-amber-100 bg-amber-50/40 space-y-2'>
+                    <div className='text-xs font-black uppercase tracking-widest text-amber-700 flex items-center gap-2'>
+                      <ScanLine className='w-4 h-4' /> Verify received serial numbers physically
+                    </div>
+                    <div className='flex flex-wrap gap-2'>
+                      <Input
+                        value={scanInput}
+                        onChange={(e) => setScanInput(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            checkSerialEntry();
+                          }
+                        }}
+                        placeholder='Scan or type a serial number, then press Enter'
+                        className='h-9 text-sm flex-1 min-w-[240px] font-mono'
+                        autoComplete='off'
+                      />
+                      <Button size='sm' onClick={() => checkSerialEntry()} disabled={busy || !scanInput.trim()}>
+                        <Check className='w-3.5 h-3.5 mr-1' /> Check
+                      </Button>
+                    </div>
+                    <p className='text-[10px] text-muted-foreground'>
+                      Scanner-friendly: each scan verifies the serial instantly. Use Bulk Verify to upload a CSV of physically received serials.
+                    </p>
+                  </div>
+                )}
+
 
                 <div className='relative'>
                   <Search className='absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400' />
