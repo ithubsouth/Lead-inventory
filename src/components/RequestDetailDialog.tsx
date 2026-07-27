@@ -290,6 +290,15 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
       toast.error(`Verify all serials first (${verifiedCount}/${serials.length} verified).`);
       return;
     }
+    if (action === 'approved' && isGrnStage && !opts.reject && !opts.revoke && !req.grn_number) {
+      toast.error('Enter and save the GRN number before approving.');
+      return;
+    }
+    if (action === 'approved' && isAssetCodeStage && !opts.reject && !opts.revoke && serials.length && serials.some((s) => !s.asset_code)) {
+      toast.error('Every serial needs a unique Asset Code before final approval.');
+      return;
+    }
+
     setBusy(true);
     try {
 
