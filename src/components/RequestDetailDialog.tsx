@@ -652,6 +652,187 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
     }
   };
 
+  /** ---- Stage helpers: GRN + Asset Code ---- */
+  const codeRef = useRef<HTMLInputElement>(null);
+
+  const saveGrn = async () => {
+    if (!req) return;
+    setBusy(true);
+    try {
+      const { error } = await supabase
+        .from('requests')
+        .update({ grn_number: grnInput.trim() })
+        .eq('id', req.id);
+      if (error) throw error;
+      await supabase.from('request_stages').insert({
+        request_id: req.id,
+        stage_key: req.current_stage,
+        stage_label: `GRN recorded: ${grnInput.trim()}`,
+        order_index: currentIdx,
+        assigned_dept: req.current_stage_dept,
+        action: 'commented',
+        actor_id: profile?.id,
+        actor_email: profile?.email,
+        actor_dept: profile?.department,
+        comment: `GRN Number: ${grnInput.trim()}`,
+      });
+      toast.success('GRN saved');
+      await load();
+    } catch (e: any) {
+      toast.error(e.message || 'Could not save GRN');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const nextFreeAssetCode = async (): Promise<number> => {
+    const { data } = await supabase
+      .from('devices')
+      .select('far_code')
+      .not('far_code', 'is', null)
+      .order('far_code', { ascending: false })
+      .limit(1);
+    const { data: used } = await supabase
+      .from('request_serials')
+      .select('asset_code')
+      .not('asset_code', 'is', null);
+    const maxUsed = (used || []).reduce((m: number, r: any) => {
+      const n = Number(r.asset_code);
+      return isNaN(n) ? m : Math.max(m, n);
+    }, 0);
+    return Math.max(Number(data?.[0]?.far_code || 100000), maxUsed, 100000) + 1;
+  };
+
+  const autoGenerateAssetCodes = async () => {
+    if (!req) return;
+    setBusy(true);
+    try {
+      let code = await nextFreeAssetCode();
+      const targets = serials.filter((s) => !s.asset_code);
+      if (!targets.length) {
+        toast.info('All serials already have an asset code');
+        return;
+      }
+      for (const s of targets) {
+        const { error } = await supabase
+          .from('request_serials')
+          .update({ asset_code: String(code++) })
+          .eq('id', s.id);
+        if (error) throw error;
+      }
+      toast.success(`Generated ${targets.length} asset codes`);
+      await load();
+    } catch (e: any) {
+      toast.error(e.message || 'Could not generate asset codes');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const setAssetCode = async (id: string, value: string) => {
+    const v = value.trim();
+    if (v && serials.some((s) => s.id !== id && s.asset_code === v)) {
+      toast.error(`Asset code ${v} is already used in this request`);
+      return;
+    }
+    const { error } = await supabase
+      .from('request_serials')
+      .update({ asset_code: v || null })
+      .eq('id', id);
+    if (error) toast.error(error.message);
+    else await load();
+  };
+
+  const bulkAssetCodes = async (file: File) => {
+    setBusy(true);
+    try {
+      const text = await file.text();
+      const map = new Map<string, string>();
+      text.split(/\r?\n/).forEach((line) => {
+        const [a, b] = line.split(',').map((c) => (c || '').trim().replace(/^"|"$/g, ''));
+        if (!a || !b) return;
+        if (/serial/i.test(a)) return;
+        map.set(a, b);
+      });
+      let n = 0;
+      for (const s of serials) {
+        const code = map.get(s.serial_number);
+        if (code && code !== s.asset_code) {
+          const { error } = await supabase
+            .from('request_serials')
+            .update({ asset_code: code })
+            .eq('id', s.id);
+          if (error) throw error;
+          n++;
+        }
+      }
+      toast.success(`Updated ${n} asset codes`);
+      await load();
+    } catch (e: any) {
+      toast.error(e.message || 'Bulk asset code upload failed');
+    } finally {
+      setBusy(false);
+      if (codeRef.current) codeRef.current.value = '';
+    }
+  };
+
+  /** ---- Manual serial verification entry (audit-table style) ---- */
+  const checkSerialEntry = async (raw?: string) => {
+    const value = (raw ?? scanInput).trim();
+    if (!value) return;
+    const match = serials.find((s) => s.serial_number.toLowerCase() === value.toLowerCase());
+    if (!match) {
+      toast.error(`${value} is not part of this request`);
+      setScanInput('');
+      return;
+    }
+    setBusy(true);
+    try {
+      await setSerialVerification([match.id], true, 'Matched');
+      await load();
+      toast.success(`${value} verified`);
+      setScanInput('');
+    } catch (e: any) {
+      toast.error(e.message || 'Could not verify');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const clearAllVerification = async () => {
+    if (!serials.length) return;
+    setBusy(true);
+    try {
+      await supabase
+        .from('request_serials')
+        .update({ verified: false, verify_result: null, verified_by: null, verified_at: null })
+        .in('id', serials.map((s) => s.id));
+      await load();
+      toast.success('Verification cleared');
+    } catch (e: any) {
+      toast.error(e.message || 'Could not clear');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const saveSubject = async () => {
+    if (!req) return;
+    const v = subjectDraft.trim();
+    if (!v || v === req.title) {
+      setEditingSubject(false);
+      return;
+    }
+    const { error } = await supabase.from('requests').update({ title: v }).eq('id', req.id);
+    if (error) toast.error(error.message);
+    else {
+      toast.success('Subject updated');
+      await load();
+    }
+    setEditingSubject(false);
+  };
+
+
   if (!req) {
     return (
       <Dialog open={open} onOpenChange={onOpenChange}>
