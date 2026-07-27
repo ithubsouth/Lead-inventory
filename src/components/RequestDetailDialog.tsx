@@ -212,7 +212,10 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
     });
 
   const isVerifyStage = !!req && req.current_stage === 'tech_verify_serials';
+  const isGrnStage = !!req && req.current_stage === 'scm_take_grn';
+  const isAssetCodeStage = !!req && req.current_stage === 'finance_approve';
   const verifiedCount = serials.filter((s) => s.verified).length;
+
 
   const notifyMentions = async (text: string) => {
     if (!req) return;
