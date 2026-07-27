@@ -34,6 +34,9 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 
+import TabAccessSelect from './TabAccessSelect';
+import { ADMIN_DEPARTMENT } from '@/lib/appTabs';
+
 interface AppUser {
   id: string;
   email: string;
@@ -41,6 +44,7 @@ interface AppUser {
   department?: string;
   role?: 'Super Admin' | 'Admin' | 'Operator' | 'Reporter';
   location?: string;
+  tab_access?: string[] | null;
 }
 
 const Combobox = ({
@@ -140,6 +144,7 @@ export const UserProfile = () => {
   const [department, setDepartment] = useState(user?.user_metadata?.department || '');
   const [role, setRole] = useState<string>('');
   const [location, setLocation] = useState<string>('General');
+  const [tabAccess, setTabAccess] = useState<string[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [users, setUsers] = useState<AppUser[]>([]);
   const [selectedUser, setSelectedUser] = useState<AppUser | null>(null);
@@ -284,6 +289,7 @@ export const UserProfile = () => {
     setDepartment(user.department || '');
     setRole(user.role || '');
     setLocation(user.location || 'General');
+    setTabAccess(user.tab_access || []);
     setOpenEditUser(true);
     setErrorMessage('');
   };
@@ -317,6 +323,7 @@ export const UserProfile = () => {
           department,
           role: updateRole,
           location: location,
+          tab_access: tabAccess.length ? tabAccess : null,
         })
         .eq('id', selectedUser.id);
       if (error) throw error;
@@ -457,6 +464,7 @@ export const UserProfile = () => {
     setDepartment('');
     setRole('');
     setLocation('General');
+    setTabAccess([]);
     setErrorMessage('');
   };
 
@@ -801,6 +809,17 @@ export const UserProfile = () => {
                   )}
                 </SelectContent>
               </Select>
+            </div>
+            <div>
+              <Label className="text-sm">Tab Access</Label>
+              <TabAccessSelect
+                value={tabAccess}
+                onChange={setTabAccess}
+                fullAccess={department === ADMIN_DEPARTMENT || role === 'Super Admin'}
+              />
+              <p className="text-[10px] text-muted-foreground mt-1">
+                Leave empty to give Approvals-only access.
+              </p>
             </div>
             <div>
               <Label className="text-sm">Location *</Label>
