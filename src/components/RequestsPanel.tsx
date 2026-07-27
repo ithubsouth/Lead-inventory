@@ -283,15 +283,20 @@ export default function RequestsPanel({ focusRequestId, onFocusHandled }: Props)
         </div>
       </div>
 
-      <div className='bg-white border-y border-slate-100 overflow-hidden relative'>
-        <div className='sticky top-0 z-20 grid grid-cols-12 gap-3 px-8 py-4 text-[10px] font-black uppercase tracking-[0.15em] text-slate-400 border-b bg-slate-50/80 backdrop-blur-md shadow-sm'>
-          <div className='col-span-3'>Request Details</div>
-          <div className='col-span-3'>Workflow Stage</div>
-          <div className='col-span-2'>Raiser Information</div>
+      <div className='bg-white border-y border-slate-100 overflow-x-auto relative'>
+        <div className='min-w-[1180px]'>
+        <div className='sticky top-0 z-20 grid grid-cols-12 gap-3 px-6 py-4 text-[10px] font-black uppercase tracking-[0.15em] text-slate-400 border-b bg-slate-50/80 backdrop-blur-md shadow-sm'>
+          <div className='col-span-3'>Subject</div>
+          <div className='col-span-1'>PO Number</div>
+          <div className='col-span-1'>Warehouse</div>
+          <div className='col-span-1'>Asset Type</div>
           <div className='col-span-1 text-center'>Qty</div>
-          <div className='col-span-2'>Activity</div>
+          <div className='col-span-2'>Requested By</div>
+          <div className='col-span-1'>Requested At</div>
+          <div className='col-span-1'>Pending At</div>
           <div className='col-span-1 text-right'>Status</div>
         </div>
+
 
         {loading ? (
           <div className='px-6 py-32 text-center'>
