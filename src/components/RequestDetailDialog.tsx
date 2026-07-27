@@ -125,7 +125,12 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
   const [serialSearchQuery, setSerialSearchQuery] = useState('');
   const [comment, setComment] = useState('');
   const [busy, setBusy] = useState(false);
+  const [grnInput, setGrnInput] = useState('');
+  const [scanInput, setScanInput] = useState('');
+  const [editingSubject, setEditingSubject] = useState(false);
+  const [subjectDraft, setSubjectDraft] = useState('');
   const fileRef = useRef<HTMLInputElement>(null);
+
 
   const load = async () => {
     const [{ data: r }, { data: s }, { data: sn }, { data: d }] = await Promise.all([
