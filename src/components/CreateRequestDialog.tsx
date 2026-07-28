@@ -10,6 +10,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
+import { Badge } from '@/components/ui/badge';
 import {
   Select,
   SelectContent,
@@ -68,6 +69,9 @@ export default function CreateRequestDialog({ open, onOpenChange, onCreated }: P
   const [poNumber, setPoNumber] = useState('');
   const [receivedFrom, setReceivedFrom] = useState('');
   const [stockQuery, setStockQuery] = useState('');
+  const [stockFilterStatus, setStockFilterStatus] = useState<string>('');
+  const [stockFilterGroup, setStockFilterGroup] = useState<string>('');
+  const [stockFilterCondition, setStockFilterCondition] = useState<string>('');
   const [stockLoading, setStockLoading] = useState(false);
   const [stockDevices, setStockDevices] = useState<any[]>([]);
   const [warehouse, setWarehouse] = useState('');
@@ -295,12 +299,20 @@ export default function CreateRequestDialog({ open, onOpenChange, onCreated }: P
       setStockLoading(true);
       let q = supabase
         .from('devices')
-        .select('serial_number, asset_type, model, warehouse, asset_group, asset_status, configuration')
+        .select('serial_number, asset_type, model, warehouse, asset_group, asset_status, configuration, asset_condition')
         .eq('is_deleted', false)
-        .order('created_at', { ascending: false })
-        .limit(100);
+        .in('status', ['Available', 'Stock'])
+        .order('created_at', { ascending: false });
+
       if (stockQuery.trim()) q = q.ilike('serial_number', `%${stockQuery.trim()}%`);
       if (warehouse) q = q.eq('warehouse', warehouse);
+      if (assetType) q = q.eq('asset_type', assetType);
+      if (model) q = q.eq('model', model);
+      if (configuration) q = q.eq('configuration', configuration);
+      if (stockFilterGroup && stockFilterGroup !== 'ALL_GROUPS') q = q.eq('asset_group', stockFilterGroup);
+      if (stockFilterStatus && stockFilterStatus !== 'ALL_STATUSES') q = q.eq('asset_status', stockFilterStatus);
+      if (stockFilterCondition) q = q.ilike('asset_condition', `%${stockFilterCondition}%`);
+
       const { data } = await q;
       if (!cancelled) {
         setStockDevices(data || []);
@@ -311,7 +323,7 @@ export default function CreateRequestDialog({ open, onOpenChange, onCreated }: P
       cancelled = true;
       clearTimeout(t);
     };
-  }, [type, stockQuery, warehouse]);
+  }, [type, stockQuery, warehouse, assetType, model, configuration, stockFilterGroup, stockFilterStatus, stockFilterCondition]);
 
   const addStockSerial = (d: any) => {
     setSerialEntries(prev => {
@@ -580,57 +592,6 @@ export default function CreateRequestDialog({ open, onOpenChange, onCreated }: P
                 placeholder='Stock'
               />
             </div>
-            {type === 'asset_movement' && (
-              <div className='col-span-2 rounded-xl border border-blue-100 bg-blue-50/40 p-3 space-y-2'>
-                <div className='flex items-center justify-between gap-3'>
-                  <span className='text-[10px] font-black uppercase tracking-widest text-blue-700'>
-                    Pick serials available in stock
-                  </span>
-                  <div className='relative w-64'>
-                    <Input
-                      value={stockQuery}
-                      onChange={(e) => setStockQuery(e.target.value)}
-                      placeholder='Search stock serials...'
-                      className='h-8 text-xs pr-8'
-                    />
-                    <Search className='absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400' />
-                  </div>
-                </div>
-                <div className='max-h-48 overflow-y-auto rounded-lg bg-white border border-blue-100 divide-y'>
-                  {stockLoading && (
-                    <div className='p-3 text-xs text-muted-foreground flex items-center gap-2'>
-                      <Loader2 className='w-3.5 h-3.5 animate-spin' /> Loading stock serials...
-                    </div>
-                  )}
-                  {!stockLoading && stockDevices.length === 0 && (
-                    <div className='p-3 text-xs text-muted-foreground'>No stock serials found.</div>
-                  )}
-                  {stockDevices.map((d) => {
-                    const picked = serialEntries.some((e) => e.serial_number === d.serial_number);
-                    return (
-                      <button
-                        key={d.serial_number}
-                        type='button'
-                        onClick={() => addStockSerial(d)}
-                        disabled={picked}
-                        className={cn(
-                          'w-full text-left px-3 py-2 text-xs flex items-center justify-between hover:bg-blue-50 transition-colors',
-                          picked && 'opacity-40 cursor-not-allowed'
-                        )}
-                      >
-                        <span className='font-mono font-bold'>{d.serial_number}</span>
-                        <span className='text-[10px] text-slate-500'>
-                          {[d.asset_type, d.model, d.warehouse, d.asset_group].filter(Boolean).join(' · ')}
-                        </span>
-                      </button>
-                    );
-                  })}
-                </div>
-                <p className='text-[10px] text-muted-foreground'>
-                  Approving this request updates the asset group and asset code on these existing assets — no new order is created.
-                </p>
-              </div>
-            )}
             <div>
               <Label>Warehouse</Label>
               <Select value={warehouse} onValueChange={setWarehouse}>
@@ -683,6 +644,129 @@ export default function CreateRequestDialog({ open, onOpenChange, onCreated }: P
               />
             </div>
           </div>
+
+          {type === 'asset_movement' && (
+            <div className='rounded-xl border border-blue-100 bg-blue-50/40 p-4 space-y-4'>
+              <div className='flex items-center justify-between gap-3'>
+                <div className='flex items-center gap-3'>
+                  <span className='text-xs font-black uppercase tracking-widest text-blue-700'>
+                    Pick serials available in stock
+                  </span>
+                  <div className='flex gap-1.5'>
+                    <Badge variant="outline" className="bg-blue-100/50 text-blue-700 border-blue-200 font-bold text-xs h-6 px-3">
+                      {serialEntries.filter(e => e.serial_number?.trim()).length} Picked
+                    </Badge>
+                  </div>
+                </div>
+                <div className='flex items-center gap-2'>
+                  <div className='relative w-64'>
+                    <Input
+                      value={stockQuery}
+                      onChange={(e) => setStockQuery(e.target.value)}
+                      placeholder='Search serials...'
+                      className='h-10 text-sm pr-8 bg-white border-blue-100 shadow-sm'
+                    />
+                    <Search className='absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400' />
+                  </div>
+                </div>
+              </div>
+
+              <div className='grid grid-cols-3 gap-4 bg-white/60 p-4 rounded-lg border border-blue-100'>
+                <div className='space-y-1.5'>
+                  <Label className='text-xs font-bold text-blue-700 uppercase tracking-tight'>1. Filter Status</Label>
+                  <Select value={stockFilterStatus} onValueChange={setStockFilterStatus}>
+                    <SelectTrigger className="h-10 text-sm bg-white border-blue-100 shadow-sm"><SelectValue placeholder='All Statuses' /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="ALL_STATUSES">All Statuses</SelectItem>
+                      {assetStatuses.map((s) => (
+                        <SelectItem key={s} value={s}>{s}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className='space-y-1.5'>
+                  <Label className='text-xs font-bold text-blue-700 uppercase tracking-tight'>2. Filter Group</Label>
+                  <Select value={stockFilterGroup} onValueChange={setStockFilterGroup}>
+                    <SelectTrigger className="h-10 text-sm bg-white border-blue-100 shadow-sm"><SelectValue placeholder='All Groups' /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="ALL_GROUPS">All Groups</SelectItem>
+                      {assetGroups.map((a) => (
+                        <SelectItem key={a} value={a}>{a}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className='space-y-1.5'>
+                  <Label className='text-xs font-bold text-blue-700 uppercase tracking-tight'>3. Filter Condition</Label>
+                  <Input
+                    value={stockFilterCondition}
+                    onChange={(e) => setStockFilterCondition(e.target.value)}
+                    placeholder='Type condition...'
+                    className='h-10 text-sm bg-white border-blue-100 shadow-sm'
+                  />
+                </div>
+              </div>
+
+              <div className='max-h-[500px] overflow-y-auto rounded-lg bg-white border border-blue-100 grid grid-cols-2 divide-x divide-y shadow-inner'>
+                {stockLoading && (
+                  <div className='col-span-2 p-10 text-sm text-muted-foreground flex flex-col items-center justify-center gap-3'>
+                    <Loader2 className='w-6 h-6 animate-spin text-blue-600' />
+                    <span>Loading available inventory...</span>
+                  </div>
+                )}
+                {!stockLoading && stockDevices.length === 0 && (
+                  <div className='col-span-2 p-10 text-sm text-muted-foreground text-center italic'>No matching stock serials found.</div>
+                )}
+                {stockDevices.map((d) => {
+                  const picked = serialEntries.some((e) => e.serial_number === d.serial_number);
+                  return (
+                    <button
+                      key={d.serial_number}
+                      type='button'
+                      onClick={() => addStockSerial(d)}
+                      disabled={picked}
+                      className={cn(
+                        'w-full text-left px-5 py-4 hover:bg-blue-50 transition-all group relative',
+                        picked && 'opacity-40 cursor-not-allowed bg-slate-50'
+                      )}
+                    >
+                      <div className="flex flex-col w-full gap-2">
+                        <div className="flex items-center justify-between w-full">
+                          <div className="flex items-center gap-2">
+                            <span className='font-mono font-black text-lg text-blue-700 group-hover:text-blue-800 tracking-tight'>{d.serial_number}</span>
+                            <Badge className={cn(
+                              "text-[10px] font-black py-0.5 px-2 h-5 border-0 shadow-sm",
+                              d.asset_status === 'Fresh' ? 'bg-green-500 text-white' :
+                              d.asset_status === 'Refurb' ? 'bg-amber-500 text-white' :
+                              'bg-red-500 text-white'
+                            )}>
+                              {d.asset_status}
+                            </Badge>
+                          </div>
+                          <div className='text-[10px] font-black text-slate-400 uppercase tracking-widest'>
+                            {d.warehouse}
+                          </div>
+                        </div>
+                        <div className="flex flex-col w-full space-y-0.5">
+                          <div className="text-sm font-bold text-slate-800 leading-tight">
+                            {d.model} {d.configuration}
+                          </div>
+                          {d.asset_condition && (
+                            <div className="text-[11px] font-bold italic text-amber-700 bg-amber-50 px-2 py-0.5 rounded border border-amber-100 mt-1.5 w-fit">
+                              {d.asset_condition}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+              <p className='text-[10px] text-muted-foreground'>
+                Approving this request updates the asset group and asset code on these existing assets — no new order is created.
+              </p>
+            </div>
+          )}
 
           <div className='space-y-4 pt-4 border-t'>
             <div className='flex items-center justify-between p-3 bg-slate-50 rounded-xl border border-slate-200'>

@@ -40,11 +40,17 @@ export function NotificationBell({ onOpenRequest }: Props) {
 
   const load = async () => {
     if (!profile?.id) return;
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('notifications')
       .select('*')
+      .or(`user_id.eq.${profile.id},target_dept.eq.${profile.department}`)
       .order('created_at', { ascending: false })
       .limit(100);
+
+    if (error) {
+      console.error('Failed to load notifications:', error);
+      return;
+    }
     setItems((data as Notification[]) || []);
   };
 
@@ -75,10 +81,17 @@ export function NotificationBell({ onOpenRequest }: Props) {
 
   const markRead = async (n: Notification) => {
     if (!n.read_at) {
-      await supabase
+      const { error } = await supabase
         .from('notifications')
         .update({ read_at: new Date().toISOString() })
         .eq('id', n.id);
+
+      if (error) {
+        console.error('Failed to mark notification as read:', error);
+        toast.error('Failed to mark as read');
+        return;
+      }
+
       setItems((prev) =>
         prev.map((x) => (x.id === n.id ? { ...x, read_at: new Date().toISOString() } : x))
       );
@@ -92,11 +105,20 @@ export function NotificationBell({ onOpenRequest }: Props) {
   const markAllRead = async () => {
     const ids = items.filter((n) => !n.read_at).map((n) => n.id);
     if (!ids.length) return;
-    await supabase
+
+    const { error } = await supabase
       .from('notifications')
       .update({ read_at: new Date().toISOString() })
       .in('id', ids);
+
+    if (error) {
+      console.error('Failed to mark all notifications as read:', error);
+      toast.error('Failed to mark all as read');
+      return;
+    }
+
     setItems((prev) => prev.map((n) => ({ ...n, read_at: n.read_at || new Date().toISOString() })));
+    toast.success('All notifications marked as read');
   };
 
   return (

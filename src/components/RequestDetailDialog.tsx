@@ -248,7 +248,7 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
         user_id: u.id,
         request_id: req.id,
         kind: 'mention',
-        title: `${profile?.email || 'Someone'} tagged you on: ${req.title || REQUEST_TYPE_LABELS[req.type]}`,
+        title: `${profile?.full_name || profile?.email || 'Someone'} tagged you on: ${req.title || REQUEST_TYPE_LABELS[req.type]}`,
         body: text,
       }))
     );
@@ -963,17 +963,19 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
                 {req.po_number ? ` · PO ${req.po_number}` : ''} · Raised by {req.raised_by_email} ({req.raised_dept}) · {fmtDateTime(req.created_at)}
               </div>
             </div>
-            <div className='flex items-center gap-2 shrink-0'>
-              <Badge variant='outline' className='font-bold text-[10px]'>
-                Pending at: {req.status === 'open' ? req.current_stage_dept : '—'}
-              </Badge>
-              <Badge className='capitalize'>{req.status}</Badge>
-              <Button size='sm' variant='outline' onClick={downloadSerialsCsv} disabled={busy}>
-                <FileDown className='w-3.5 h-3.5 mr-1' /> CSV
+            <div className='flex items-center gap-2 shrink-0 pr-8'>
+              {req.status === 'open' && (
+                <Badge variant='outline' className='font-bold text-[10px] h-8 px-3 rounded-full flex items-center bg-muted/20'>
+                  Pending at: {req.current_stage_dept}
+                </Badge>
+              )}
+              <Badge className='capitalize h-8 px-3 rounded-full flex items-center'>{req.status}</Badge>
+              <Button size='sm' variant='outline' onClick={downloadSerialsCsv} disabled={busy} className='h-8 w-8 rounded-xl p-0' title="Download CSV">
+                <FileDown className='w-4 h-4' />
               </Button>
               {profile?.role === 'Super Admin' && (
-                <Button size='sm' variant='destructive' onClick={deleteRequest} disabled={busy}>
-                  <Trash2 className='w-3.5 h-3.5 mr-1' /> Delete
+                <Button size='sm' variant='destructive' onClick={deleteRequest} disabled={busy} className='h-8 w-8 rounded-xl p-0' title="Delete Request">
+                  <Trash2 className='w-4 h-4' />
                 </Button>
               )}
             </div>

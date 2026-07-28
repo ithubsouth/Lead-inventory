@@ -132,6 +132,15 @@ const Combobox = ({
   );
 };
 
+const deriveNameFromEmail = (email: string) => {
+  if (!email) return '';
+  const localPart = email.split('@')[0];
+  return localPart
+    .split(/[._-]/)
+    .map(part => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ');
+};
+
 export const UserProfile = () => {
   const { user, signOut, updateUser } = useAuth();
   const { toast } = useToast();
@@ -189,6 +198,32 @@ export const UserProfile = () => {
     setDepartment(user?.user_metadata?.department || '');
     checkAuthorization();
   }, [user]);
+
+  useEffect(() => {
+    if (openEditUser && !selectedUser && email && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      const fetchExistingUserDetails = async () => {
+        try {
+          const { data, error } = await supabase
+            .from('users')
+            .select('full_name, department, location')
+            .eq('email', email)
+            .maybeSingle();
+
+          if (data && !error) {
+            if (data.full_name) setFullName(data.full_name);
+            if (data.department) setDepartment(data.department);
+            if (data.location) setLocation(data.location);
+          } else {
+            // If not found in DB, derive from email
+            setFullName(deriveNameFromEmail(email));
+          }
+        } catch (err) {
+          setFullName(deriveNameFromEmail(email));
+        }
+      };
+      fetchExistingUserDetails();
+    }
+  }, [email, openEditUser, selectedUser]);
 
   const checkAuthorization = async () => {
     if (!user?.email) {
@@ -762,14 +797,10 @@ export const UserProfile = () => {
               />
             </div>
             <div>
-              <Label htmlFor="editFullName" className="text-sm">Full Name</Label>
-              <Input
-                id="editFullName"
-                value={fullName}
-                onChange={(e) => setFullName(e.target.value)}
-                className="text-sm"
-                placeholder="Full Name"
-              />
+              <Label className="text-sm text-slate-500">Full Name</Label>
+              <div className="text-sm font-semibold p-2 bg-slate-50 rounded-md border border-slate-100 min-h-[36px] flex items-center">
+                {fullName || '—'}
+              </div>
             </div>
             <div>
               <Label className="text-sm">Select Department *</Label>
