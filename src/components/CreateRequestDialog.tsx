@@ -101,6 +101,7 @@ export default function CreateRequestDialog({ open, onOpenChange, onCreated }: P
         if (draft.type) setType(draft.type);
         if (draft.title) setTitle(draft.title);
         if (draft.poNumber) setPoNumber(draft.poNumber);
+        if (draft.receivedFrom) setReceivedFrom(draft.receivedFrom);
         if (draft.warehouse) setWarehouse(draft.warehouse);
         if (draft.assetType) setAssetType(draft.assetType);
         if (draft.model) setModel(draft.model);
