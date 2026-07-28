@@ -512,6 +512,8 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
       .limit(1);
     let nextCode = ((existingMax?.[0]?.far_code as number) || 100000) + 1;
 
+    const sourceName = (req as any).received_from || 'Stock';
+
     const orderRow: any = {
       order_type: 'Hardware',
       material_type: 'Inward',
@@ -522,7 +524,7 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
       sales_order: req.po_number || null,
       configuration: req.configuration || null,
       agreement_type: req.agreement_type || null,
-      school_name: 'Stock',
+      school_name: sourceName,
       order_date: new Date().toISOString().split('T')[0],
       created_by: profile?.email,
       updated_by: profile?.email,
@@ -533,42 +535,63 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
     const orderId = orderIns!.id;
 
     if (serials.length) {
-      const deviceRows = serials.map((s) => ({
-        order_id: orderId,
-        order_type: 'Hardware',
-        warehouse: req.warehouse || '-',
-        sales_order: req.po_number || null,
-        school_name: 'Stock',
-        asset_type: req.asset_type || 'Tablet',
-        model: req.model || '-',
-        configuration: req.configuration || null,
-        serial_number: s.serial_number,
-        asset_group: s.asset_group || req.asset_group || null,
-        asset_status: s.asset_status || req.asset_status || 'Fresh',
-        status: 'Stock' as const,
-        far_code: s.asset_code ? Number(s.asset_code) : nextCode++,
-        material_type: 'Inward' as const,
-        created_by: profile?.email,
-        updated_by: profile?.email,
-      }));
-      const { error: dErr } = await supabase.from('devices').insert(deviceRows);
+      const deviceRows = serials.map((s) => {
+        const parsed = Number(s.asset_code);
+        return {
+          order_id: orderId,
+          order_type: 'Hardware',
+          warehouse: req.warehouse || '-',
+          sales_order: req.po_number || null,
+          school_name: sourceName,
+          asset_type: req.asset_type || 'Tablet',
+          model: req.model || '-',
+          configuration: req.configuration || null,
+          serial_number: s.serial_number,
+          asset_group: s.asset_group || req.asset_group || null,
+          asset_status: s.asset_status || req.asset_status || 'Fresh',
+          // devices.status only allows Available / Assigned / Maintenance
+          status: 'Available',
+          far_code: s.asset_code && !isNaN(parsed) ? parsed : nextCode++,
+          ref_po: req.po_number || null,
+          ref_grn: req.grn_number || null,
+          material_type: 'Inward',
+          created_by: profile?.email,
+          updated_by: profile?.email,
+        };
+      });
+      const { error: dErr } = await supabase.from('devices').insert(deviceRows as any);
       if (dErr) toast.error(`Devices create failed: ${dErr.message}`);
+      else toast.success('Order and devices created');
     }
   };
 
+  /**
+   * Asset Movement (EH to FA): the assets already exist — no new order is created.
+   * We only update asset group + asset code on the existing device rows and
+   * stamp the request reference (PO / GRN).
+   */
   const applyMovement = async () => {
     if (!req || !serials.length) return;
-    const sns = serials.map((s) => s.serial_number);
-    const { error } = await supabase
-      .from('devices')
-      .update({
-        warehouse: req.warehouse || undefined,
-        asset_group: req.asset_group || undefined,
+    let failed = 0;
+    for (const s of serials) {
+      const parsed = Number(s.asset_code);
+      const patch: any = {
+        asset_group: s.asset_group || req.asset_group || undefined,
+        ref_po: req.po_number || null,
+        ref_grn: req.grn_number || null,
         updated_by: profile?.email,
-      })
-      .in('serial_number', sns);
-    if (error) toast.error(`Movement update failed: ${error.message}`);
+      };
+      if (s.asset_code && !isNaN(parsed)) patch.far_code = parsed;
+      const { error } = await supabase
+        .from('devices')
+        .update(patch)
+        .eq('serial_number', s.serial_number);
+      if (error) failed++;
+    }
+    if (failed) toast.error(`${failed} serial(s) could not be updated`);
+    else toast.success('Existing assets updated (asset group + asset code)');
   };
+
 
   const deleteRequest = async () => {
     if (!req) return;
