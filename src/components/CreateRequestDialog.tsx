@@ -516,9 +516,68 @@ export default function CreateRequestDialog({ open, onOpenChange, onCreated }: P
               <Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder='Short description' />
             </div>
             <div>
-              <Label>PO Number</Label>
+              <Label>PO Number (Sales Order)</Label>
               <Input value={poNumber} onChange={(e) => setPoNumber(e.target.value)} />
             </div>
+            <div>
+              <Label>Received From (School Name)</Label>
+              <Input
+                value={receivedFrom}
+                onChange={(e) => setReceivedFrom(e.target.value)}
+                placeholder='Stock'
+              />
+            </div>
+            {type === 'asset_movement' && (
+              <div className='col-span-2 rounded-xl border border-blue-100 bg-blue-50/40 p-3 space-y-2'>
+                <div className='flex items-center justify-between gap-3'>
+                  <span className='text-[10px] font-black uppercase tracking-widest text-blue-700'>
+                    Pick serials available in stock
+                  </span>
+                  <div className='relative w-64'>
+                    <Input
+                      value={stockQuery}
+                      onChange={(e) => setStockQuery(e.target.value)}
+                      placeholder='Search stock serials...'
+                      className='h-8 text-xs pr-8'
+                    />
+                    <Search className='absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400' />
+                  </div>
+                </div>
+                <div className='max-h-48 overflow-y-auto rounded-lg bg-white border border-blue-100 divide-y'>
+                  {stockLoading && (
+                    <div className='p-3 text-xs text-muted-foreground flex items-center gap-2'>
+                      <Loader2 className='w-3.5 h-3.5 animate-spin' /> Loading stock serials...
+                    </div>
+                  )}
+                  {!stockLoading && stockDevices.length === 0 && (
+                    <div className='p-3 text-xs text-muted-foreground'>No stock serials found.</div>
+                  )}
+                  {stockDevices.map((d) => {
+                    const picked = serialEntries.some((e) => e.serial_number === d.serial_number);
+                    return (
+                      <button
+                        key={d.serial_number}
+                        type='button'
+                        onClick={() => addStockSerial(d)}
+                        disabled={picked}
+                        className={cn(
+                          'w-full text-left px-3 py-2 text-xs flex items-center justify-between hover:bg-blue-50 transition-colors',
+                          picked && 'opacity-40 cursor-not-allowed'
+                        )}
+                      >
+                        <span className='font-mono font-bold'>{d.serial_number}</span>
+                        <span className='text-[10px] text-slate-500'>
+                          {[d.asset_type, d.model, d.warehouse, d.asset_group].filter(Boolean).join(' · ')}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+                <p className='text-[10px] text-muted-foreground'>
+                  Approving this request updates the asset group and asset code on these existing assets — no new order is created.
+                </p>
+              </div>
+            )}
             <div>
               <Label>Warehouse</Label>
               <Select value={warehouse} onValueChange={setWarehouse}>
