@@ -66,6 +66,10 @@ export default function CreateRequestDialog({ open, onOpenChange, onCreated }: P
   const [type, setType] = useState<RequestType>('new_hardware');
   const [title, setTitle] = useState('');
   const [poNumber, setPoNumber] = useState('');
+  const [receivedFrom, setReceivedFrom] = useState('');
+  const [stockQuery, setStockQuery] = useState('');
+  const [stockLoading, setStockLoading] = useState(false);
+  const [stockDevices, setStockDevices] = useState<any[]>([]);
   const [warehouse, setWarehouse] = useState('');
   const [assetType, setAssetType] = useState<string>('');
   const [model, setModel] = useState('');
@@ -97,6 +101,7 @@ export default function CreateRequestDialog({ open, onOpenChange, onCreated }: P
         if (draft.type) setType(draft.type);
         if (draft.title) setTitle(draft.title);
         if (draft.poNumber) setPoNumber(draft.poNumber);
+        if (draft.receivedFrom) setReceivedFrom(draft.receivedFrom);
         if (draft.warehouse) setWarehouse(draft.warehouse);
         if (draft.assetType) setAssetType(draft.assetType);
         if (draft.model) setModel(draft.model);
@@ -119,13 +124,13 @@ export default function CreateRequestDialog({ open, onOpenChange, onCreated }: P
   // Save draft whenever state changes
   useEffect(() => {
     const draft = {
-      type, title, poNumber, warehouse, assetType, model, configuration,
+      type, title, poNumber, receivedFrom, warehouse, assetType, model, configuration,
       quantity, assetStatus, assetGroup, assetCode, assetCondition,
       serialEntries, notes
     };
     localStorage.setItem(STORAGE_KEY, JSON.stringify(draft));
   }, [
-    type, title, poNumber, warehouse, assetType, model, configuration,
+    type, title, poNumber, receivedFrom, warehouse, assetType, model, configuration,
     quantity, assetStatus, assetGroup, assetCode, assetCondition,
     serialEntries, notes
   ]);
@@ -134,6 +139,7 @@ export default function CreateRequestDialog({ open, onOpenChange, onCreated }: P
     localStorage.removeItem(STORAGE_KEY);
     setTitle('');
     setPoNumber('');
+    setReceivedFrom('');
     setWarehouse('');
     setAssetType('');
     setModel('');
@@ -281,6 +287,52 @@ export default function CreateRequestDialog({ open, onOpenChange, onCreated }: P
     });
   };
 
+  /** Asset Movement (EH to FA): load serials that are currently in stock. */
+  useEffect(() => {
+    if (type !== 'asset_movement') return;
+    let cancelled = false;
+    const t = setTimeout(async () => {
+      setStockLoading(true);
+      let q = supabase
+        .from('devices')
+        .select('serial_number, asset_type, model, warehouse, asset_group, asset_status, configuration')
+        .eq('is_deleted', false)
+        .order('created_at', { ascending: false })
+        .limit(100);
+      if (stockQuery.trim()) q = q.ilike('serial_number', `%${stockQuery.trim()}%`);
+      if (warehouse) q = q.eq('warehouse', warehouse);
+      const { data } = await q;
+      if (!cancelled) {
+        setStockDevices(data || []);
+        setStockLoading(false);
+      }
+    }, 300);
+    return () => {
+      cancelled = true;
+      clearTimeout(t);
+    };
+  }, [type, stockQuery, warehouse]);
+
+  const addStockSerial = (d: any) => {
+    setSerialEntries(prev => {
+      if (prev.some(e => e.serial_number === d.serial_number)) return prev;
+      const entry: SerialEntry = {
+        serial_number: d.serial_number,
+        asset_status: d.asset_status || assetStatus || 'Fresh',
+        asset_group: 'FA',
+        asset_code: '',
+        asset_condition: '',
+      };
+      const blank = prev.findIndex(e => !e.serial_number?.trim());
+      const next = blank >= 0
+        ? prev.map((e, i) => (i === blank ? entry : e))
+        : [...prev, entry];
+      setQuantity(next.length);
+      return next;
+    });
+  };
+
+
   const downloadCSV = () => {
     const headers = [
       'Request Type', 'Title', 'PO Number', 'Warehouse', 'Asset Type', 'Model', 'Configuration',
@@ -390,6 +442,7 @@ export default function CreateRequestDialog({ open, onOpenChange, onCreated }: P
           current_stage: first.key,
           current_stage_dept: first.dept,
           po_number: poNumber || null,
+          received_from: receivedFrom.trim() || (type === 'new_hardware' ? 'Stock' : null),
           warehouse: warehouse || null,
           asset_type: assetType || null,
           model: model || null,
@@ -516,9 +569,68 @@ export default function CreateRequestDialog({ open, onOpenChange, onCreated }: P
               <Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder='Short description' />
             </div>
             <div>
-              <Label>PO Number</Label>
+              <Label>PO Number (Sales Order)</Label>
               <Input value={poNumber} onChange={(e) => setPoNumber(e.target.value)} />
             </div>
+            <div>
+              <Label>Received From (School Name)</Label>
+              <Input
+                value={receivedFrom}
+                onChange={(e) => setReceivedFrom(e.target.value)}
+                placeholder='Stock'
+              />
+            </div>
+            {type === 'asset_movement' && (
+              <div className='col-span-2 rounded-xl border border-blue-100 bg-blue-50/40 p-3 space-y-2'>
+                <div className='flex items-center justify-between gap-3'>
+                  <span className='text-[10px] font-black uppercase tracking-widest text-blue-700'>
+                    Pick serials available in stock
+                  </span>
+                  <div className='relative w-64'>
+                    <Input
+                      value={stockQuery}
+                      onChange={(e) => setStockQuery(e.target.value)}
+                      placeholder='Search stock serials...'
+                      className='h-8 text-xs pr-8'
+                    />
+                    <Search className='absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400' />
+                  </div>
+                </div>
+                <div className='max-h-48 overflow-y-auto rounded-lg bg-white border border-blue-100 divide-y'>
+                  {stockLoading && (
+                    <div className='p-3 text-xs text-muted-foreground flex items-center gap-2'>
+                      <Loader2 className='w-3.5 h-3.5 animate-spin' /> Loading stock serials...
+                    </div>
+                  )}
+                  {!stockLoading && stockDevices.length === 0 && (
+                    <div className='p-3 text-xs text-muted-foreground'>No stock serials found.</div>
+                  )}
+                  {stockDevices.map((d) => {
+                    const picked = serialEntries.some((e) => e.serial_number === d.serial_number);
+                    return (
+                      <button
+                        key={d.serial_number}
+                        type='button'
+                        onClick={() => addStockSerial(d)}
+                        disabled={picked}
+                        className={cn(
+                          'w-full text-left px-3 py-2 text-xs flex items-center justify-between hover:bg-blue-50 transition-colors',
+                          picked && 'opacity-40 cursor-not-allowed'
+                        )}
+                      >
+                        <span className='font-mono font-bold'>{d.serial_number}</span>
+                        <span className='text-[10px] text-slate-500'>
+                          {[d.asset_type, d.model, d.warehouse, d.asset_group].filter(Boolean).join(' · ')}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+                <p className='text-[10px] text-muted-foreground'>
+                  Approving this request updates the asset group and asset code on these existing assets — no new order is created.
+                </p>
+              </div>
+            )}
             <div>
               <Label>Warehouse</Label>
               <Select value={warehouse} onValueChange={setWarehouse}>

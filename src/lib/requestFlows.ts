@@ -44,8 +44,8 @@ export const isTerminalStage = (type: RequestType, currentKey: string): boolean 
 };
 
 export const REQUEST_TYPE_LABELS: Record<RequestType, string> = {
-  new_hardware: 'New Hardware Procurement',
-  asset_movement: 'Existing Hardware Asset Movement',
+  new_hardware: 'New Hardware Procurement (Stock)',
+  asset_movement: 'Asset Movement (EH to FA)',
 };
 
 export const canActOnStage = (opts: {
