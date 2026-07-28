@@ -66,6 +66,10 @@ export default function CreateRequestDialog({ open, onOpenChange, onCreated }: P
   const [type, setType] = useState<RequestType>('new_hardware');
   const [title, setTitle] = useState('');
   const [poNumber, setPoNumber] = useState('');
+  const [receivedFrom, setReceivedFrom] = useState('');
+  const [stockQuery, setStockQuery] = useState('');
+  const [stockLoading, setStockLoading] = useState(false);
+  const [stockDevices, setStockDevices] = useState<any[]>([]);
   const [warehouse, setWarehouse] = useState('');
   const [assetType, setAssetType] = useState<string>('');
   const [model, setModel] = useState('');
