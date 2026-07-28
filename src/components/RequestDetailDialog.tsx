@@ -1037,7 +1037,8 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
           <div className='col-span-8 space-y-4 min-w-0'>
             <div className='grid grid-cols-3 gap-3 text-sm'>
               {[
-                ['PO Number', req.po_number],
+                ['PO Number (Sales Order)', req.po_number],
+                ['Received From', req.received_from],
                 ['Warehouse', req.warehouse],
                 ['Asset Type', req.asset_type],
                 ['Model', req.model],
