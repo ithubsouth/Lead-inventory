@@ -442,6 +442,7 @@ export default function CreateRequestDialog({ open, onOpenChange, onCreated }: P
           current_stage: first.key,
           current_stage_dept: first.dept,
           po_number: poNumber || null,
+          received_from: receivedFrom.trim() || (type === 'new_hardware' ? 'Stock' : null),
           warehouse: warehouse || null,
           asset_type: assetType || null,
           model: model || null,
