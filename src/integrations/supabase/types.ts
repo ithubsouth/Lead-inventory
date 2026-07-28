@@ -170,6 +170,8 @@ export type Database = {
           order_type: string | null
           product: string | null
           profile_id: string | null
+          ref_grn: string | null
+          ref_po: string | null
           sales_order: string | null
           school_name: string | null
           sd_card_size: string | null
@@ -204,6 +206,8 @@ export type Database = {
           order_type?: string | null
           product?: string | null
           profile_id?: string | null
+          ref_grn?: string | null
+          ref_po?: string | null
           sales_order?: string | null
           school_name?: string | null
           sd_card_size?: string | null
@@ -238,6 +242,8 @@ export type Database = {
           order_type?: string | null
           product?: string | null
           profile_id?: string | null
+          ref_grn?: string | null
+          ref_po?: string | null
           sales_order?: string | null
           school_name?: string | null
           sd_card_size?: string | null
@@ -670,6 +676,7 @@ export type Database = {
           raised_by: string | null
           raised_by_email: string | null
           raised_dept: string | null
+          received_from: string | null
           status: Database["public"]["Enums"]["request_status"]
           title: string
           type: Database["public"]["Enums"]["request_type"]
@@ -695,6 +702,7 @@ export type Database = {
           raised_by?: string | null
           raised_by_email?: string | null
           raised_dept?: string | null
+          received_from?: string | null
           status?: Database["public"]["Enums"]["request_status"]
           title: string
           type: Database["public"]["Enums"]["request_type"]
@@ -720,6 +728,7 @@ export type Database = {
           raised_by?: string | null
           raised_by_email?: string | null
           raised_dept?: string | null
+          received_from?: string | null
           status?: Database["public"]["Enums"]["request_status"]
           title?: string
           type?: Database["public"]["Enums"]["request_type"]
