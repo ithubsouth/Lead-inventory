@@ -746,14 +746,14 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
       await supabase.from('request_stages').insert({
         request_id: req.id,
         stage_key: req.current_stage,
-        stage_label: `GRN recorded: ${grnInput.trim()}`,
+        stage_label: `GRN Number saved: ${grnInput.trim()}`,
         order_index: currentIdx,
         assigned_dept: req.current_stage_dept,
-        action: 'commented',
+        action: 'submitted',
         actor_id: profile?.id,
         actor_email: profile?.email,
         actor_dept: profile?.department,
-        comment: `GRN Number: ${grnInput.trim()}`,
+        comment: null,
       });
       toast.success('GRN saved');
       await load();
