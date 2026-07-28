@@ -234,13 +234,14 @@ export const UserProfile = () => {
     try {
       const { data, error } = await supabase
         .from('users')
-        .select('email, role, location')
+        .select('email, role, location, department')
         .eq('email', user.email)
         .single();
       if (data && !error) {
         setIsAuthorized(true);
         setUserRole(data.role);
         setLocation(data.location || 'General');
+        if (data.department) setDepartment(data.department);
       } else {
         setIsAuthorized(false);
         setUserRole(null);
@@ -850,7 +851,7 @@ export const UserProfile = () => {
                 fullAccess={department === ADMIN_DEPARTMENT || role === 'Super Admin'}
               />
               <p className="text-[10px] text-muted-foreground mt-1">
-                Leave empty to give Approvals-only access.
+                Leave empty to give Asset Master-only access.
               </p>
             </div>
             <div>

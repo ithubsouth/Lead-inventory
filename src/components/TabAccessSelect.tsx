@@ -49,7 +49,7 @@ export default function TabAccessSelect({ value, onChange, disabled, fullAccess 
         >
           <span className='truncate'>
             {value.length === 0
-              ? 'Approvals only (default)'
+              ? 'Asset Master only (default)'
               : allSelected
               ? 'All tabs'
               : `${value.length} tab${value.length > 1 ? 's' : ''} selected`}

@@ -52,9 +52,24 @@ export const canActOnStage = (opts: {
   role: string | null;
   department: string | null;
   assignedDept: string;
+  raisedByRole?: string | null;
+  action?: StageAction;
 }) => {
-  const { role, department, assignedDept } = opts;
+  const { role, department, assignedDept, raisedByRole, action } = opts;
+
+  // Super Admin can do anything
   if (role === 'Super Admin') return true;
+
+  // Administrators department can act on any request at any stage
+  if (department === 'Administrators' && role === 'Admin') return true;
+
+  // Special Rule: If Operator raised it, only Admin/Super Admin can Approve it.
+  // We check if the intent is 'approved' or if we are checking general action permission.
+  if (raisedByRole === 'Operator' && action === 'approved') {
+    return role === 'Admin' || role === 'Super Admin';
+  }
+
+  // Regular rules
   if (role !== 'Admin') return false;
-  return department === assignedDept || department === 'Administrators';
+  return department === assignedDept;
 };

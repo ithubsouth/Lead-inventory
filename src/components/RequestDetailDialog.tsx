@@ -77,6 +77,7 @@ interface RequestFull {
   raised_by: string;
   raised_by_email: string | null;
   raised_dept: string;
+  raised_by_role: string | null;
   created_at: string;
 }
 
@@ -90,6 +91,7 @@ interface StageRow {
   actor_dept: string | null;
   comment: string | null;
   acted_at: string;
+  created_at: string;
 }
 
 interface SerialRow {
@@ -146,7 +148,7 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
         .from('request_stages')
         .select('*')
         .eq('request_id', requestId)
-        .order('acted_at', { ascending: false }),
+        .order('created_at', { ascending: false }),
       supabase.from('request_serials').select('*').eq('request_id', requestId),
       supabase
         .from('request_documents')
@@ -219,6 +221,7 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
       role: profile?.role || null,
       department: profile?.department || null,
       assignedDept: req.current_stage_dept,
+      raisedByRole: req.raised_by_role,
     });
 
   const canEditSubject =
@@ -298,6 +301,22 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
 
   const record = async (action: StageAction, opts: { closeAfter?: boolean; reject?: boolean; revoke?: boolean } = {}) => {
     if (!req || !profile?.id) return;
+
+    // Check Operator-raised restriction for approvals
+    if (action === 'approved' && !opts.reject && !opts.revoke) {
+      const canApprove = canActOnStage({
+        role: profile.role || null,
+        department: profile.department || null,
+        assignedDept: req.current_stage_dept,
+        raisedByRole: req.raised_by_role,
+        action: 'approved'
+      });
+      if (!canApprove) {
+        toast.error('Only Administrators or Super Admins can approve requests raised by an Operator.');
+        return;
+      }
+    }
+
     if (action === 'approved' && isVerifyStage && serials.length && verifiedCount < serials.length) {
       toast.error(`Verify all serials first (${verifiedCount}/${serials.length} verified).`);
       return;
@@ -325,6 +344,7 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
         actor_email: profile.email,
         actor_dept: profile.department,
         comment: comment || null,
+        acted_at: new Date().toISOString(),
       });
 
       let nextStatus: RequestStatus = req.status;
@@ -1015,7 +1035,7 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
             </ol>
 
             <div className='text-sm font-semibold pt-4 border-t'>History <span className='text-[10px] font-normal text-muted-foreground'>(latest first)</span></div>
-            <div className='space-y-2 max-h-80 overflow-y-auto pr-1'>
+            <div className='space-y-2 pr-1'>
               {stages.length === 0 && (
                 <div className='text-xs text-muted-foreground italic'>No activity recorded yet.</div>
               )}
@@ -1023,7 +1043,7 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
                 <div key={s.id} className='text-xs p-2 rounded border bg-muted/30 break-words'>
                   <div className='flex items-start justify-between gap-2'>
                     <span className='font-medium capitalize'>{s.action}</span>
-                    <span className='text-muted-foreground shrink-0'>{fmtDateTime(s.acted_at)}</span>
+                    <span className='text-muted-foreground shrink-0'>{fmtDateTime(s.acted_at || s.created_at)}</span>
                   </div>
                   <div className='text-muted-foreground mt-0.5 break-words'>{s.stage_label}</div>
                   <div className='text-muted-foreground break-all'>
@@ -1055,9 +1075,19 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
               ].map(([k, v]) => (
                 <div key={k as string} className='p-2 rounded border bg-muted/30 min-w-0'>
                   <div className='text-[10px] uppercase text-muted-foreground'>{k}</div>
-                  <div className='truncate' title={v ? String(v) : '-'}>{v || '-'}</div>
+                  <div className='truncate text-xs font-semibold' title={v ? String(v) : '-'}>{v || '-'}</div>
                 </div>
               ))}
+            </div>
+
+            <div className='p-3 rounded-xl border border-blue-100 bg-blue-50/30 space-y-1.5'>
+              <div className='text-[10px] font-black uppercase tracking-widest text-blue-700 flex items-center gap-2'>
+                <History className='w-3 h-3' /> Admin Note
+              </div>
+              <p className='text-[11px] leading-relaxed text-slate-600 font-medium'>
+                Administrators receive all notifications and can act on requests at any stage.
+                Requests not acted upon within <strong>15 working days</strong> will be automatically approved by the system Admin.
+              </p>
             </div>
 
             {req.notes && (
@@ -1427,38 +1457,38 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
                 <MentionTextarea
                   value={comment}
                   onChange={setComment}
-                  placeholder={canAct ? 'Add a comment — type @ to tag a teammate (e.g. @test@gmail.com)' : 'Only assigned department Admins can act.'}
+                  placeholder='Add a comment — type @ to tag a teammate (e.g. @test@gmail.com)'
                   rows={2}
-                  disabled={!canAct}
+                  disabled={busy}
                 />
 
                 <div className='flex flex-wrap gap-2 justify-end'>
                   <Button
                     variant='outline'
-                    disabled={!canAct || busy || !comment.trim()}
+                    disabled={busy || !comment.trim()}
                     onClick={() => record('commented')}
                   >
-                    Comment
+                    {busy ? <Loader2 className='w-4 h-4 animate-spin' /> : 'Comment'}
                   </Button>
                   <Button
                     variant='outline'
-                    disabled={!canAct || busy || !comment.trim()}
+                    disabled={!canAct || busy || (profile?.department !== 'Administrators' && !comment.trim())}
                     onClick={() => record('revoked', { revoke: true })}
                   >
-                    <RotateCcw className='w-4 h-4 mr-1' /> Revoke
+                    {busy ? <Loader2 className='w-4 h-4 animate-spin' /> : <><RotateCcw className='w-4 h-4 mr-1' /> Revoke</>}
                   </Button>
                   <Button
                     variant='destructive'
-                    disabled={!canAct || busy || !comment.trim()}
+                    disabled={!canAct || busy || (profile?.department !== 'Administrators' && !comment.trim())}
                     onClick={() => record('rejected', { reject: true })}
                   >
-                    <X className='w-4 h-4 mr-1' /> Reject
+                    {busy ? <Loader2 className='w-4 h-4 animate-spin' /> : <><X className='w-4 h-4 mr-1' /> Reject</>}
                   </Button>
                   <Button
                     disabled={!canAct || busy}
                     onClick={() => record('approved')}
                   >
-                    <Check className='w-4 h-4 mr-1' /> Approve
+                    {busy ? <Loader2 className='w-4 h-4 animate-spin' /> : <><Check className='w-4 h-4 mr-1' /> Approve</>}
                   </Button>
                 </div>
                 {!canAct && (

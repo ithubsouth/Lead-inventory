@@ -14,14 +14,14 @@ export const APP_TABS: AppTabDef[] = [
   { key: 'view', label: 'View Orders' },
   { key: 'order', label: 'Order Summary' },
   { key: 'devices', label: 'Devices' },
-  { key: 'requests', label: 'Approvals' },
+  { key: 'requests', label: 'Asset Master' },
   { key: 'audit', label: 'Audit View' },
   { key: 'activity', label: 'Activity Logs' },
 ];
 
 export const ALL_TAB_KEYS = APP_TABS.map((t) => t.key);
 
-/** Departments other than Administrators only get Approvals by default. */
+/** Departments other than Administrators only get Asset Master by default. */
 export const DEFAULT_TAB_KEYS = ['requests'];
 
 export const ADMIN_DEPARTMENT = 'Administrators';
@@ -39,7 +39,7 @@ export const hasFullAccess = (opts: { role?: string | null; department?: string 
  * Resolves which tab keys a user may see.
  * - Administrators department / Super Admin → everything
  * - Explicit grants (users.tab_access) → those tabs
- * - Otherwise → Approvals only
+ * - Otherwise → Asset Master only
  */
 export function resolveTabAccess(opts: {
   role?: string | null;

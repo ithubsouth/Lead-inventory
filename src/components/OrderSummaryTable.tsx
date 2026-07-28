@@ -494,7 +494,7 @@ const OrderSummaryTable: React.FC<OrderSummaryTableProps> = ({
   const groupHeaderHeight = '28px';
 
   return (
-    <Card style={{ border: 'none', borderRadius: '0', background: '#fff', padding: '24px', width: '100%' }}>
+    <Card style={{ border: 'none', borderRadius: '0', background: '#fff', padding: '12px 24px', width: '100%' }}>
       <CardHeader style={{ paddingBottom: '2px' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <CardTitle style={{ display: 'flex', alignItems: 'center', gap: '1px', fontSize: '12px' }}>
@@ -650,8 +650,8 @@ const OrderSummaryTable: React.FC<OrderSummaryTableProps> = ({
               style={{
                 overflowX: 'auto',
                 overflowY: 'auto',
-                height: '400px',
-                maxHeight: '400px',
+                height: 'calc(100vh - 340px)',
+                minHeight: '400px',
                 position: 'relative',
                 overscrollBehavior: 'contain',
                 boxSizing: 'border-box',

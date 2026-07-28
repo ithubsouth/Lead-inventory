@@ -277,7 +277,7 @@ export const ActivityLogs: React.FC = () => {
   };
 
   return (
-    <Card className="border-none shadow-none bg-transparent">
+    <Card className="border-none shadow-none bg-white rounded-none p-6 pt-3 min-h-screen">
       <CardHeader className="px-0 pb-6">
         <div className="flex items-center justify-between gap-4 flex-wrap">
           <CardTitle className="flex items-center gap-2 text-2xl font-bold text-gray-800">
@@ -301,7 +301,7 @@ export const ActivityLogs: React.FC = () => {
         </div>
       </CardHeader>
       <CardContent className="px-0 space-y-4">
-        <div ref={tableContainerRef} tabIndex={0} style={{ overflowX: 'auto', overflowY: 'auto', height: '520px', maxHeight: '520px', position: 'relative', overscrollBehavior: 'contain', boxSizing: 'border-box', width: '100%' }} className="rounded-xl border border-gray-200 bg-white shadow-sm focus:outline-none focus:ring-1 focus:ring-blue-400" onClick={() => tableContainerRef.current?.focus()}>
+        <div ref={tableContainerRef} tabIndex={0} style={{ overflowX: 'auto', overflowY: 'auto', height: 'calc(100vh - 280px)', minHeight: '400px', position: 'relative', overscrollBehavior: 'contain', boxSizing: 'border-box', width: '100%' }} className="rounded-xl border border-gray-200 bg-white shadow-sm focus:outline-none focus:ring-1 focus:ring-blue-400" onClick={() => tableContainerRef.current?.focus()}>
           <Table wrapperOverflow="visible" style={{ minWidth: '1800px' }}>
             <TableHeader className="bg-white border-b border-gray-200">
               <TableRow>

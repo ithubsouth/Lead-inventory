@@ -40,10 +40,16 @@ export function NotificationBell({ onOpenRequest }: Props) {
 
   const load = async () => {
     if (!profile?.id) return;
-    const { data, error } = await supabase
+    let query = supabase
       .from('notifications')
-      .select('*')
-      .or(`user_id.eq.${profile.id},target_dept.eq.${profile.department}`)
+      .select('*');
+
+    // Administrators and Super Admins see everything in their bell
+    if (profile.role !== 'Super Admin' && profile.department !== 'Administrators') {
+      query = query.or(`user_id.eq.${profile.id},target_dept.eq.${profile.department}`);
+    }
+
+    const { data, error } = await query
       .order('created_at', { ascending: false })
       .limit(100);
 
@@ -64,7 +70,9 @@ export function NotificationBell({ onOpenRequest }: Props) {
         { event: 'INSERT', schema: 'public', table: 'notifications' },
         (payload) => {
           const n = payload.new as Notification;
+          const isAdmin = profile.role === 'Super Admin' || profile.department === 'Administrators';
           const forMe =
+            isAdmin ||
             n.user_id === profile.id ||
             (n.target_dept && n.target_dept === profile.department);
           if (forMe) {
@@ -77,7 +85,7 @@ export function NotificationBell({ onOpenRequest }: Props) {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [profile?.id, profile?.department]);
+  }, [profile?.id, profile?.department, profile?.role]);
 
   const markRead = async (n: Notification) => {
     if (!n.read_at) {

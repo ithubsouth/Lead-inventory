@@ -644,7 +644,7 @@ const AuditTable: React.FC<AuditTableProps> = ({
   }
 
   return (
-    <Card style={{ border: 'none', borderRadius: '0', background: '#fff', padding: '24px', minHeight: '200px', width: '100%' }}>
+    <Card style={{ border: 'none', borderRadius: '0', background: '#fff', padding: '12px 24px', width: '100%' }}>
       <CardHeader style={{ padding: '10px 10px 4px' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <CardTitle style={{ display: 'flex', alignItems: 'center', gap: '1px', fontSize: '12px', marginBottom: 0 }}>
@@ -888,8 +888,8 @@ const AuditTable: React.FC<AuditTableProps> = ({
           style={{
             overflowX: 'auto',
             overflowY: 'auto',
-            height: '400px',
-            maxHeight: '400px',
+            height: 'calc(100vh - 380px)',
+            minHeight: '400px',
             position: 'relative',
             overscrollBehavior: 'contain',
             boxSizing: 'border-box',

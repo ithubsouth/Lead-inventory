@@ -444,6 +444,7 @@ export default function CreateRequestDialog({ open, onOpenChange, onCreated }: P
     try {
       const flow = getFlow(type);
       const first = flow[0];
+      const second = flow[1]; // Auto-advance to second stage
 
       const { data: reqRows, error: reqErr } = await supabase
         .from('requests')
@@ -451,8 +452,8 @@ export default function CreateRequestDialog({ open, onOpenChange, onCreated }: P
           type,
           status: 'open' as const,
           title: title.trim(),
-          current_stage: first.key,
-          current_stage_dept: first.dept,
+          current_stage: second ? second.key : first.key,
+          current_stage_dept: second ? second.dept : first.dept,
           po_number: poNumber || null,
           received_from: receivedFrom.trim() || (type === 'new_hardware' ? 'Stock' : null),
           warehouse: warehouse || null,
@@ -465,12 +466,14 @@ export default function CreateRequestDialog({ open, onOpenChange, onCreated }: P
           raised_by: profile.id,
           raised_by_email: profile.email,
           raised_dept: profile.department || 'Administrators',
+          raised_by_role: profile.role,
         })
         .select('id')
         .single();
       if (reqErr) throw reqErr;
       const requestId = reqRows!.id as string;
 
+      // Record first stage as "Submitted"
       await supabase.from('request_stages').insert({
         request_id: requestId,
         stage_key: first.key,
@@ -482,9 +485,11 @@ export default function CreateRequestDialog({ open, onOpenChange, onCreated }: P
         actor_email: profile.email,
         actor_dept: profile.department,
         comment: 'Request raised',
+        acted_at: new Date().toISOString(),
       });
 
       if (serialEntries.length) {
+        // ... (serials logic remains same)
         const seen = new Set<string>();
         const rows = serialEntries.map((e) => {
           const s = e.serial_number?.trim();
@@ -506,12 +511,15 @@ export default function CreateRequestDialog({ open, onOpenChange, onCreated }: P
         await (supabase as any).from('request_serials').insert(rows);
       }
 
+      const notifyDept = second ? second.dept : first.dept;
+      const notifyLabel = second ? second.label : first.label;
+
       await supabase.from('notifications').insert({
-        target_dept: first.dept,
+        target_dept: notifyDept,
         request_id: requestId,
         kind: 'stage_assigned',
         title: `New ${REQUEST_TYPE_LABELS[type]} request`,
-        body: `${title} · assigned to ${first.dept} (${first.label})`,
+        body: `${title} · assigned to ${notifyDept} (${notifyLabel})`,
       });
 
       localStorage.removeItem(STORAGE_KEY);
