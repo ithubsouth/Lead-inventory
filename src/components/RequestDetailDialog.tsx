@@ -62,6 +62,8 @@ interface RequestFull {
   current_stage_dept: string;
   po_number: string | null;
   grn_number: string | null;
+  received_from: string | null;
+
 
   warehouse: string | null;
   asset_type: string | null;
