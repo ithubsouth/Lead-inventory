@@ -285,6 +285,52 @@ export default function CreateRequestDialog({ open, onOpenChange, onCreated }: P
     });
   };
 
+  /** Asset Movement (EH to FA): load serials that are currently in stock. */
+  useEffect(() => {
+    if (type !== 'asset_movement') return;
+    let cancelled = false;
+    const t = setTimeout(async () => {
+      setStockLoading(true);
+      let q = supabase
+        .from('devices')
+        .select('serial_number, asset_type, model, warehouse, asset_group, asset_status, configuration')
+        .eq('is_deleted', false)
+        .order('created_at', { ascending: false })
+        .limit(100);
+      if (stockQuery.trim()) q = q.ilike('serial_number', `%${stockQuery.trim()}%`);
+      if (warehouse) q = q.eq('warehouse', warehouse);
+      const { data } = await q;
+      if (!cancelled) {
+        setStockDevices(data || []);
+        setStockLoading(false);
+      }
+    }, 300);
+    return () => {
+      cancelled = true;
+      clearTimeout(t);
+    };
+  }, [type, stockQuery, warehouse]);
+
+  const addStockSerial = (d: any) => {
+    setSerialEntries(prev => {
+      if (prev.some(e => e.serial_number === d.serial_number)) return prev;
+      const entry: SerialEntry = {
+        serial_number: d.serial_number,
+        asset_status: d.asset_status || assetStatus || 'Fresh',
+        asset_group: 'FA',
+        asset_code: '',
+        asset_condition: '',
+      };
+      const blank = prev.findIndex(e => !e.serial_number?.trim());
+      const next = blank >= 0
+        ? prev.map((e, i) => (i === blank ? entry : e))
+        : [...prev, entry];
+      setQuantity(next.length);
+      return next;
+    });
+  };
+
+
   const downloadCSV = () => {
     const headers = [
       'Request Type', 'Title', 'PO Number', 'Warehouse', 'Asset Type', 'Model', 'Configuration',
