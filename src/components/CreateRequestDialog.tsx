@@ -124,13 +124,13 @@ export default function CreateRequestDialog({ open, onOpenChange, onCreated }: P
   // Save draft whenever state changes
   useEffect(() => {
     const draft = {
-      type, title, poNumber, warehouse, assetType, model, configuration,
+      type, title, poNumber, receivedFrom, warehouse, assetType, model, configuration,
       quantity, assetStatus, assetGroup, assetCode, assetCondition,
       serialEntries, notes
     };
     localStorage.setItem(STORAGE_KEY, JSON.stringify(draft));
   }, [
-    type, title, poNumber, warehouse, assetType, model, configuration,
+    type, title, poNumber, receivedFrom, warehouse, assetType, model, configuration,
     quantity, assetStatus, assetGroup, assetCode, assetCondition,
     serialEntries, notes
   ]);
@@ -139,6 +139,7 @@ export default function CreateRequestDialog({ open, onOpenChange, onCreated }: P
     localStorage.removeItem(STORAGE_KEY);
     setTitle('');
     setPoNumber('');
+    setReceivedFrom('');
     setWarehouse('');
     setAssetType('');
     setModel('');
