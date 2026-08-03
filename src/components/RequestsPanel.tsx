@@ -122,9 +122,11 @@ export default function RequestsPanel({ focusRequestId, onFocusHandled }: Props)
       checkDraft();
       const { data, error } = await supabase
         .from('requests')
-        .select('*')
+        .select(
+          'id,type,status,title,current_stage,current_stage_dept,raised_by,raised_by_email,raised_dept,po_number,warehouse,asset_type,quantity,created_at'
+        )
         .order('created_at', { ascending: false })
-        .limit(500);
+        .limit(300);
 
       if (error) {
         console.error('Error fetching requests:', error);
