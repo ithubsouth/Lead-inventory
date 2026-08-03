@@ -381,3 +381,8 @@ All colors MUST be HSL.
     scrollbar-color: #cbd5e1 transparent;
   }
 }
+
+@layer utilities {
+  .no-scrollbar::-webkit-scrollbar { display: none; }
+  .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+}

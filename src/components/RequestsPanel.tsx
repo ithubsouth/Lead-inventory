@@ -122,9 +122,11 @@ export default function RequestsPanel({ focusRequestId, onFocusHandled }: Props)
       checkDraft();
       const { data, error } = await supabase
         .from('requests')
-        .select('*')
+        .select(
+          'id,type,status,title,current_stage,current_stage_dept,raised_by,raised_by_email,raised_dept,po_number,warehouse,asset_type,quantity,created_at'
+        )
         .order('created_at', { ascending: false })
-        .limit(500);
+        .limit(300);
 
       if (error) {
         console.error('Error fetching requests:', error);
@@ -202,27 +204,28 @@ export default function RequestsPanel({ focusRequestId, onFocusHandled }: Props)
   };
 
   return (
-    <div className='p-6 pt-3 space-y-6 min-h-screen bg-white w-full'>
-      <div className='flex items-center justify-between border-b border-slate-100 pb-6'>
-        <div className='space-y-1'>
-          <h2 className='text-2xl font-black text-slate-800 tracking-tight'>Asset Master Management</h2>
-          <p className='text-sm font-medium text-slate-400'>Monitor and manage hardware procurement and movement requests.</p>
+    <div className='p-3 sm:p-6 pt-3 space-y-4 sm:space-y-6 min-h-screen bg-white w-full'>
+      <div className='flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-4 sm:pb-6'>
+        <div className='space-y-1 min-w-0'>
+          <h2 className='text-xl sm:text-2xl font-black text-slate-800 tracking-tight'>Asset Master Management</h2>
+          <p className='text-xs sm:text-sm font-medium text-slate-400'>Monitor and manage hardware procurement and movement requests.</p>
         </div>
         <div className='flex items-center gap-3'>
           {!isReporter && (
-            <Button onClick={() => setCreateOpen(true)} className='gap-2 bg-blue-600 hover:bg-blue-700 text-white font-bold'>
+            <Button onClick={() => setCreateOpen(true)} className='gap-2 bg-blue-600 hover:bg-blue-700 text-white font-bold w-full sm:w-auto'>
               <Plus className='w-4 h-4' /> New Request
             </Button>
           )}
         </div>
       </div>
 
-      <div className='flex flex-wrap items-center justify-between gap-3'>
-        <div className='flex bg-slate-100 p-1.5 rounded-xl gap-1 border border-slate-200'>
+
+      <div className='flex flex-col md:flex-row md:flex-wrap md:items-center justify-between gap-3'>
+        <div className='flex bg-slate-100 p-1.5 rounded-xl gap-1 border border-slate-200 overflow-x-auto no-scrollbar'>
           <button
             onClick={() => setTab('inbox')}
             className={cn(
-              'px-4 py-2 text-xs font-black uppercase tracking-widest rounded-lg flex items-center gap-2 transition-all',
+              'px-3 sm:px-4 py-2 text-[11px] sm:text-xs font-black uppercase tracking-widest rounded-lg flex items-center gap-2 transition-all shrink-0',
               tab === 'inbox' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:bg-white/50'
             )}
           >
@@ -231,7 +234,7 @@ export default function RequestsPanel({ focusRequestId, onFocusHandled }: Props)
           <button
             onClick={() => setTab('mine')}
             className={cn(
-              'px-4 py-2 text-xs font-black uppercase tracking-widest rounded-lg flex items-center gap-2 transition-all',
+              'px-3 sm:px-4 py-2 text-[11px] sm:text-xs font-black uppercase tracking-widest rounded-lg flex items-center gap-2 transition-all shrink-0',
               tab === 'mine' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:bg-white/50'
             )}
           >
@@ -241,7 +244,7 @@ export default function RequestsPanel({ focusRequestId, onFocusHandled }: Props)
             <button
               onClick={() => { setTab('drafts'); checkDraft(); }}
               className={cn(
-                'px-4 py-2 text-xs font-black uppercase tracking-widest rounded-lg flex items-center gap-2 transition-all',
+                'px-3 sm:px-4 py-2 text-[11px] sm:text-xs font-black uppercase tracking-widest rounded-lg flex items-center gap-2 transition-all shrink-0',
                 tab === 'drafts' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:bg-white/50'
               )}
             >
@@ -253,7 +256,7 @@ export default function RequestsPanel({ focusRequestId, onFocusHandled }: Props)
             <button
               onClick={() => setTab('all')}
               className={cn(
-                'px-4 py-2 text-xs font-black uppercase tracking-widest rounded-lg flex items-center gap-2 transition-all',
+                'px-3 sm:px-4 py-2 text-[11px] sm:text-xs font-black uppercase tracking-widest rounded-lg flex items-center gap-2 transition-all shrink-0',
                 tab === 'all' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:bg-white/50'
               )}
             >
@@ -261,7 +264,7 @@ export default function RequestsPanel({ focusRequestId, onFocusHandled }: Props)
             </button>
           )}
         </div>
-        <div className='flex items-center gap-2'>
+        <div className='flex items-center gap-2 w-full md:w-auto'>
           {tab === 'drafts' && draft && (
             <Button
               variant='ghost'
@@ -273,12 +276,12 @@ export default function RequestsPanel({ focusRequestId, onFocusHandled }: Props)
               Delete All Drafts
             </Button>
           )}
-          <div className='relative'>
+          <div className='relative w-full md:w-auto'>
             <Input
               value={q}
               onChange={(e) => setQ(e.target.value)}
               placeholder='Search requests...'
-              className='w-72 pl-10 h-10 rounded-xl border-slate-200 focus-visible:ring-blue-500'
+              className='w-full md:w-72 pl-10 h-10 rounded-xl border-slate-200 focus-visible:ring-blue-500'
             />
             <Search className='absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none' />
           </div>
@@ -286,8 +289,8 @@ export default function RequestsPanel({ focusRequestId, onFocusHandled }: Props)
       </div>
 
       <div className='bg-white border-y border-slate-100 overflow-x-auto relative'>
-        <div className='min-w-[1180px]'>
-          <div className='sticky top-0 z-20 grid grid-cols-12 gap-3 px-6 py-4 text-[10px] font-black uppercase tracking-[0.15em] text-slate-400 border-b bg-slate-50/80 backdrop-blur-md shadow-sm'>
+        <div className='md:min-w-[1180px]'>
+          <div className='hidden md:grid sticky top-0 z-20 grid-cols-12 gap-3 px-6 py-4 text-[10px] font-black uppercase tracking-[0.15em] text-slate-400 border-b bg-slate-50/80 backdrop-blur-md shadow-sm'>
             <div className='col-span-3'>Subject</div>
             <div className='col-span-1'>PO Number</div>
             <div className='col-span-1'>Warehouse</div>
@@ -309,7 +312,7 @@ export default function RequestsPanel({ focusRequestId, onFocusHandled }: Props)
           draft ? (
             <div className='divide-y divide-slate-100'>
               <div
-                className='w-full text-left grid grid-cols-12 gap-3 px-8 py-6 hover:bg-blue-50/30 transition-all group border-l-4 border-l-blue-500/30 hover:border-l-blue-500 cursor-pointer'
+                className='w-full text-left block md:grid md:grid-cols-12 gap-3 px-4 md:px-8 py-5 md:py-6 hover:bg-blue-50/30 transition-all group border-l-4 border-l-blue-500/30 hover:border-l-blue-500 cursor-pointer'
                 onClick={() => setCreateOpen(true)}
               >
                 <div className='col-span-3 min-w-0'>
@@ -379,9 +382,45 @@ export default function RequestsPanel({ focusRequestId, onFocusHandled }: Props)
               <button
                 key={r.id || Math.random()}
                 onClick={() => setDetailId(r.id)}
-                className='w-full text-left grid grid-cols-12 gap-3 px-6 py-4 hover:bg-blue-50/30 transition-all group border-l-4 border-l-transparent hover:border-l-blue-500'
+                className='w-full text-left block md:grid md:grid-cols-12 gap-3 px-4 md:px-6 py-4 hover:bg-blue-50/30 transition-all group border-l-4 border-l-transparent hover:border-l-blue-500'
               >
-                <div className='col-span-3 min-w-0'>
+                {/* Mobile card */}
+                <div className='md:hidden space-y-2'>
+                  <div className='flex items-start justify-between gap-2'>
+                    <div className='min-w-0'>
+                      <div className='font-bold text-sm text-slate-700 break-words'>
+                        {r.title || (r.type ? REQUEST_TYPE_LABELS[r.type] : 'Untitled Request')}
+                      </div>
+                      <div className='text-[11px] font-medium text-slate-400 mt-0.5 break-words'>
+                        {r.type ? REQUEST_TYPE_LABELS[r.type] : 'General'}
+                      </div>
+                    </div>
+                    <Badge className={cn(
+                      'shrink-0 border-0 capitalize font-black text-[9px] tracking-widest px-2.5 py-1 rounded-full',
+                      r.status === 'open' ? 'bg-blue-500 text-white' :
+                      r.status === 'approved' ? 'bg-green-500 text-white' :
+                      r.status === 'rejected' ? 'bg-red-500 text-white' :
+                      'bg-slate-200 text-slate-700'
+                    )}>
+                      {r.status || 'Pending'}
+                    </Badge>
+                  </div>
+                  <div className='grid grid-cols-2 gap-x-3 gap-y-1.5 text-[11px]'>
+                    <div className='min-w-0'><span className='text-slate-400'>PO </span><span className='font-semibold text-slate-700 break-words'>{r.po_number || '-'}</span></div>
+                    <div className='min-w-0'><span className='text-slate-400'>Warehouse </span><span className='font-semibold text-slate-700 break-words'>{r.warehouse || '-'}</span></div>
+                    <div className='min-w-0'><span className='text-slate-400'>Asset </span><span className='font-semibold text-slate-700 break-words'>{r.asset_type || '-'}</span></div>
+                    <div className='min-w-0'><span className='text-slate-400'>Qty </span><span className='font-semibold text-slate-700'>{r.quantity ?? '-'}</span></div>
+                    <div className='col-span-2 min-w-0'><span className='text-slate-400'>By </span><span className='font-semibold text-slate-700 break-all'>{r.raised_by_email || 'Unknown'}</span></div>
+                    <div className='col-span-2 min-w-0 text-slate-500'>{fmtDateTime(r.created_at)}</div>
+                  </div>
+                  {r.status === 'open' && (
+                    <Badge variant='outline' className='bg-amber-50 text-amber-700 border-amber-200 font-bold text-[10px] px-2 py-1 rounded-lg max-w-full'>
+                      <span className='truncate'>Pending at {r.current_stage_dept || '-'}</span>
+                    </Badge>
+                  )}
+                </div>
+
+                <div className='hidden md:block col-span-3 min-w-0'>
                   <div className='font-bold text-sm text-slate-700 truncate group-hover:text-blue-600 transition-colors'>
                     {r.title || (r.type ? REQUEST_TYPE_LABELS[r.type] : 'Untitled Request')}
                   </div>
@@ -389,27 +428,27 @@ export default function RequestsPanel({ focusRequestId, onFocusHandled }: Props)
                     {r.type ? REQUEST_TYPE_LABELS[r.type] : 'General'}
                   </div>
                 </div>
-                <div className='col-span-1 min-w-0 text-xs font-semibold text-slate-600 flex items-center truncate'>
+                <div className='hidden md:flex col-span-1 min-w-0 text-xs font-semibold text-slate-600 items-center truncate'>
                   <span className='truncate'>{r.po_number || '-'}</span>
                 </div>
-                <div className='col-span-1 min-w-0 text-xs text-slate-600 flex items-center'>
+                <div className='hidden md:flex col-span-1 min-w-0 text-xs text-slate-600 items-center'>
                   <span className='truncate'>{r.warehouse || '-'}</span>
                 </div>
-                <div className='col-span-1 min-w-0 text-xs text-slate-600 flex items-center'>
+                <div className='hidden md:flex col-span-1 min-w-0 text-xs text-slate-600 items-center'>
                   <span className='truncate'>{r.asset_type || '-'}</span>
                 </div>
-                <div className='col-span-1 text-sm font-black text-slate-600 text-center flex items-center justify-center'>
+                <div className='hidden md:flex col-span-1 text-sm font-black text-slate-600 text-center items-center justify-center'>
                   {r.quantity ?? '-'}
                 </div>
-                <div className='col-span-2 min-w-0 text-[11px] font-medium text-slate-500 flex flex-col justify-center'>
+                <div className='hidden md:flex col-span-2 min-w-0 text-[11px] font-medium text-slate-500 flex-col justify-center'>
                   <div className='truncate text-slate-700 font-bold'>{r.raised_by_email || 'Unknown User'}</div>
                   <div className='truncate text-[10px] uppercase tracking-widest opacity-60 mt-0.5'>{r.raised_dept || 'General'}</div>
                 </div>
-                <div className='col-span-1 min-w-0 text-[11px] font-medium text-slate-500 flex flex-col justify-center'>
+                <div className='hidden md:flex col-span-1 min-w-0 text-[11px] font-medium text-slate-500 flex-col justify-center'>
                   <div className='truncate'>{fmtDateTime(r.created_at)}</div>
                   <div className='truncate text-[10px] text-slate-400'>{safeFormatDistance(r.created_at)}</div>
                 </div>
-                <div className='col-span-1 min-w-0 flex items-center'>
+                <div className='hidden md:flex col-span-1 min-w-0 items-center'>
                   {r.status === 'open' ? (
                     <Badge
                       variant='outline'
@@ -422,7 +461,7 @@ export default function RequestsPanel({ focusRequestId, onFocusHandled }: Props)
                     <span className='text-[11px] text-slate-400'>—</span>
                   )}
                 </div>
-                <div className='col-span-1 text-right flex items-center justify-end'>
+                <div className='hidden md:flex col-span-1 text-right items-center justify-end'>
                   <Badge className={cn(
                     "border-0 capitalize font-black text-[9px] tracking-widest px-3 py-1 rounded-full shadow-sm",
                     r.status === 'open' ? 'bg-blue-500 text-white' :
