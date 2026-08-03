@@ -204,20 +204,21 @@ export default function RequestsPanel({ focusRequestId, onFocusHandled }: Props)
   };
 
   return (
-    <div className='p-6 pt-3 space-y-6 min-h-screen bg-white w-full'>
-      <div className='flex items-center justify-between border-b border-slate-100 pb-6'>
-        <div className='space-y-1'>
-          <h2 className='text-2xl font-black text-slate-800 tracking-tight'>Asset Master Management</h2>
-          <p className='text-sm font-medium text-slate-400'>Monitor and manage hardware procurement and movement requests.</p>
+    <div className='p-3 sm:p-6 pt-3 space-y-4 sm:space-y-6 min-h-screen bg-white w-full'>
+      <div className='flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-4 sm:pb-6'>
+        <div className='space-y-1 min-w-0'>
+          <h2 className='text-xl sm:text-2xl font-black text-slate-800 tracking-tight'>Asset Master Management</h2>
+          <p className='text-xs sm:text-sm font-medium text-slate-400'>Monitor and manage hardware procurement and movement requests.</p>
         </div>
         <div className='flex items-center gap-3'>
           {!isReporter && (
-            <Button onClick={() => setCreateOpen(true)} className='gap-2 bg-blue-600 hover:bg-blue-700 text-white font-bold'>
+            <Button onClick={() => setCreateOpen(true)} className='gap-2 bg-blue-600 hover:bg-blue-700 text-white font-bold w-full sm:w-auto'>
               <Plus className='w-4 h-4' /> New Request
             </Button>
           )}
         </div>
       </div>
+
 
       <div className='flex flex-wrap items-center justify-between gap-3'>
         <div className='flex bg-slate-100 p-1.5 rounded-xl gap-1 border border-slate-200'>
