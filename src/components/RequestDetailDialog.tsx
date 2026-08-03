@@ -23,7 +23,6 @@ import {
   getFlow,
   nextStage,
   isTerminalStage,
-  MOVEMENT_ORDER_TYPE,
 } from '@/lib/requestFlows';
 import { format } from 'date-fns';
 import { fmtDateTime } from '@/lib/dateFormat';
@@ -525,25 +524,20 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
     }
   };
 
-  const maxFarCode = async () => {
-    const { data } = await supabase
+  const materializeAssets = async () => {
+    if (!req) return;
+    const { data: existingMax } = await supabase
       .from('devices')
       .select('far_code')
       .not('far_code', 'is', null)
       .order('far_code', { ascending: false })
       .limit(1);
-    return ((data?.[0]?.far_code as number) || 100000) + 1;
-  };
-
-  const materializeAssets = async () => {
-    if (!req) return;
-    let nextCode = await maxFarCode();
+    let nextCode = ((existingMax?.[0]?.far_code as number) || 100000) + 1;
 
     const sourceName = (req as any).received_from || 'Stock';
 
     const orderRow: any = {
-      // New Hardware Procurement is always a Stock (inward) order
-      order_type: 'Stock',
+      order_type: 'Hardware',
       material_type: 'Inward',
       asset_type: req.asset_type || 'Tablet',
       model: req.model || '-',
@@ -567,7 +561,7 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
         const parsed = Number(s.asset_code);
         return {
           order_id: orderId,
-          order_type: 'Stock',
+          order_type: 'Hardware',
           warehouse: req.warehouse || '-',
           sales_order: req.po_number || null,
           school_name: sourceName,
@@ -594,36 +588,12 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
   };
 
   /**
-   * Asset Movement (EH to FA): the assets already exist in stock.
-   * We create a reference-only order (order_type "Asset Movement (EH to FA)",
-   * material_type "Reference" so it never counts as Inward/Outward stock),
-   * then update asset group + asset code on the existing device rows.
+   * Asset Movement (EH to FA): the assets already exist — no new order is created.
+   * We only update asset group + asset code on the existing device rows and
+   * stamp the request reference (PO / GRN).
    */
   const applyMovement = async () => {
     if (!req || !serials.length) return;
-    let nextCode = await maxFarCode();
-
-    const orderRow: any = {
-      order_type: MOVEMENT_ORDER_TYPE,
-      // Reference only — excluded from Inward / Outward stock movement
-      material_type: 'Reference',
-      asset_type: req.asset_type || 'Tablet',
-      model: req.model || '-',
-      quantity: serials.length,
-      warehouse: req.warehouse || '-',
-      sales_order: req.po_number || null,
-      configuration: req.configuration || null,
-      agreement_type: req.agreement_type || null,
-      school_name: (req as any).received_from || null,
-      asset_group: req.asset_group || null,
-      serial_numbers: serials.map((s) => s.serial_number),
-      order_date: new Date().toISOString().split('T')[0],
-      created_by: profile?.email,
-      updated_by: profile?.email,
-    };
-    const { error: oErr } = await supabase.from('orders').insert(orderRow);
-    if (oErr) toast.error(`Reference order failed: ${oErr.message}`);
-
     let failed = 0;
     for (const s of serials) {
       const parsed = Number(s.asset_code);
@@ -633,7 +603,7 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
         ref_grn: req.grn_number || null,
         updated_by: profile?.email,
       };
-      patch.far_code = s.asset_code && !isNaN(parsed) ? parsed : nextCode++;
+      if (s.asset_code && !isNaN(parsed)) patch.far_code = parsed;
       const { error } = await supabase
         .from('devices')
         .update(patch)
@@ -641,7 +611,7 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
       if (error) failed++;
     }
     if (failed) toast.error(`${failed} serial(s) could not be updated`);
-    else toast.success('Asset code & group updated on existing stock assets');
+    else toast.success('Existing assets updated (asset group + asset code)');
   };
 
 
