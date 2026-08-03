@@ -48,6 +48,9 @@ export const REQUEST_TYPE_LABELS: Record<RequestType, string> = {
   asset_movement: 'Asset Movement (EH to FA)',
 };
 
+/** Order type stamped on reference-only orders created by movement requests. */
+export const MOVEMENT_ORDER_TYPE = 'Asset Movement (EH to FA)';
+
 export const canActOnStage = (opts: {
   role: string | null;
   department: string | null;
