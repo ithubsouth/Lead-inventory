@@ -312,7 +312,7 @@ export default function RequestsPanel({ focusRequestId, onFocusHandled }: Props)
           draft ? (
             <div className='divide-y divide-slate-100'>
               <div
-                className='w-full text-left grid grid-cols-12 gap-3 px-8 py-6 hover:bg-blue-50/30 transition-all group border-l-4 border-l-blue-500/30 hover:border-l-blue-500 cursor-pointer'
+                className='w-full text-left block md:grid md:grid-cols-12 gap-3 px-4 md:px-8 py-5 md:py-6 hover:bg-blue-50/30 transition-all group border-l-4 border-l-blue-500/30 hover:border-l-blue-500 cursor-pointer'
                 onClick={() => setCreateOpen(true)}
               >
                 <div className='col-span-3 min-w-0'>
