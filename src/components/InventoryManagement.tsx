@@ -10,6 +10,7 @@ import { NotificationBell } from '@/components/NotificationBell';
 import { Order, Device, OrderSummary, TabletItem, TVItem } from './types';
 import { DateRange } from 'react-day-picker';
 import { useUserProfile } from '@/hooks/useUserProfile';
+import { readDeviceCache, writeDeviceCache, maxUpdatedAt } from '@/lib/deviceCache';
 
 
 const UnifiedAssetForm = lazy(() => import('./UnifiedAssetForm'));
@@ -70,6 +71,13 @@ const InventoryManagement = () => {
   // Realtime handlers are registered once, so they read the current tab through a ref.
   const activeTabRef = useRef(activeTab);
   useEffect(() => { activeTabRef.current = activeTab; }, [activeTab]);
+  // Latest device list + sync marker, readable from realtime handlers and async loaders.
+  const devicesRef = useRef<Device[]>([]);
+  const devicesSyncedAtRef = useRef<string | null>(null);
+  const forceFullDevicesRef = useRef(false);
+  // Local edits update state directly; keep the ref in step so incremental merges start from them.
+  useEffect(() => { devicesRef.current = devices; }, [devices]);
+  const devicesLoadingRef = useRef<Promise<void> | null>(null);
   const { allowedTabs, loading: profileLoading } = useUserProfile();
   const canSee = (key: string) => allowedTabs.includes(key);
 
@@ -162,6 +170,13 @@ const InventoryManagement = () => {
               loadOrders({ background: true });
             } else {
               setDataLoaded(prev => ({ ...prev, orders: false }));
+            }
+            // A device's Stock/Assigned status comes from its order, so refresh devices fully.
+            forceFullDevicesRef.current = true;
+            if (DEVICE_TABS.includes(activeTabRef.current)) {
+              loadDevices({ background: true });
+            } else {
+              setDataLoaded(prev => ({ ...prev, devices: false }));
             }
           }, 1500);
         }
@@ -329,64 +344,153 @@ const InventoryManagement = () => {
     }
   };
 
+  const DEVICE_SELECT = `*, orders ( material_type )`;
+  const DEVICE_BATCH = 1000;
+
+  const normalizeDevice = (device: any): Device => {
+    const orderData = Array.isArray(device.orders) ? device.orders[0] : device.orders;
+    const materialType = orderData?.material_type || null;
+    const status = device.order_id && materialType === 'Outward' ? 'Assigned' : 'Stock';
+    const { orders: _orders, ...rest } = device;
+    return {
+      ...rest,
+      sales_order: device.sales_order?.trim() || '',
+      order_type: device.order_type?.trim() || '',
+      warehouse: device.warehouse?.trim() || '',
+      deal_id: device.deal_id?.trim() || '',
+      nucleus_id: device.nucleus_id?.trim() || '',
+      school_name: device.school_name?.trim() || '',
+      asset_type: device.asset_type?.trim() || '',
+      model: device.model?.trim() || '',
+      configuration: device.configuration?.trim() || '',
+      serial_number: device.serial_number?.trim() || '',
+      sd_card_size: device.sd_card_size?.trim() || '',
+      profile_id: device.profile_id?.trim() || '',
+      product: device.product?.trim() || '',
+      asset_status: device.asset_status?.trim() || '',
+      asset_group: device.asset_group?.trim() || '',
+      asset_condition: device.asset_condition?.trim() || '',
+      status,
+      updated_by: device.updated_by?.trim() || '',
+      audited_by: device.audited_by?.trim() || '',
+      material_type: materialType,
+      asset_check: device.asset_check?.trim() || 'Unmatched',
+    } as Device;
+  };
+
+  const sortDevices = (rows: Device[]) =>
+    rows.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+
+  const deviceCacheKey = async () => {
+    const { data } = await supabase.auth.getSession();
+    return data.session?.user?.id ? `devices:v1:${data.session.user.id}` : null;
+  };
+
+  const applyDevices = async (rows: Device[], lastUpdatedAt: string | null) => {
+    devicesRef.current = rows;
+    devicesSyncedAtRef.current = lastUpdatedAt;
+    setDevices(rows);
+    const key = await deviceCacheKey();
+    if (key) writeDeviceCache(key, { rows, lastUpdatedAt, savedAt: Date.now() });
+  };
+
+  /** Fetch every device (paged in parallel). */
+  const fetchAllDevices = async (): Promise<Device[]> => {
+    const { count, error } = await supabase.from('devices').select('id', { count: 'exact', head: true });
+    if (error) throw error;
+    const numPages = Math.ceil((count || 0) / DEVICE_BATCH);
+    const results = await Promise.all(Array.from({ length: numPages }, (_, i) =>
+      supabase.from('devices')
+        .select(DEVICE_SELECT)
+        .order('created_at', { ascending: false })
+        .range(i * DEVICE_BATCH, (i + 1) * DEVICE_BATCH - 1)
+    ));
+    const failed = results.find(r => r.error);
+    if (failed?.error) throw failed.error;
+    return results.flatMap(r => r.data || []).map(normalizeDevice);
+  };
+
+  /**
+   * Fetch only devices changed since the last sync and merge them in.
+   * Returns null when a full reload is needed (e.g. rows were hard-deleted).
+   */
+  const fetchChangedDevices = async (since: string): Promise<Device[] | null> => {
+    const [{ count, error: countErr }, changed] = await Promise.all([
+      supabase.from('devices').select('id', { count: 'exact', head: true }),
+      (async () => {
+        const rows: any[] = [];
+        for (let page = 0; ; page++) {
+          const { data, error } = await supabase.from('devices')
+            .select(DEVICE_SELECT)
+            .gte('updated_at', since)
+            .order('updated_at', { ascending: true })
+            .range(page * DEVICE_BATCH, (page + 1) * DEVICE_BATCH - 1);
+          if (error) throw error;
+          rows.push(...(data || []));
+          if (!data || data.length < DEVICE_BATCH) break;
+          if (rows.length > 20000) return null; // lots changed: a full reload is cheaper
+        }
+        return rows;
+      })(),
+    ]);
+    if (countErr) throw countErr;
+    if (!changed) return null;
+
+    const byId = new Map(devicesRef.current.map(d => [d.id, d]));
+    for (const raw of changed) byId.set(raw.id, normalizeDevice(raw));
+    if (byId.size !== (count || 0)) return null; // something was deleted/added out of band
+    return sortDevices(Array.from(byId.values()));
+  };
+
   const loadDevices = async ({ background = false }: { background?: boolean } = {}) => {
+    // Coalesce overlapping calls (tab switch + realtime refresh at the same time).
+    if (devicesLoadingRef.current) return devicesLoadingRef.current;
+    const run = (async () => {
+      let showingData = devicesRef.current.length > 0;
+      try {
+        // 1. Show the last saved list instantly (first visit in this browser session).
+        if (!showingData) {
+          const key = await deviceCacheKey();
+          const cached = key ? await readDeviceCache<Device>(key) : null;
+          if (cached?.rows?.length) {
+            devicesRef.current = cached.rows;
+            devicesSyncedAtRef.current = cached.lastUpdatedAt;
+            setDevices(cached.rows);
+            showingData = true;
+          }
+        }
+        if (!showingData && !background) setLoading(true);
+        if (showingData) setLoading(false);
+
+        // 2. Bring it up to date: only changed rows when possible, otherwise everything.
+        let rows: Device[] | null = null;
+        const since = devicesSyncedAtRef.current;
+        if (since && showingData && !forceFullDevicesRef.current) {
+          rows = await fetchChangedDevices(since);
+        }
+        if (!rows) {
+          rows = await fetchAllDevices();
+          forceFullDevicesRef.current = false;
+        }
+        await applyDevices(rows, maxUpdatedAt(rows) || since);
+      } catch (error: any) {
+        console.error('Error loading devices:', error);
+        if (!showingData) {
+          toast({
+            title: 'Error',
+            description: `Failed to load devices: ${error.message || 'Unknown error'}.`,
+            variant: 'destructive',
+          });
+        }
+      } finally {
+        setLoading(false);
+      }
+    })();
+    devicesLoadingRef.current = run;
     try {
-      if (!background) setLoading(true);
-      const batchSize = 1000;
-
-      const { count } = await supabase.from('devices').select('*', { count: 'exact', head: true });
-      const numPages = Math.ceil((count || 0) / batchSize);
-
-      const results = await Promise.all(Array.from({ length: numPages }, (_, i) =>
-        supabase.from('devices')
-          .select(`*, orders ( material_type )`)
-          .order('created_at', { ascending: false })
-          .range(i * batchSize, (i + 1) * batchSize - 1)
-      ));
-
-      const allDevices = results.flatMap(r => r.data || []);
-
-      const updatedDevices = allDevices.map((device: any) => {
-        const orderData = Array.isArray(device.orders) ? device.orders[0] : device.orders;
-        const materialType = orderData?.material_type || null;
-        const status = device.order_id && materialType === 'Outward' ? 'Assigned' : 'Stock';
-
-        return {
-          ...device,
-          sales_order: device.sales_order?.trim() || '',
-          order_type: device.order_type?.trim() || '',
-          warehouse: device.warehouse?.trim() || '',
-          deal_id: device.deal_id?.trim() || '',
-          nucleus_id: device.nucleus_id?.trim() || '',
-          school_name: device.school_name?.trim() || '',
-          asset_type: device.asset_type?.trim() || '',
-          model: device.model?.trim() || '',
-          configuration: device.configuration?.trim() || '',
-          serial_number: device.serial_number?.trim() || '',
-          sd_card_size: device.sd_card_size?.trim() || '',
-          profile_id: device.profile_id?.trim() || '',
-          product: device.product?.trim() || '',
-          asset_status: device.asset_status?.trim() || '',
-          asset_group: device.asset_group?.trim() || '',
-          asset_condition: device.asset_condition?.trim() || '',
-          status,
-          updated_by: device.updated_by?.trim() || '',
-          audited_by: device.audited_by?.trim() || '',
-          material_type: materialType,
-          asset_check: device.asset_check?.trim() || 'Unmatched',
-        } as Device;
-      });
-
-      setDevices(updatedDevices);
-    } catch (error: any) {
-      console.error('Error loading devices:', error);
-      toast({
-        title: 'Error',
-        description: `Failed to load devices: ${error.message || 'Unknown error'}.`,
-        variant: 'destructive',
-      });
+      await run;
     } finally {
-      setLoading(false);
+      devicesLoadingRef.current = null;
     }
   };
 
