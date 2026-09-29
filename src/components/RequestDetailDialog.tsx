@@ -1099,11 +1099,10 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
                 ['Configuration', req.configuration],
                 ['Quantity', req.quantity ?? serials.length],
                 ['Asset Status', req.asset_status || serials.find((s) => s.asset_status)?.asset_status],
-                ['Asset Group', req.asset_group || serials.find((s) => s.asset_group)?.asset_group],
+                ['Requested At', fmtDateTime(req.created_at)],
                 ['GRN Number', req.grn_number],
                 ['Pending At', req.status === 'open' ? req.current_stage_dept : '—'],
                 ['Requested By', req.raised_by_email],
-                ['Requested At', fmtDateTime(req.created_at)],
               ].map(([k, v]) => (
                 <div key={k as string} className='p-2 rounded border bg-muted/30 min-w-0'>
                   <div className='text-[10px] uppercase text-muted-foreground'>{k}</div>
