@@ -170,32 +170,39 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
     if (open) {
       load();
 
-      // Set up real-time subscription for this specific request
+      // Set up real-time subscription for this specific request. Bulk actions (e.g. giving
+      // 500 serials an asset code) fire one event per row, so reload once they settle.
+      let reloadTimer: ReturnType<typeof setTimeout> | undefined;
+      const scheduleLoad = () => {
+        clearTimeout(reloadTimer);
+        reloadTimer = setTimeout(() => load(), 500);
+      };
       const channel = supabase
         .channel(`request-detail-${requestId}`)
         .on(
           'postgres_changes',
           { event: '*', schema: 'public', table: 'requests', filter: `id=eq.${requestId}` },
-          () => load()
+          scheduleLoad
         )
         .on(
           'postgres_changes',
           { event: '*', schema: 'public', table: 'request_stages', filter: `request_id=eq.${requestId}` },
-          () => load()
+          scheduleLoad
         )
         .on(
           'postgres_changes',
           { event: '*', schema: 'public', table: 'request_serials', filter: `request_id=eq.${requestId}` },
-          () => load()
+          scheduleLoad
         )
         .on(
           'postgres_changes',
           { event: '*', schema: 'public', table: 'request_documents', filter: `request_id=eq.${requestId}` },
-          () => load()
+          scheduleLoad
         )
         .subscribe();
 
       return () => {
+        clearTimeout(reloadTimer);
         supabase.removeChannel(channel);
       };
     }
@@ -926,17 +933,49 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
     }
   };
 
+  /** Reject if a database call hangs, so the button never spins forever. */
+  const withTimeout = <T,>(p: PromiseLike<T>, ms: number, what: string): Promise<T> =>
+    Promise.race([
+      Promise.resolve(p),
+      new Promise<T>((_, rej) => setTimeout(() => rej(new Error(`${what} timed out. Please try again.`)), ms)),
+    ]);
+
+  /** Update many serial rows at once (in parallel batches) instead of one after another. */
+  const updateSerials = async (updates: { id: string; patch: Record<string, unknown> }[]) => {
+    const BATCH = 25;
+    for (let i = 0; i < updates.length; i += BATCH) {
+      const results = await Promise.all(
+        updates.slice(i, i + BATCH).map((u) =>
+          supabase.from('request_serials').update(u.patch).eq('id', u.id)
+        )
+      );
+      const failed = results.find((r) => r.error);
+      if (failed?.error) throw failed.error;
+    }
+  };
+
   const nextFreeAssetCode = async (): Promise<number> => {
-    const { data } = await supabase
-      .from('devices')
-      .select('far_code')
-      .not('far_code', 'is', null)
-      .order('far_code', { ascending: false })
-      .limit(1);
-    const { data: used } = await supabase
-      .from('request_serials')
-      .select('asset_code')
-      .not('asset_code', 'is', null);
+    // Highest code already given to a device, plus codes reserved on other still-open
+    // requests (closed requests' codes are already on devices). Both queries run together.
+    const [{ data, error: devErr }, { data: used, error: usedErr }] = await withTimeout(
+      Promise.all([
+        supabase
+          .from('devices')
+          .select('far_code')
+          .not('far_code', 'is', null)
+          .order('far_code', { ascending: false })
+          .limit(1),
+        supabase
+          .from('request_serials')
+          .select('asset_code, requests!inner(status)')
+          .not('asset_code', 'is', null)
+          .eq('requests.status', 'open'),
+      ]),
+      30000,
+      'Looking up the next asset code'
+    );
+    if (devErr) throw devErr;
+    if (usedErr) throw usedErr;
     const maxUsed = (used || []).reduce((m: number, r: any) => {
       const n = Number(r.asset_code);
       return isNaN(n) ? m : Math.max(m, n);
@@ -948,22 +987,21 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
     if (!req) return;
     setBusy(true);
     try {
-      let code = await nextFreeAssetCode();
       const targets = serials.filter((s) => !s.asset_code);
       if (!targets.length) {
         toast.info('All serials already have an asset code');
         return;
       }
-      for (const s of targets) {
-        const { error } = await supabase
-          .from('request_serials')
-          .update({ asset_code: String(code++) })
-          .eq('id', s.id);
-        if (error) throw error;
-      }
+      let code = await nextFreeAssetCode();
+      await withTimeout(
+        updateSerials(targets.map((s) => ({ id: s.id, patch: { asset_code: String(code++) } }))),
+        60000,
+        'Saving asset codes'
+      );
       toast.success(`Generated ${targets.length} asset codes`);
       await load();
     } catch (e: any) {
+      console.error(e);
       toast.error(e.message || 'Could not generate asset codes');
     } finally {
       setBusy(false);
@@ -995,19 +1033,14 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
         if (/serial/i.test(a)) return;
         map.set(a, b);
       });
-      let n = 0;
-      for (const s of serials) {
-        const code = map.get(s.serial_number);
-        if (code && code !== s.asset_code) {
-          const { error } = await supabase
-            .from('request_serials')
-            .update({ asset_code: code })
-            .eq('id', s.id);
-          if (error) throw error;
-          n++;
-        }
-      }
-      toast.success(`Updated ${n} asset codes`);
+      const updates = serials
+        .filter((s) => {
+          const code = map.get(s.serial_number);
+          return code && code !== s.asset_code;
+        })
+        .map((s) => ({ id: s.id, patch: { asset_code: map.get(s.serial_number)! } }));
+      await withTimeout(updateSerials(updates), 60000, 'Saving asset codes');
+      toast.success(`Updated ${updates.length} asset codes`);
       await load();
     } catch (e: any) {
       toast.error(e.message || 'Bulk asset code upload failed');
