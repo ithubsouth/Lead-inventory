@@ -675,6 +675,7 @@ export type Database = {
           quantity: number | null
           raised_by: string | null
           raised_by_email: string | null
+          raised_by_role: string | null
           raised_dept: string | null
           received_from: string | null
           status: Database["public"]["Enums"]["request_status"]
@@ -701,6 +702,7 @@ export type Database = {
           quantity?: number | null
           raised_by?: string | null
           raised_by_email?: string | null
+          raised_by_role?: string | null
           raised_dept?: string | null
           received_from?: string | null
           status?: Database["public"]["Enums"]["request_status"]
@@ -727,6 +729,7 @@ export type Database = {
           quantity?: number | null
           raised_by?: string | null
           raised_by_email?: string | null
+          raised_by_role?: string | null
           raised_dept?: string | null
           received_from?: string | null
           status?: Database["public"]["Enums"]["request_status"]
