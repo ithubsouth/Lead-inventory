@@ -214,16 +214,26 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
     !!req.warehouse &&
     req.warehouse !== profile.location;
 
+  // A revoked request is sent back to the first stage so the person who raised it
+  // can correct it and resubmit. We only treat it as "sent back" when the latest
+  // workflow action (ignoring comments) was a revoke — an Operator's fresh request
+  // also sits at the first stage while it waits for their department Admin.
+  const lastWorkflowAction = stages.find((st) => st.action !== 'commented')?.action;
+  const isBackWithRaiser =
+    !!req && req.status === 'open' && currentIdx === 0 && lastWorkflowAction === 'revoked';
+  const isRaiser = !!req && !!profile?.id && req.raised_by === profile.id;
+
   const canAct = !!req &&
     req.status === 'open' &&
-    !locationBlocked &&
-    canActOnStage({
-      role: profile?.role || null,
-      department: profile?.department || null,
-      assignedDept: req.current_stage_dept,
-      raisedByRole: req.raised_by_role,
-      stageKey: req.current_stage,
-    });
+    ((isBackWithRaiser && isRaiser) ||
+      (!locationBlocked &&
+        canActOnStage({
+          role: profile?.role || null,
+          department: profile?.department || null,
+          assignedDept: req.current_stage_dept,
+          raisedByRole: req.raised_by_role,
+          stageKey: req.current_stage,
+        })));
 
   const canEditSubject =
     !!req &&
@@ -304,7 +314,7 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
     if (!req || !profile?.id) return;
 
     // Check Operator-raised restriction for approvals
-    if (action === 'approved' && !opts.reject && !opts.revoke) {
+    if (action === 'approved' && !opts.reject && !opts.revoke && !(isBackWithRaiser && isRaiser)) {
       const canApprove = canActOnStage({
         role: profile.role || null,
         department: profile.department || null,
@@ -341,11 +351,11 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
         stage_label: flow[currentIdx]?.label || req.current_stage,
         order_index: currentIdx,
         assigned_dept: req.current_stage_dept,
-        action,
+        action: isBackWithRaiser && action === 'approved' ? 'submitted' : action,
         actor_id: profile.id,
         actor_email: profile.email,
         actor_dept: profile.department,
-        comment: comment || null,
+        comment: comment || (isBackWithRaiser && action === 'approved' ? 'Resubmitted' : null),
         acted_at: new Date().toISOString(),
       });
 
@@ -360,8 +370,13 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
         nextStatus = 'rejected';
         notifTitle = `Request rejected: ${req.title || REQUEST_TYPE_LABELS[req.type]}`;
       } else if (opts.revoke) {
-        nextStatus = 'revoked';
-        notifTitle = `Request revoked: ${req.title || REQUEST_TYPE_LABELS[req.type]}`;
+        // Send back to the person who raised it (first stage) instead of cancelling.
+        const first = flow[0];
+        nextStatus = 'open';
+        nextStageKey = first.key;
+        nextDept = req.raised_dept || first.dept;
+        notifTitle = `Request sent back to you: ${req.title || REQUEST_TYPE_LABELS[req.type]}`;
+        notifTarget = { user_id: req.raised_by };
       } else if (action === 'approved') {
         const nxt = nextStage(req.type, req.current_stage);
         if (!nxt) {
@@ -375,7 +390,9 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
         } else {
           nextStageKey = nxt.key;
           nextDept = nxt.dept;
-          notifTitle = `Stage advanced: ${nxt.label}`;
+          notifTitle = isBackWithRaiser
+            ? `Request resubmitted: ${req.title || REQUEST_TYPE_LABELS[req.type]}`
+            : `Stage advanced: ${nxt.label}`;
           notifTarget = { target_dept: nxt.dept };
         }
       } else if (action === 'commented') {
@@ -383,14 +400,17 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
       }
 
       if (opts.reject || opts.revoke || action === 'approved') {
-        await supabase
+        const { data: updRows, error: updErr } = await supabase
           .from('requests')
           .update({
             status: nextStatus,
             current_stage: nextStageKey,
             current_stage_dept: nextDept,
           })
-          .eq('id', req.id);
+          .eq('id', req.id)
+          .select('id');
+        if (updErr) throw updErr;
+        if (!updRows?.length) throw new Error('You do not have permission to update this request.');
       }
 
       if (notifTitle) {
@@ -1011,7 +1031,7 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
             <div className='text-sm font-semibold'>Workflow</div>
             <ol className='space-y-2'>
               {flow.map((s, i) => {
-                const done = i < currentIdx || req.status !== 'open';
+                const done = i < currentIdx || req.status === 'closed' || req.status === 'approved';
                 const active = i === currentIdx && req.status === 'open';
                 return (
                   <li
@@ -1472,13 +1492,16 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
                   >
                     {busy ? <Loader2 className='w-4 h-4 animate-spin' /> : 'Comment'}
                   </Button>
-                  <Button
-                    variant='outline'
-                    disabled={!canAct || busy || (profile?.department !== 'Administrators' && !comment.trim())}
-                    onClick={() => record('revoked', { revoke: true })}
-                  >
-                    {busy ? <Loader2 className='w-4 h-4 animate-spin' /> : <><RotateCcw className='w-4 h-4 mr-1' /> Revoke</>}
-                  </Button>
+                  {!isBackWithRaiser && currentIdx > 0 && (
+                    <Button
+                      variant='outline'
+                      disabled={!canAct || busy || (profile?.department !== 'Administrators' && !comment.trim())}
+                      onClick={() => record('revoked', { revoke: true })}
+                      title='Send this request back to the person who raised it'
+                    >
+                      {busy ? <Loader2 className='w-4 h-4 animate-spin' /> : <><RotateCcw className='w-4 h-4 mr-1' /> Send back to requester</>}
+                    </Button>
+                  )}
                   <Button
                     variant='destructive'
                     disabled={!canAct || busy || (profile?.department !== 'Administrators' && !comment.trim())}
@@ -1490,14 +1513,16 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
                     disabled={!canAct || busy}
                     onClick={() => record('approved')}
                   >
-                    {busy ? <Loader2 className='w-4 h-4 animate-spin' /> : <><Check className='w-4 h-4 mr-1' /> Approve</>}
+                    {busy ? <Loader2 className='w-4 h-4 animate-spin' /> : <><Check className='w-4 h-4 mr-1' /> {isBackWithRaiser ? 'Resubmit' : 'Approve'}</>}
                   </Button>
                 </div>
                 {!canAct && (
                   <p className='text-xs text-muted-foreground text-right'>
                     {locationBlocked
                       ? `This request belongs to ${req.warehouse}. You can only act on ${profile?.location} requests.`
-                      : `Action requires being Admin/Super Admin of ${req.current_stage_dept}.`}
+                      : isBackWithRaiser
+                        ? `This request was sent back to ${req.raised_by_email || 'the requester'} for changes.`
+                        : `Action requires being Admin/Super Admin of ${req.current_stage_dept}.`}
                   </p>
                 )}
 
