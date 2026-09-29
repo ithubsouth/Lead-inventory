@@ -222,6 +222,7 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
       department: profile?.department || null,
       assignedDept: req.current_stage_dept,
       raisedByRole: req.raised_by_role,
+      stageKey: req.current_stage,
     });
 
   const canEditSubject =
@@ -309,10 +310,11 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
         department: profile.department || null,
         assignedDept: req.current_stage_dept,
         raisedByRole: req.raised_by_role,
-        action: 'approved'
+        action: 'approved',
+        stageKey: req.current_stage,
       });
       if (!canApprove) {
-        toast.error('Only Administrators or Super Admins can approve requests raised by an Operator.');
+        toast.error('You do not have permission to approve this stage.');
         return;
       }
     }
