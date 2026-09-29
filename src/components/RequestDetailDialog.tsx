@@ -24,7 +24,7 @@ import {
   nextStage,
   isTerminalStage,
 } from '@/lib/requestFlows';
-import { format } from 'date-fns';
+import { format, formatDistanceToNow } from 'date-fns';
 import { fmtDateTime } from '@/lib/dateFormat';
 import {
   Check,
@@ -43,6 +43,7 @@ import {
   Search,
   Pencil,
   ScanLine,
+  Clock,
 } from 'lucide-react';
 
 interface Props {
@@ -325,6 +326,46 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
     }
   };
 
+
+  // People accountable for the current stage: everyone who is allowed to act on it.
+  const [stageApprovers, setStageApprovers] = useState<{ email: string; full_name: string | null }[]>([]);
+  useEffect(() => {
+    if (!req || req.status !== 'open') { setStageApprovers([]); return; }
+    let cancelled = false;
+    (async () => {
+      // Sent back: the person who raised it is the one who has to act.
+      if (isBackWithRaiser) {
+        if (!cancelled) setStageApprovers(req.raised_by_email ? [{ email: req.raised_by_email, full_name: null }] : []);
+        return;
+      }
+      const { data } = await supabase
+        .from('users')
+        .select('email, full_name, role, department, location')
+        .eq('department', req.current_stage_dept);
+      if (cancelled) return;
+      const people = (data || []).filter((u: any) => {
+        const allowed = canActOnStage({
+          role: u.role,
+          department: u.department,
+          assignedDept: req.current_stage_dept,
+          raisedByRole: req.raised_by_role,
+          stageKey: req.current_stage,
+        });
+        if (!allowed) return false;
+        // Technology Team / SCM only handle their own warehouse.
+        if (isLocationScopedDept(u.department) && u.location && u.location !== 'General' && req.warehouse) {
+          return u.location === req.warehouse;
+        }
+        return true;
+      });
+      setStageApprovers(people.map((u: any) => ({ email: u.email, full_name: u.full_name })));
+    })();
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [req?.id, req?.current_stage, req?.current_stage_dept, req?.status, isBackWithRaiser]);
+
+  // When the request reached its current stage (latest workflow action, else creation).
+  const pendingSince = req ? (latestWorkflow?.acted_at || latestWorkflow?.created_at || req.created_at) : null;
 
   // Requests that were approved but never moved on are advanced automatically the next
   // time someone who is allowed to act on them opens them — no button needed.
@@ -1147,9 +1188,31 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
                       </div>
                     )}
                     {active && (
-                      <span className='ml-auto text-[10px] font-semibold uppercase tracking-wide text-primary shrink-0'>
-                        In progress
-                      </span>
+                      <div
+                        className='ml-auto flex items-center gap-1.5 text-right shrink-0 max-w-[50%]'
+                        title={
+                          stageApprovers.length
+                            ? `Waiting for: ${stageApprovers.map((a) => a.email).join(', ')}`
+                            : `Waiting for an Admin of ${s.dept}`
+                        }
+                      >
+                        <Clock className='w-4 h-4 text-amber-500 shrink-0' />
+                        <div className='min-w-0 leading-tight'>
+                          <div className='text-[11px] font-medium text-amber-700 truncate'>
+                            {stageApprovers.length
+                              ? stageApprovers
+                                  .slice(0, 2)
+                                  .map((a) => a.full_name || a.email.split('@')[0])
+                                  .join(', ') + (stageApprovers.length > 2 ? ` +${stageApprovers.length - 2}` : '')
+                              : `${s.dept} Admin`}
+                          </div>
+                          {pendingSince && (
+                            <div className='text-[10px] text-muted-foreground'>
+                              Pending {formatDistanceToNow(new Date(pendingSince))}
+                            </div>
+                          )}
+                        </div>
+                      </div>
                     )}
                   </li>
                 );
