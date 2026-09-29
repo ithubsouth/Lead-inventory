@@ -1,4 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
+import { TableSkeleton } from './TableSkeleton';
+import { SearchInput } from './SearchInput';
 import { Search, Download, Eye, Calendar, FileText } from 'lucide-react';
 import AssetDocumentsDialog from './AssetDocumentsDialog';
 import { Device } from './types';
@@ -518,16 +520,7 @@ const DevicesTable: React.FC<DevicesTableProps> = ({
         <div style={{ marginBottom: '8px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '4px', flexWrap: 'wrap' }}>
             <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ position: 'relative', width: '100%' }}>
-                <Input
-                  id="search"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="Search by Serial, Sales Order, Deal ID, School, Nucleus ID, Asset Type, Model, Configuration, Asset Status, Asset Condition, Product, Status, Order Type, Asset Group, Asset Code, SD Card Size, Profile ID, Updated By"
-                  style={{ paddingLeft: '8px', paddingRight: '28px', fontSize: '12px', width: '100%', border: '1px solid #d1d5db', borderRadius: '4px', padding: '6px 28px 6px 8px', height: '28px' }}
-                />
-                <Search style={{ position: 'absolute', right: '8px', top: '50%', transform: 'translateY(-50%)', width: '12px', height: '12px', color: '#6b7280', pointerEvents: 'none' }} />
-              </div>
+              <SearchInput id="search" value={searchQuery} onChange={setSearchQuery} placeholder="Search by Serial, Sales Order, Deal ID, School, Nucleus ID, Asset Type, Model, Configuration, Asset Status, Asset Condition, Product, Status, Order Type, Asset Group, Asset Code, SD Card Size, Profile ID, Updated By" />
             </div>
             <Button
               variant="outline"
@@ -646,10 +639,10 @@ const DevicesTable: React.FC<DevicesTableProps> = ({
           </div>
         </div>
 
-        {loading ? (
-          <div style={{ fontSize: '12px', padding: '8px' }}>Loading devices...</div>
+        {loading && (!devices || devices.length === 0) ? (
+          <TableSkeleton columns={9} label='Loading devices…' />
         ) : !devices || devices.length === 0 ? (
-          <div style={{ fontSize: '12px', padding: '8px' }}>No devices available. Check your database or data loading logic.</div>
+          <div style={{ fontSize: '13px', padding: '24px 8px', textAlign: 'center', color: '#6b7280' }}>No devices yet. Devices are added when an order with serial numbers is saved.</div>
         ) : (
           <>
             <div
@@ -699,7 +692,10 @@ const DevicesTable: React.FC<DevicesTableProps> = ({
                   {paginatedDevices.length === 0 ? (
                     <TableRow>
                       <TableCell colSpan={22} style={{ textAlign: 'center', fontSize: '12px', padding: '8px' }}>
-                        No devices found with current filters. Try adjusting the filters or check data loading.
+                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px', padding: '24px 8px' }}>
+                          <span>No devices match these filters.</span>
+                          <Button variant="outline" size="sm" onClick={clearFilters}>Clear filters</Button>
+                        </div>
                       </TableCell>
                     </TableRow>
                   ) : (

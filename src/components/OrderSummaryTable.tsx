@@ -1,4 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { TableSkeleton } from './TableSkeleton';
+import { SearchInput } from './SearchInput';
 import { Search, Download, Plus } from 'lucide-react';
 import { Device } from './types';
 import { formatDate } from './utils';
@@ -343,7 +345,6 @@ const OrderSummaryTable: React.FC<OrderSummaryTableProps> = ({
   ]);
 
   const paginatedSummary = useMemo(() => {
-    console.log('Paginating summaries:', summaries.length, 'from', (currentPage - 1) * rowsPerPage, 'to', currentPage * rowsPerPage);
     return summaries.slice(
       (currentPage - 1) * rowsPerPage,
       currentPage * rowsPerPage
@@ -529,16 +530,7 @@ const OrderSummaryTable: React.FC<OrderSummaryTableProps> = ({
         <div style={{ marginBottom: '8px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '4px', flexWrap: 'wrap' }}>
             <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ position: 'relative', width: '100%' }}>
-                <Input
-                  id="search"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="Search by Warehouse, Asset Type, or Model"
-                  style={{ paddingLeft: '8px', paddingRight: '28px', fontSize: '12px', width: '100%', height: '28px' }}
-                />
-                <Search style={{ position: 'absolute', right: '8px', top: '50%', transform: 'translateY(-50%)', width: '12px', height: '12px', color: '#6b7280', pointerEvents: 'none' }} />
-              </div>
+              <SearchInput id="search" value={searchQuery} onChange={setSearchQuery} placeholder="Search by Warehouse, Asset Type, or Model" />
             </div>
             <Button
               variant="outline"
@@ -637,12 +629,15 @@ const OrderSummaryTable: React.FC<OrderSummaryTableProps> = ({
           </div>
         </div>
 
-        {loading ? (
-          <div style={{ fontSize: '12px', padding: '8px' }}>Loading summary data...</div>
+        {loading && devices.length === 0 ? (
+          <TableSkeleton columns={7} label='Loading summary…' />
         ) : devices.length === 0 ? (
-          <div style={{ fontSize: '12px', padding: '8px' }}>No devices available. Load devices or check your database.</div>
+          <div style={{ fontSize: '12px', padding: '8px' }}>No devices yet, so there is nothing to summarise.</div>
         ) : summaries.length === 0 ? (
-          <div style={{ fontSize: '12px', padding: '8px' }}>No summary data found with current filters. Try adjusting the filters.</div>
+          <div style={{ fontSize: '12px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px', padding: '24px 8px' }}>
+            <span>No results match these filters.</span>
+            <Button variant="outline" size="sm" onClick={clearFilters}>Clear filters</Button>
+          </div>
         ) : (
           <>
             <div

@@ -15,8 +15,9 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Plus, Inbox, User, Layers, Search, FileEdit, Trash2 } from 'lucide-react';
-import { REQUEST_TYPE_LABELS, getFlow, RequestType, RequestStatus } from '@/lib/requestFlows';
+import { Plus, Inbox, User, Layers, Search, FileEdit, Trash2, BellRing, CheckCircle2 } from 'lucide-react';
+import { REQUEST_TYPE_LABELS, getFlow, canActOnStage, RequestType, RequestStatus } from '@/lib/requestFlows';
+import { TableSkeleton } from './TableSkeleton';
 import { hasFullAccess, isLocationScopedDept } from '@/lib/appTabs';
 
 import { formatDistanceToNow } from 'date-fns';
@@ -38,6 +39,7 @@ interface RequestRow {
   raised_by: string;
   raised_by_email: string | null;
   raised_dept: string;
+  raised_by_role?: string | null;
   po_number: string | null;
   warehouse: string | null;
   asset_type: string | null;
@@ -129,8 +131,9 @@ export default function RequestsPanel({ focusRequestId, onFocusHandled }: Props)
 
       if (error) {
         console.error('Error fetching requests:', error);
-        toast.error('Failed to load requests');
-        setRows([]);
+        toast.error("Couldn't load requests", { action: { label: 'Retry', onClick: () => load() } });
+        // Keep showing the last list on a failed background refresh.
+        if (!background) setRows([]);
       } else {
         setRows((data as RequestRow[]) || []);
       }
@@ -168,7 +171,26 @@ export default function RequestsPanel({ focusRequestId, onFocusHandled }: Props)
     }
   }, [focusRequestId, onFocusHandled]);
 
-  const filtered = rows.filter((r) => {
+  /** True when the signed-in user can act on this request right now. */
+  const needsMyAction = (r: RequestRow) =>
+    r.status === 'open' &&
+    !isReporter &&
+    (r.current_stage_dept === profile?.department || profile?.role === 'Super Admin') &&
+    canActOnStage({
+      role: profile?.role ?? null,
+      department: profile?.department ?? null,
+      assignedDept: r.current_stage_dept,
+      raisedByRole: r.raised_by_role,
+      stageKey: r.current_stage,
+    });
+
+  const stageProgress = (r: RequestRow) => {
+    const flow = getFlow(r.type);
+    const i = flow.findIndex((x) => x.key === r.current_stage);
+    return { step: i < 0 ? 0 : i + 1, total: flow.length };
+  };
+
+  const filteredUnsorted = rows.filter((r) => {
     // "All" is a read-only overview of every request for every department.
     // Inbox / My Requests / Drafts stay limited to requests the user is involved in.
     if (tab !== 'all' && !isRelevant(r)) return false;
@@ -190,6 +212,13 @@ export default function RequestsPanel({ focusRequestId, onFocusHandled }: Props)
     }
     return true;
   });
+
+  // In the inbox, requests waiting on me come first.
+  const filtered = tab === 'inbox'
+    ? [...filteredUnsorted].sort((a, b) => Number(needsMyAction(b)) - Number(needsMyAction(a)))
+    : filteredUnsorted;
+  const actionCount = rows.filter((r) => isRelevant(r) && needsMyAction(r)).length;
+  const mineOpenCount = rows.filter((r) => r.raised_by === profile?.id && r.status === 'open').length;
 
   const stageLabel = (r: RequestRow) => {
     try {
@@ -237,6 +266,11 @@ export default function RequestsPanel({ focusRequestId, onFocusHandled }: Props)
             )}
           >
             <Inbox className='w-4 h-4' /> Inbox
+            {actionCount > 0 && (
+              <span className='ml-0.5 min-w-[18px] h-[18px] px-1 rounded-full bg-amber-500 text-white text-[10px] leading-[18px] text-center tracking-normal' title={`${actionCount} waiting for you`}>
+                {actionCount}
+              </span>
+            )}
           </button>
           <button
             onClick={() => setTab('mine')}
@@ -246,6 +280,11 @@ export default function RequestsPanel({ focusRequestId, onFocusHandled }: Props)
             )}
           >
             <User className='w-4 h-4' /> My Requests
+            {mineOpenCount > 0 && (
+              <span className='ml-0.5 min-w-[18px] h-[18px] px-1 rounded-full bg-slate-300 text-slate-700 text-[10px] leading-[18px] text-center tracking-normal' title={`${mineOpenCount} still open`}>
+                {mineOpenCount}
+              </span>
+            )}
           </button>
           {!isReporter && (
             <button
@@ -311,10 +350,7 @@ export default function RequestsPanel({ focusRequestId, onFocusHandled }: Props)
 
           <div className='overflow-y-auto custom-scrollbar-thin' style={{ height: 'calc(100vh - 340px)', minHeight: '400px' }}>
             {loading ? (
-          <div className='px-6 py-32 text-center'>
-            <div className='inline-block w-10 h-10 border-4 border-blue-500/30 border-t-blue-500 rounded-full animate-spin mb-4'></div>
-            <p className='text-sm font-bold text-slate-400 uppercase tracking-widest'>Syncing with server...</p>
-          </div>
+          <TableSkeleton rows={6} columns={7} label='Loading requests…' />
         ) : tab === 'drafts' ? (
           draft ? (
             <div className='divide-y divide-slate-100'>
@@ -386,23 +422,45 @@ export default function RequestsPanel({ focusRequestId, onFocusHandled }: Props)
             </div>
           )
         ) : filtered.length === 0 ? (
-          <div className='px-6 py-40 text-center'>
-            <div className='w-20 h-20 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-4'>
-              <Inbox className='w-10 h-10 text-slate-200' />
+          <div className='px-6 py-32 text-center space-y-3'>
+            <div className='w-20 h-20 bg-slate-50 rounded-full flex items-center justify-center mx-auto'>
+              {tab === 'inbox' && !q ? <CheckCircle2 className='w-10 h-10 text-green-300' /> : <Inbox className='w-10 h-10 text-slate-200' />}
             </div>
-            <p className='text-sm font-bold text-slate-400 uppercase tracking-widest'>No requests found in this view</p>
+            <p className='text-sm font-bold text-slate-500'>
+              {q
+                ? `No requests match "${q}".`
+                : tab === 'inbox'
+                  ? "You're all caught up. Nothing is waiting for you."
+                  : tab === 'mine'
+                    ? "You haven't raised any requests yet."
+                    : 'No requests yet.'}
+            </p>
+            {q && (
+              <Button variant='outline' size='sm' onClick={() => setQ('')}>Clear search</Button>
+            )}
+            {!q && tab === 'mine' && !isReporter && (
+              <Button size='sm' onClick={() => setCreateOpen(true)} className='gap-2'><Plus className='w-4 h-4' /> New Request</Button>
+            )}
           </div>
         ) : (
           <div className='divide-y divide-slate-100'>
-            {filtered.map((r) => (
+            {filtered.map((r) => {
+              const mine = needsMyAction(r);
+              const prog = stageProgress(r);
+              return (
               <button
                 key={r.id || Math.random()}
                 onClick={() => setDetailId(r.id)}
-                className='w-full text-left grid grid-cols-12 gap-3 px-6 py-4 hover:bg-blue-50/30 transition-all group border-l-4 border-l-transparent hover:border-l-blue-500'
+                aria-label={`${r.title || 'Request'}${mine ? ', waiting for your action' : ''}`}
+                className={cn(
+                  'w-full text-left grid grid-cols-12 gap-3 px-6 py-4 transition-all group border-l-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-inset',
+                  mine ? 'bg-amber-50/60 border-l-amber-500 hover:bg-amber-50' : 'border-l-transparent hover:bg-blue-50/30 hover:border-l-blue-500'
+                )}
               >
                 <div className='col-span-3 min-w-0'>
-                  <div className='font-bold text-sm text-slate-700 truncate group-hover:text-blue-600 transition-colors'>
-                    {r.title || (r.type ? REQUEST_TYPE_LABELS[r.type] : 'Untitled Request')}
+                  <div className='font-bold text-sm text-slate-700 truncate group-hover:text-blue-600 transition-colors flex items-center gap-2'>
+                    {mine && <BellRing className='w-3.5 h-3.5 text-amber-500 flex-shrink-0' aria-hidden />}
+                    <span className='truncate'>{r.title || (r.type ? REQUEST_TYPE_LABELS[r.type] : 'Untitled Request')}</span>
                   </div>
                   <div className='text-[11px] font-medium text-slate-400 mt-0.5 truncate'>
                     {r.type ? REQUEST_TYPE_LABELS[r.type] : 'General'}
@@ -430,13 +488,19 @@ export default function RequestsPanel({ focusRequestId, onFocusHandled }: Props)
                 </div>
                 <div className='col-span-1 min-w-0 flex items-center'>
                   {r.status === 'open' ? (
-                    <Badge
-                      variant='outline'
-                      className='bg-amber-50 text-amber-700 border-amber-200 font-bold text-[10px] px-2 py-1 rounded-lg max-w-full'
-                      title={stageLabel(r)}
-                    >
-                      <span className='truncate block max-w-[110px]'>{r.current_stage_dept || '-'}</span>
-                    </Badge>
+                    <div className='min-w-0 w-full space-y-1' title={`Step ${prog.step} of ${prog.total}: ${stageLabel(r)}`}>
+                      <Badge
+                        variant='outline'
+                        className={cn('font-bold text-[10px] px-2 py-1 rounded-lg max-w-full', mine ? 'bg-amber-500 text-white border-amber-500' : 'bg-amber-50 text-amber-700 border-amber-200')}
+                      >
+                        <span className='truncate block max-w-[110px]'>{mine ? 'You' : r.current_stage_dept || '-'}</span>
+                      </Badge>
+                      <div className='flex gap-0.5' aria-hidden>
+                        {Array.from({ length: prog.total }).map((_, i) => (
+                          <span key={i} className={cn('h-1 flex-1 rounded-full', i < prog.step - 1 ? 'bg-green-500' : i === prog.step - 1 ? 'bg-amber-500' : 'bg-slate-200')} />
+                        ))}
+                      </div>
+                    </div>
                   ) : (
                     <span className='text-[11px] text-slate-400'>—</span>
                   )}
@@ -453,7 +517,8 @@ export default function RequestsPanel({ focusRequestId, onFocusHandled }: Props)
                   </Badge>
                 </div>
               </button>
-            ))}
+              );
+            })}
           </div>
         )}
         </div>
@@ -469,7 +534,7 @@ export default function RequestsPanel({ focusRequestId, onFocusHandled }: Props)
           onCreated={(id) => {
             setCreateOpen(false);
             setDetailId(id);
-            load();
+            load({ background: true });
           }}
         />
       )}
@@ -478,7 +543,7 @@ export default function RequestsPanel({ focusRequestId, onFocusHandled }: Props)
           requestId={detailId}
           open={!!detailId}
           onOpenChange={(o) => !o && setDetailId(null)}
-          onChanged={load}
+          onChanged={() => load({ background: true })}
         />
       )}
       </Suspense>

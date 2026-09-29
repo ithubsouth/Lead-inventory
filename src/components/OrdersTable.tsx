@@ -1,4 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
+import { TableSkeleton } from './TableSkeleton';
+import { SearchInput } from './SearchInput';
 import { Search, Eye, Edit, Trash2, RotateCcw, Download, Calendar, FileText } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import EditOrderForm from './EditOrderForm';
@@ -549,16 +551,7 @@ const OrdersTable: React.FC<OrdersTableProps> = ({
         <div style={{ marginBottom: '8px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '4px', flexWrap: 'wrap' }}>
             <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ position: 'relative', width: '100%' }}>
-                <Input
-                  id="search"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="Search by Sales Order, Deal ID, School, Nucleus ID, Profile ID, or Serial Number"
-                  style={{ paddingLeft: '8px', paddingRight: '28px', fontSize: '12px', width: '100%', border: '1px solid #d1d5db', borderRadius: '4px', padding: '6px 28px 6px 8px', height: '28px' }}
-                />
-                <Search style={{ position: 'absolute', right: '8px', top: '50%', transform: 'translateY(-50%)', width: '12px', height: '12px', color: '#6b7280', pointerEvents: 'none' }} />
-              </div>
+              <SearchInput id="search" value={searchQuery} onChange={setSearchQuery} placeholder="Search by Sales Order, Deal ID, School, Nucleus ID, Profile ID, or Serial Number" />
             </div>
             <Button
               variant="outline"
@@ -653,8 +646,10 @@ const OrdersTable: React.FC<OrdersTableProps> = ({
           </div>
         </div>
 
-        {orders.length === 0 ? (
-          <div style={{ fontSize: '12px', padding: '8px' }}>No orders available. Create an order or check your database.</div>
+        {loading && orders.length === 0 ? (
+          <TableSkeleton columns={8} label='Loading orders…' />
+        ) : orders.length === 0 ? (
+          <div style={{ fontSize: '13px', padding: '24px 8px', textAlign: 'center', color: '#6b7280' }}>No orders yet. Orders you create in the Create Order tab will appear here.</div>
         ) : (
           <>
             <div
@@ -699,7 +694,10 @@ const OrdersTable: React.FC<OrdersTableProps> = ({
                   {paginatedOrders.length === 0 ? (
                     <TableRow>
                       <TableCell colSpan={17} style={{ textAlign: 'center', fontSize: '12px', padding: '8px' }}>
-                        No orders found with current filters. Try adjusting the filters or check loadOrders.
+                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px', padding: '24px 8px' }}>
+                          <span>No orders match these filters.</span>
+                          <Button variant="outline" size="sm" onClick={clearFilters}>Clear filters</Button>
+                        </div>
                       </TableCell>
                     </TableRow>
                   ) : (

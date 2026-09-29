@@ -8,7 +8,7 @@ import { Badge } from '@/components/ui/badge';
 import { Plus, Minus, Camera, X, Search } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
 import { supabase } from '@/integrations/supabase/client';
-import EnhancedBarcodeScanner from './EnhancedBarcodeScanner';
+const EnhancedBarcodeScanner = React.lazy(() => import('./EnhancedBarcodeScanner'));
 import { Order, Device } from './types';
 import type { ASSET_TYPES } from './types';
 import { formatDate } from './utils';
@@ -1005,14 +1005,18 @@ const EditOrderForm: React.FC<EditOrderFormProps> = ({ order, onSave, onCancel }
         </Button>
       </div>
 
-      <EnhancedBarcodeScanner
-        isOpen={showScanner}
-        onClose={() => {
-          setShowScanner(false);
-          setCurrentSerialIndex(null);
-        }}
-        onScan={handleScanSuccess}
-      />
+      {showScanner && (
+        <React.Suspense fallback={null}>
+          <EnhancedBarcodeScanner
+            isOpen={showScanner}
+            onClose={() => {
+              setShowScanner(false);
+              setCurrentSerialIndex(null);
+            }}
+            onScan={handleScanSuccess}
+          />
+        </React.Suspense>
+      )}
     </div>
   );
 };

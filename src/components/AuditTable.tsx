@@ -1,4 +1,5 @@
 import React, { useMemo, useState, useCallback, useRef, lazy, Suspense } from 'react';
+import { TableSkeleton } from './TableSkeleton';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -10,7 +11,6 @@ import { Filter, Search, ScanLine, Upload, Download } from 'lucide-react';
 import { DatePickerWithRange } from './DatePickerWithRange';
 import { DateRange } from 'react-day-picker';
 import { Device } from './types';
-import debounce from 'lodash/debounce';
 import { excludedAuditItems, assetStatuses, assetGroups } from './constants';
 import MultiSelect from './MultiSelect';
 import {
@@ -24,6 +24,7 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { scanFeedback } from '@/lib/scanFeedback';
 import { useToast } from '@/hooks/use-toast';
 
 // Camera/barcode library is large; load it only when the scanner is opened.
@@ -512,13 +513,17 @@ const AuditTable: React.FC<AuditTableProps> = ({
     setScannerInput('');
   };
 
-  const handleCheck = useCallback(() => {
-    const trimmedInput = scannerInput.trim();
+  // Takes the serial explicitly so camera scans and fast hardware scanners (which type
+  // a serial + Enter in a few ms) are each checked. The old version read `scannerInput`
+  // through a 300 ms debounce, which dropped rapid scans and checked stale values.
+  const handleCheck = useCallback((raw?: string) => {
+    const trimmedInput = (raw ?? scannerInput).trim();
     if (!trimmedInput) return;
 
     setScannerInput('');
+    const needle = trimmedInput.toUpperCase();
     const matchedDevice = filteredDevices.find(
-      (device) => device.serial_number === trimmedInput || device.id === trimmedInput
+      (device) => (device.serial_number || '').trim().toUpperCase() === needle || device.id === trimmedInput
     );
 
     if (matchedDevice) {
@@ -530,6 +535,7 @@ const AuditTable: React.FC<AuditTableProps> = ({
       onUpdateAssetCheck(matchedDevice.id, checkStatus)
         .then(() => {
           setScanResult(checkStatus);
+          scanFeedback(checkStatus === 'Matched' ? 'ok' : 'warn');
           setAuditOverrides((prev) => ({
             ...prev,
             [matchedDevice.id]: {
@@ -544,27 +550,27 @@ const AuditTable: React.FC<AuditTableProps> = ({
         .catch((err) => {
           setError(`Failed to update asset check: ${err.message}`);
           setScanResult('Error');
+          scanFeedback('error');
+          inputRef.current?.focus();
         })
         .finally(() => {
           setUpdatingDeviceId(null);
         });
     } else {
-      setScanResult('Not Found');
+      setScanResult(`Not Found: ${trimmedInput}`);
+      scanFeedback('error');
       inputRef.current?.focus();
     }
   }, [scannerInput, filteredDevices, selectedWarehouse, onUpdateAssetCheck]);
 
-  const debouncedHandleCheck = useCallback(debounce(handleCheck, 300), [handleCheck]);
-
   const handleBarcodeScan = (scannedText: string) => {
-    setScannerInput(scannedText);
-    debouncedHandleCheck();
+    handleCheck(scannedText);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter') {
       e.preventDefault();
-      debouncedHandleCheck();
+      handleCheck(e.currentTarget.value);
     }
   };
 
@@ -638,12 +644,14 @@ const AuditTable: React.FC<AuditTableProps> = ({
   if (pageRange[pageRange.length - 1] < totalPages) pageRange.push('...');
   if (pageRange[pageRange.length - 1] !== totalPages) pageRange.push(totalPages);
 
-  if (loading) {
-    return <div style={{ fontSize: '12px', padding: '8px' }}>Loading audit data...</div>;
+  // Only block the screen on the very first load; later refreshes keep the table
+  // (and the scanner input's focus) in place while an audit is in progress.
+  if (loading && (!devices || devices.length === 0)) {
+    return <TableSkeleton columns={10} label='Loading audit data…' />;
   }
 
   if (!devices || devices.length === 0) {
-    return <div style={{ fontSize: '12px', padding: '8px' }}>No devices available. Please check your data source.</div>;
+    return <div style={{ fontSize: '13px', padding: '24px 8px', textAlign: 'center', color: '#6b7280' }}>No devices to audit yet.</div>;
   }
 
   return (
@@ -729,7 +737,7 @@ const AuditTable: React.FC<AuditTableProps> = ({
                 fontSize: '12px',
                 height: '28px',
               }}
-              onClick={debouncedHandleCheck}
+              onClick={() => handleCheck()}
             >
               Check
             </Button>
@@ -980,7 +988,10 @@ const AuditTable: React.FC<AuditTableProps> = ({
               {paginatedDevices.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={14} style={{ textAlign: 'center', fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db' }}>
-                    No devices found with current filters.
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px', padding: '16px 0' }}>
+                      <span>No devices match these filters.</span>
+                      <Button variant="outline" size="sm" onClick={clearFilters}>Clear filters</Button>
+                    </div>
                   </TableCell>
                 </TableRow>
               ) : (
@@ -1078,7 +1089,7 @@ const AuditTable: React.FC<AuditTableProps> = ({
                             checked={checkText === 'Matched'}
                             onCheckedChange={(checked) => {
                               setUpdatingDeviceId(d.id);
-                              onUpdateAssetCheck(d.id, checked ? 'Matched' : 'Unmatched')
+                              onUpdateAssetCheck(d.id, checked ? 'Matched' : 'Unmatched').catch(() => undefined)
                                 .then(() => {
                                   setAuditOverrides((prev) => ({
                                     ...prev,
@@ -1226,43 +1237,48 @@ const AuditTable: React.FC<AuditTableProps> = ({
           </div>
         </div>
       )}
-      {scanResult && (
-        <div
-          style={{
-            position: 'fixed',
-            top: '50%',
-            left: '50%',
-            transform: 'translate(-50%, -50%)',
-            background: '#fff',
-            borderRadius: '8px',
-            boxShadow: '0 4px 6px rgba(0,0,0,0.1)',
-            padding: '16px',
-            zIndex: 50,
-            width: '300px',
-          }}
-        >
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-            <h3 style={{ fontSize: '14px', fontWeight: 'bold' }}>Scan Result</h3>
-            <button onClick={() => setScanResult(null)} style={{ cursor: 'pointer', background: 'none', border: 'none', fontSize: '14px' }}>
+      {scanResult && (() => {
+        // Non-blocking banner: the old centred modal covered the table and had to be
+        // dismissed between scans. This one stays out of the way and fades after 3 s.
+        const tone = scanResult === 'Matched'
+          ? { bg: '#ecfdf5', border: '#22c55e', fg: '#15803d', label: 'Matched' }
+          : scanResult.startsWith('Not Found') || scanResult === 'Error'
+            ? { bg: '#fef2f2', border: '#ef4444', fg: '#b91c1c', label: scanResult === 'Error' ? 'Could not save' : 'Not found' }
+            : { bg: '#fffbeb', border: '#f59e0b', fg: '#b45309', label: 'Different warehouse' };
+        const detail = scanResult.startsWith('Not Found: ') ? scanResult.slice('Not Found: '.length) : scanResult === tone.label ? '' : scanResult;
+        return (
+          <div
+            role='status'
+            aria-live='assertive'
+            style={{
+              position: 'fixed',
+              top: '16px',
+              left: '50%',
+              transform: 'translateX(-50%)',
+              background: tone.bg,
+              border: `2px solid ${tone.border}`,
+              color: tone.fg,
+              borderRadius: '10px',
+              boxShadow: '0 6px 16px rgba(0,0,0,0.12)',
+              padding: '10px 14px',
+              zIndex: 60,
+              minWidth: '240px',
+              maxWidth: 'calc(100vw - 32px)',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '12px',
+            }}
+          >
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: '15px', fontWeight: 700 }}>{tone.label}</div>
+              {detail && <div style={{ fontSize: '12px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{detail}</div>}
+            </div>
+            <button onClick={() => setScanResult(null)} aria-label='Dismiss' style={{ cursor: 'pointer', background: 'none', border: 'none', fontSize: '18px', color: tone.fg }}>
               ×
             </button>
           </div>
-          <p
-            style={{
-              fontSize: '12px',
-              color: scanResult === 'Matched' ? '#22c55e' : scanResult === 'Not Found' ? '#ef4444' : '#f59e0b',
-              marginBottom: '16px',
-            }}
-          >
-            {scanResult}
-          </p>
-          <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-            <Button variant="outline" size="sm" onClick={() => setScanResult(null)} style={{ fontSize: '12px' }}>
-              Close
-            </Button>
-          </div>
-        </div>
-      )}
+        );
+      })()}
       {error && (
         <div
           style={{
@@ -1331,14 +1347,14 @@ const AuditTable: React.FC<AuditTableProps> = ({
         </AlertDialog>
       )}
       {isScannerOpen && (
-        <Suspense fallback={null}>
+        <React.Suspense fallback={null}>
           <EnhancedBarcodeScanner
             isOpen={isScannerOpen}
-            onClose={() => setIsScannerOpen(false)}
+            onClose={() => { setIsScannerOpen(false); inputRef.current?.focus(); }}
             onScan={handleBarcodeScan}
-            existingSerials={filteredDevices.map((d) => d.serial_number || d.id)}
+            continuous
           />
-        </Suspense>
+        </React.Suspense>
       )}
       <Dialog open={uploadOpen} onOpenChange={(o) => { setUploadOpen(o); if (!o) setUploadResult(null); }}>
         <DialogContent className="max-w-md">

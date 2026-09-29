@@ -1,6 +1,6 @@
-import React, { useState, useEffect, useRef, lazy, Suspense, useDeferredValue } from 'react';
+import React, { useState, useEffect, useRef, lazy, Suspense } from 'react';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
-import { Package, BarChart3, Archive, Clock, History, Inbox } from 'lucide-react';
+import { Package, BarChart3, Archive, Clock, History, Inbox, ClipboardCheck, Cpu, UserX } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/use-toast';
 import { supabase } from '@/integrations/supabase/client';
@@ -11,22 +11,49 @@ import { Order, Device, OrderSummary, TabletItem, TVItem } from './types';
 import { DateRange } from 'react-day-picker';
 import { useUserProfile } from '@/hooks/useUserProfile';
 import { readDeviceCache, writeDeviceCache, maxUpdatedAt } from '@/lib/deviceCache';
+import { useAuth } from '@/contexts/AuthContext';
+import { TableSkeleton } from './TableSkeleton';
 
 
-const UnifiedAssetForm = lazy(() => import('./UnifiedAssetForm'));
-const OrdersTable = lazy(() => import('./OrdersTable'));
-const DevicesTable = lazy(() => import('./DevicesTable'));
-const OrderSummaryTable = lazy(() => import('./OrderSummaryTable'));
-const AuditTable = lazy(() => import('./AuditTable'));
-const ActivityLogs = lazy(() => import('./ActivityLogs'));
-const EnhancedBarcodeScanner = lazy(() => import('./EnhancedBarcodeScanner'));
+// Chunk loaders are kept in one map so a tab's code can be prefetched
+// (on hover / when the browser is idle) before the user clicks it.
+const tabLoaders = {
+  create: () => import('./UnifiedAssetForm'),
+  view: () => import('./OrdersTable'),
+  order: () => import('./OrderSummaryTable'),
+  devices: () => import('./DevicesTable'),
+  audit: () => import('./AuditTable'),
+  activity: () => import('./ActivityLogs'),
+} as const;
+type LazyTabKey = keyof typeof tabLoaders;
+const prefetched = new Set<string>();
+const prefetchTab = (key: string) => {
+  if (prefetched.has(key) || !(key in tabLoaders)) return;
+  prefetched.add(key);
+  tabLoaders[key as LazyTabKey]().catch(() => prefetched.delete(key));
+};
+
+const UnifiedAssetForm = lazy(tabLoaders.create);
+const OrdersTable = lazy(tabLoaders.view);
+const DevicesTable = lazy(tabLoaders.devices);
+const OrderSummaryTable = lazy(tabLoaders.order);
+const AuditTable = lazy(tabLoaders.audit);
+const ActivityLogs = lazy(tabLoaders.activity);
 const VersionHistoryDialog = lazy(() => import('./VersionHistoryDialog'));
 import RequestsPanel from './RequestsPanel';
 import NotificationsPage from './NotificationsPage';
 
-const TabFallback = () => (
-  <div className='flex items-center justify-center py-16 text-sm text-muted-foreground'>Loading…</div>
-);
+const TAB_DEFS: { key: string; label: string; short: string; icon: React.ComponentType<{ className?: string }> }[] = [
+  { key: 'create', label: 'Create Order', short: 'Create', icon: Package },
+  { key: 'view', label: 'View Orders', short: 'Orders', icon: Archive },
+  { key: 'order', label: 'Order Summary', short: 'Summary', icon: BarChart3 },
+  { key: 'devices', label: 'Devices', short: 'Devices', icon: Cpu },
+  { key: 'requests', label: 'Asset Master', short: 'Assets', icon: Inbox },
+  { key: 'audit', label: 'Audit View', short: 'Audit', icon: ClipboardCheck },
+  { key: 'activity', label: 'Activity Logs', short: 'Activity', icon: Clock },
+];
+
+const TabFallback = () => <TableSkeleton />;
 
 const InventoryManagement = () => {
   const [orders, setOrders] = useState<Order[]>([]);
@@ -34,8 +61,6 @@ const InventoryManagement = () => {
   const [loading, setLoading] = useState(false);
   const [isClearing, setIsClearing] = useState(false);
   const [dataLoaded, setDataLoaded] = useState({ orders: false, devices: false });
-  const [showScanner, setShowScanner] = useState(false);
-  const [currentSerialIndex, setCurrentSerialIndex] = useState<{ itemId: string; index: number; type: 'tablet' | 'tv' } | null>(null);
   const [selectedWarehouse, setSelectedWarehouse] = useState<string[]>([]);
   const [selectedAssetType, setSelectedAssetType] = useState<string[]>([]);
   const [selectedModel, setSelectedModel] = useState<string[]>([]);
@@ -52,7 +77,6 @@ const InventoryManagement = () => {
   const [toDate, setToDate] = useState<DateRange | undefined>();
   const [showDeleted, setShowDeleted] = useState<boolean>(false);
   const [searchQuery, setSearchQuery] = useState<string>('');
-  const deferredSearchQuery = useDeferredValue(searchQuery);
   const [orderType, setOrderType] = useState('');
   const [salesOrder, setSalesOrder] = useState('');
   const [dealId, setDealId] = useState('');
@@ -60,15 +84,11 @@ const InventoryManagement = () => {
   const [schoolName, setSchoolName] = useState('');
   const [brand, setBrand] = useState('');
   const [agreementType, setAgreementType] = useState('');
-  const [tablets, setTablets] = useState<TabletItem[]>([]);
-  const [tvs, setTvs] = useState<TVItem[]>([]);
   const [logoLoaded, setLogoLoaded] = useState(false);
   const [versionHistoryOpen, setVersionHistoryOpen] = useState(false);
   const [focusRequestId, setFocusRequestId] = useState<string | null>(null);
   const [showNotificationsPage, setShowNotificationsPage] = useState(false);
   const { toast } = useToast();
-  const [userEmail, setUserEmail] = useState<string | null>(null);
-  const [userRole, setUserRole] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<string>('');
   // Realtime handlers are registered once, so they read the current tab through a ref.
   const activeTabRef = useRef(activeTab);
@@ -80,8 +100,26 @@ const InventoryManagement = () => {
   // Local edits update state directly; keep the ref in step so incremental merges start from them.
   useEffect(() => { devicesRef.current = devices; }, [devices]);
   const devicesLoadingRef = useRef<Promise<void> | null>(null);
-  const { allowedTabs, loading: profileLoading } = useUserProfile();
+  const { user } = useAuth();
+  const { profile, allowedTabs, loading: profileLoading } = useUserProfile();
+  // Role and email come from the already-loaded profile, which saves two
+  // round-trips (auth.getUser + users lookup) before the first tab can render.
+  const userEmail = user?.email ?? profile?.email ?? null;
+  const userRole = profile?.role ?? null;
   const canSee = (key: string) => allowedTabs.includes(key);
+  const visibleTabs = TAB_DEFS.filter((t) => canSee(t.key) && !(t.key === 'create' && userRole === 'Reporter'));
+  const accountMissing = !profileLoading && !!user && !profile?.role;
+
+  // Warm up the code for the other tabs once the first screen is on-screen,
+  // so the first click on a tab doesn't wait for a chunk download.
+  const tabReady = !!activeTab;
+  useEffect(() => {
+    if (!tabReady) return;
+    const w = window as any;
+    const run = () => TAB_DEFS.forEach((t) => prefetchTab(t.key));
+    const id = w.requestIdleCallback ? w.requestIdleCallback(run, { timeout: 4000 }) : window.setTimeout(run, 2500);
+    return () => (w.cancelIdleCallback ? w.cancelIdleCallback(id) : window.clearTimeout(id));
+  }, [tabReady]);
 
   useEffect(() => {
     if (!userRole || profileLoading || !allowedTabs.length) return;
@@ -128,29 +166,6 @@ const InventoryManagement = () => {
   }, [activeTab, userRole]);
 
   useEffect(() => {
-    const fetchUser = async () => {
-      try {
-        const { data: { user }, error } = await supabase.auth.getUser();
-        if (error) throw error;
-        setUserEmail(user?.email || null);
-        if (!user?.email) {
-          console.warn('No user email found.');
-          toast({ title: 'Warning', description: 'No authenticated user found. Updates may fail.', variant: 'destructive' });
-          return;
-        }
-
-        const { data: userData, error: roleError } = await supabase
-          .from('users')
-          .select('role, department')
-          .eq('email', user.email)
-          .single();
-        if (roleError) throw roleError;
-        setUserRole(userData?.role || null);
-      } catch (error) {
-        console.error('Error fetching user:', error);
-      }
-    };
-    fetchUser();
 
     // Bulk imports can fire hundreds of change events in a few seconds. Instead of
     // reloading the whole table on every event, wait for things to settle and then
@@ -496,37 +511,6 @@ const InventoryManagement = () => {
     }
   };
 
-  const handleScanResult = (scannedValue: string) => {
-    if (currentSerialIndex) {
-      const { itemId, index, type } = currentSerialIndex;
-      if (type === 'tablet') {
-        setTablets(prev =>
-          prev.map(tablet => {
-            if (tablet.id === itemId) {
-              const newSerialNumbers = [...tablet.serialNumbers];
-              newSerialNumbers[index] = scannedValue.trim();
-              return { ...tablet, serialNumbers: newSerialNumbers };
-            }
-            return tablet;
-          })
-        );
-      } else {
-        setTvs(prev =>
-          prev.map(tv => {
-            if (tv.id === itemId) {
-              const newSerialNumbers = [...tv.serialNumbers];
-              newSerialNumbers[index] = scannedValue.trim();
-              return { ...tv, serialNumbers: newSerialNumbers };
-            }
-            return tv;
-          })
-        );
-      }
-      setCurrentSerialIndex(null);
-    }
-    setShowScanner(false);
-  };
-
   const handleUpdateAssetCheck = async (deviceId: string, checkStatus: string) => {
     try {
       if (!userEmail) {
@@ -539,6 +523,17 @@ const InventoryManagement = () => {
       if (!['Matched', 'Unmatched'].includes(validStatus)) {
         throw new Error(`Invalid check status: ${checkStatus}`);
       }
+
+      // Remember the value before the optimistic update so a failed save can be undone.
+      const before = devicesRef.current.find((d) => d.id === deviceId);
+      const previousCheck = before?.asset_check || 'Unmatched';
+      const label = before?.serial_number || 'device';
+      const rollback = () =>
+        setDevices((prevDevices) =>
+          prevDevices.map((device) =>
+            device.id === deviceId ? { ...device, asset_check: previousCheck } : device
+          )
+        );
 
       setDevices((prevDevices) =>
         prevDevices.map((device) =>
@@ -561,42 +556,29 @@ const InventoryManagement = () => {
         .select();
 
       if (error) {
-        setDevices((prevDevices) =>
-          prevDevices.map((device) =>
-            device.id === deviceId ? { ...device, asset_check: device.asset_check || 'Unmatched' } : device
-          )
-        );
+        rollback();
         console.error('Supabase update error:', error);
         if (error.code === '42501') {
-          throw new Error('Permission denied: You do not have sufficient privileges to update this device.');
+          throw new Error('You do not have permission to update this device.');
         }
         throw error;
       }
 
       if (data && data.length > 0) {
-        toast({
-          title: 'Success',
-          description: `Asset check set to ${validStatus} for device ${deviceId}.`,
-        });
+        toast({ title: `${label} · ${validStatus}`, description: 'Audit check saved.' });
       } else {
-        setDevices((prevDevices) =>
-          prevDevices.map((device) =>
-            device.id === deviceId ? { ...device, asset_check: device.asset_check || 'Unmatched' } : device
-          )
-        );
-        toast({
-          title: 'Warning',
-          description: `No device found with ID ${deviceId}.`,
-          variant: 'destructive'
-        });
+        rollback();
+        throw new Error(`${label} was not found. It may have been deleted.`);
       }
     } catch (error: any) {
       console.error('Error updating asset check:', error);
       toast({
-        title: 'Error',
-        description: `Failed to set asset check to ${checkStatus}: ${error.message || 'Unknown error'}`,
+        title: "Couldn't save audit check",
+        description: error.message || 'Check your connection and try again.',
         variant: 'destructive'
       });
+      // Re-throw so callers (e.g. the audit scanner) can show the failure instead of "Matched".
+      throw error;
     }
   };
 
@@ -672,13 +654,12 @@ const InventoryManagement = () => {
         toast({ title: 'Success', description: `Successfully updated ${updates.length} devices.` });
       }
 
+      const byId = new Map(updates.map(u => [u.id, u.updates]));
+      const nowIso = new Date().toISOString();
       setDevices(prev =>
         prev.map(d => {
-          const update = updates.find(u => u.id === d.id);
-          if (update) {
-            return { ...d, ...update.updates, updated_at: new Date().toISOString(), updated_by: userEmail };
-          }
-          return d;
+          const update = byId.get(d.id);
+          return update ? { ...d, ...update, updated_at: nowIso, updated_by: userEmail } : d;
         })
       );
     } catch (error: any) {
@@ -777,9 +758,10 @@ const InventoryManagement = () => {
       updatedIds.push(...(data?.map((r: any) => r.id) || []));
     }
 
+    const updatedSet = new Set(updatedIds);
     setDevices((prev) =>
       prev.map((d) =>
-        updatedIds.includes(d.id)
+        updatedSet.has(d.id)
           ? { ...d, asset_check: 'Matched', audited_at: nowIso, audited_by: userEmail, updated_at: nowIso, updated_by: userEmail }
           : d
       )
@@ -789,7 +771,7 @@ const InventoryManagement = () => {
       matchedCount: updatedIds.length,
       notFound,
       updatedSerials: eligible
-        .filter((d: any) => updatedIds.includes(d.id))
+        .filter((d: any) => updatedSet.has(d.id))
         .map((d: any) => d.serial_number),
     };
   };
@@ -807,7 +789,9 @@ const InventoryManagement = () => {
       }
 
       if (ids.length === 1) {
-        await handleUpdateAssetCheck(ids[0], 'Unmatched');
+        // handleUpdateAssetCheck already shows its own success/error toast.
+        await handleUpdateAssetCheck(ids[0], 'Unmatched').catch(() => undefined);
+        return;
       } else {
         const BATCH_SIZE = 50;
         const allUpdatedIds: string[] = [];
@@ -819,9 +803,10 @@ const InventoryManagement = () => {
         }
 
         if (allUpdatedIds.length > 0) {
+          const updatedSet = new Set(allUpdatedIds);
           setDevices(prevDevices => {
             return prevDevices.map(device =>
-              allUpdatedIds.includes(device.id)
+              updatedSet.has(device.id)
                 ? { ...device, asset_check: 'Unmatched', updated_at: new Date().toISOString(), updated_by: userEmail }
                 : device
             );
@@ -839,23 +824,27 @@ const InventoryManagement = () => {
   return (
     <div className='h-screen flex flex-col overflow-hidden bg-gradient-to-br from-background to-secondary/20 relative'>
       <div className='w-full bg-card/95 backdrop-blur-md border-b border-border/50 z-50 shadow-sm flex-shrink-0'>
-        <div className='w-full px-8 py-3 flex justify-between items-center'>
-          <div className='flex items-center space-x-4'>
+        <div className='w-full px-3 sm:px-8 py-2 sm:py-3 flex justify-between items-center gap-2'>
+          <div className='flex items-center gap-2 sm:gap-4 min-w-0'>
             <img
               src={`${import.meta.env.BASE_URL}logo.png`}
               alt='LEAD GROUP'
-              className={`h-11 w-auto transition-opacity duration-300 ${logoLoaded ? 'opacity-100' : 'opacity-0'}`}
+              className={`h-8 sm:h-11 w-auto flex-shrink-0 transition-opacity duration-300 ${logoLoaded ? 'opacity-100' : 'opacity-0'}`}
               onLoad={() => setLogoLoaded(true)}
               onError={(e) => { e.currentTarget.style.display = 'none'; }}
             />
-            <h1 className='text-2xl font-bold bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent'>Lead Inventory Management</h1>
+            <h1 className='truncate text-base sm:text-2xl font-bold bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent'>
+              <span className='hidden md:inline'>Lead Inventory Management</span>
+              <span className='md:hidden'>Lead Inventory</span>
+            </h1>
           </div>
-          <div className='flex items-center space-x-4'>
+          <div className='flex items-center gap-1 sm:gap-4 flex-shrink-0'>
             <Button
               variant='ghost'
               size='icon'
               onClick={() => setVersionHistoryOpen(true)}
               title='Version History'
+              aria-label='Version history'
               className='relative h-9 w-9 rounded-full hover:bg-primary/10 hover:text-primary'
             >
               <History className='w-5 h-5' />
@@ -864,7 +853,7 @@ const InventoryManagement = () => {
               onOpenRequest={(id) => { setFocusRequestId(id); setActiveTab('requests'); }}
               onViewAll={() => setShowNotificationsPage(true)}
             />
-            <ActiveUsers />
+            <div className='hidden sm:block'><ActiveUsers /></div>
             <UserProfile />
           </div>
         </div>
@@ -885,57 +874,46 @@ const InventoryManagement = () => {
               setActiveTab('requests');
             }}
           />
+        ) : accountMissing ? (
+          <div className='flex h-full items-center justify-center px-6 py-24'>
+            <div className='max-w-sm text-center space-y-3'>
+              <UserX className='mx-auto h-10 w-10 text-muted-foreground' />
+              <h2 className='text-lg font-semibold'>Your account isn't set up yet</h2>
+              <p className='text-sm text-muted-foreground'>
+                You're signed in as <b>{userEmail}</b>, but no role has been assigned. Ask an administrator to add you under User Management, then reload this page.
+              </p>
+              <Button variant='outline' onClick={() => window.location.reload()}>Reload</Button>
+            </div>
+          </div>
         ) : !activeTab ? (
-          <div className="flex h-full items-center justify-center py-32">
-            <div className="inline-block w-8 h-8 border-4 border-primary/30 border-t-primary rounded-full animate-spin"></div>
+          <div className='w-full'>
+            <div className='h-14 sm:h-16 border-b border-border/50 bg-card/95 px-3 sm:px-8 flex items-center gap-2'>
+              {Array.from({ length: 5 }).map((_, i) => (
+                <div key={i} className='h-9 flex-1 min-w-[80px] rounded-lg bg-muted animate-pulse' />
+              ))}
+            </div>
+            <TableSkeleton />
           </div>
         ) : (
           <div className='w-full min-h-full flex flex-col'>
             <Tabs value={activeTab} onValueChange={(v) => { if (v) setActiveTab(v); }} className='w-full flex-1 flex flex-col'>
-              {allowedTabs.length > 1 && (
-                <TabsList className='flex w-full sticky top-0 z-40 bg-card/95 backdrop-blur-md border-b border-border/50 flex-shrink-0 px-8 h-16 rounded-none shadow-sm gap-2 overflow-x-auto no-scrollbar'>
-                  {userRole !== 'Reporter' && canSee('create') && (
-                    <TabsTrigger value='create' className='flex-1 min-w-[140px] flex items-center justify-center gap-2 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground font-bold rounded-lg transition-all h-10'>
-                      <Package className='w-4 h-4' />
-                      Create Order
+              {visibleTabs.length > 1 && (
+                <TabsList className='flex w-full justify-start sticky top-0 z-40 bg-card/95 backdrop-blur-md border-b border-border/50 flex-shrink-0 px-3 sm:px-8 h-14 sm:h-16 rounded-none shadow-sm gap-1 sm:gap-2 overflow-x-auto no-scrollbar'>
+                  {visibleTabs.map(({ key, label, short, icon: Icon }) => (
+                    <TabsTrigger
+                      key={key}
+                      value={key}
+                      title={label}
+                      onMouseEnter={() => prefetchTab(key)}
+                      onFocus={() => prefetchTab(key)}
+                      onTouchStart={() => prefetchTab(key)}
+                      className='flex-1 min-w-[88px] sm:min-w-[140px] flex items-center justify-center gap-2 px-2 sm:px-3 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground font-bold rounded-lg transition-all h-10'
+                    >
+                      <Icon className='w-4 h-4 flex-shrink-0' />
+                      <span className='hidden sm:inline'>{label}</span>
+                      <span className='sm:hidden text-xs'>{short}</span>
                     </TabsTrigger>
-                  )}
-                  {canSee('view') && (
-                    <TabsTrigger value='view' className='flex-1 min-w-[140px] flex items-center justify-center gap-2 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground font-bold rounded-lg transition-all h-10'>
-                      <Archive className='w-4 h-4' />
-                      View Orders
-                    </TabsTrigger>
-                  )}
-                  {canSee('order') && (
-                    <TabsTrigger value='order' className='flex-1 min-w-[140px] flex items-center justify-center gap-2 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground font-bold rounded-lg transition-all h-10'>
-                      <BarChart3 className='w-4 h-4' />
-                      Order Summary
-                    </TabsTrigger>
-                  )}
-                  {canSee('devices') && (
-                    <TabsTrigger value='devices' className='flex-1 min-w-[140px] flex items-center justify-center gap-2 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground font-bold rounded-lg transition-all h-10'>
-                      <Archive className='w-4 h-4' />
-                      Devices
-                    </TabsTrigger>
-                  )}
-                  {canSee('requests') && (
-                    <TabsTrigger value='requests' className='flex-1 min-w-[140px] flex items-center justify-center gap-2 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground font-bold rounded-lg transition-all h-10'>
-                      <Inbox className='w-4 h-4' />
-                      Asset Master
-                    </TabsTrigger>
-                  )}
-                  {canSee('audit') && (
-                    <TabsTrigger value='audit' className='flex-1 min-w-[140px] flex items-center justify-center gap-2 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground font-bold rounded-lg transition-all h-10'>
-                      <Archive className='w-4 h-4' />
-                      Audit View
-                    </TabsTrigger>
-                  )}
-                  {canSee('activity') && (
-                    <TabsTrigger value='activity' className='flex-1 min-w-[140px] flex items-center justify-center gap-2 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground font-bold rounded-lg transition-all h-10'>
-                      <Clock className='w-4 h-4' />
-                      Activity Logs
-                    </TabsTrigger>
-                  )}
+                  ))}
                 </TabsList>
               )}
               <TabsContent value='requests' className='w-full bg-white flex-1'>
@@ -967,10 +945,6 @@ const InventoryManagement = () => {
                       loadOrders={loadOrders}
                       loadDevices={loadDevices}
                       loadOrderSummary={async () => { setDataLoaded(prev => ({ ...prev, devices: false })); }}
-                      openScanner={(itemId, index, assetType) => {
-                        setCurrentSerialIndex({ itemId, index, type: assetType as 'tablet' | 'tv' });
-                        setShowScanner(true);
-                      }}
                     />
                   </Suspense>
                 </TabsContent>
@@ -1003,7 +977,7 @@ const InventoryManagement = () => {
                     setFromDate={setFromDate}
                     showDeleted={showDeleted}
                     setShowDeleted={setShowDeleted}
-                    searchQuery={deferredSearchQuery}
+                    searchQuery={searchQuery}
                     setSearchQuery={setSearchQuery}
                     loading={loading}
                     setLoading={setLoading}
@@ -1050,7 +1024,7 @@ const InventoryManagement = () => {
                     setFromDate={setFromDate}
                     showDeleted={showDeleted}
                     setShowDeleted={setShowDeleted}
-                    searchQuery={deferredSearchQuery}
+                    searchQuery={searchQuery}
                     setSearchQuery={setSearchQuery}
                   />
                 </Suspense>
@@ -1088,7 +1062,7 @@ const InventoryManagement = () => {
                     setFromDate={setFromDate}
                     showDeleted={showDeleted}
                     setShowDeleted={setShowDeleted}
-                    searchQuery={deferredSearchQuery}
+                    searchQuery={searchQuery}
                     setSearchQuery={setSearchQuery}
                   />
                 </Suspense>
@@ -1118,7 +1092,7 @@ const InventoryManagement = () => {
                     setSelectedAssetCondition={setSelectedAssetCondition}
                     fromDate={fromDate}
                     setFromDate={setFromDate}
-                    searchQuery={deferredSearchQuery}
+                    searchQuery={searchQuery}
                     setSearchQuery={setSearchQuery}
                     onUpdateAssetCheck={handleUpdateAssetCheck}
                     onUpdateDevice={handleUpdateDevice}
@@ -1147,18 +1121,6 @@ const InventoryManagement = () => {
         .no-scrollbar::-webkit-scrollbar { display: none !important; }
         .no-scrollbar { -ms-overflow-style: none !important; scrollbar-width: none !important; }
       `}} />
-      {showScanner && (
-        <Suspense fallback={null}>
-          <EnhancedBarcodeScanner
-            isOpen={showScanner}
-            onClose={() => {
-              setShowScanner(false);
-              setCurrentSerialIndex(null);
-            }}
-            onScan={handleScanResult}
-          />
-        </Suspense>
-      )}
     </div>
   );
 };
