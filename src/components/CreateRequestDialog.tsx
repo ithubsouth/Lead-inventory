@@ -79,6 +79,7 @@ export default function CreateRequestDialog({ open, onOpenChange, onCreated }: P
   const [model, setModel] = useState('');
   const [configuration, setConfiguration] = useState('');
   const [quantity, setQuantity] = useState(1);
+  const [quantityInput, setQuantityInput] = useState('1');
   const [assetStatus, setAssetStatus] = useState('Fresh');
   const [assetGroup, setAssetGroup] = useState('NFA');
   const [assetCode, setAssetCode] = useState('');
@@ -93,6 +94,12 @@ export default function CreateRequestDialog({ open, onOpenChange, onCreated }: P
   const [docToDelete, setDocToDelete] = useState<number | null>(null);
   const [pendingDocs, setPendingDocs] = useState<File[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const updateQuantity = (next: number) => {
+    const safeQuantity = Math.min(1000, Math.max(1, Math.trunc(next)));
+    setQuantity(safeQuantity);
+    setQuantityInput(String(safeQuantity));
+  };
 
   const STORAGE_KEY = 'nucleus_request_draft';
 
@@ -110,7 +117,7 @@ export default function CreateRequestDialog({ open, onOpenChange, onCreated }: P
         if (draft.assetType) setAssetType(draft.assetType);
         if (draft.model) setModel(draft.model);
         if (draft.configuration) setConfiguration(draft.configuration);
-        if (draft.quantity) setQuantity(draft.quantity);
+        if (draft.quantity) updateQuantity(Number(draft.quantity));
         if (draft.assetStatus) setAssetStatus(draft.assetStatus);
         if (draft.assetGroup) setAssetGroup(draft.assetGroup);
         if (draft.assetCode) setAssetCode(draft.assetCode);
@@ -148,7 +155,7 @@ export default function CreateRequestDialog({ open, onOpenChange, onCreated }: P
     setAssetType('');
     setModel('');
     setConfiguration('');
-    setQuantity(1);
+    updateQuantity(1);
     setAssetStatus('Fresh');
     setAssetGroup('NFA');
     setAssetCode('');
@@ -339,7 +346,7 @@ export default function CreateRequestDialog({ open, onOpenChange, onCreated }: P
       const next = blank >= 0
         ? prev.map((e, i) => (i === blank ? entry : e))
         : [...prev, entry];
-      setQuantity(next.length);
+      updateQuantity(next.length);
       return next;
     });
   };
@@ -422,7 +429,7 @@ export default function CreateRequestDialog({ open, onOpenChange, onCreated }: P
 
       // Update quantity if we added more rows
       if (next.length > quantity) {
-        setQuantity(next.length);
+        updateQuantity(next.length);
       }
 
       return next;
@@ -777,8 +784,8 @@ export default function CreateRequestDialog({ open, onOpenChange, onCreated }: P
           )}
 
           <div className='space-y-4 pt-4 border-t'>
-            <div className='flex items-center justify-between p-3 bg-slate-50 rounded-xl border border-slate-200'>
-              <div className='flex items-center gap-4'>
+            <div className='flex flex-wrap items-center justify-between gap-3 p-3 bg-slate-50 rounded-xl border border-slate-200'>
+              <div className='flex min-w-0 flex-wrap items-center gap-3'>
                 <span className='text-[10px] font-bold text-slate-500 uppercase tracking-widest'>Bulk Apply to All Rows:</span>
                 <div className='flex gap-2'>
                   <div className='w-[120px]'>
@@ -803,33 +810,47 @@ export default function CreateRequestDialog({ open, onOpenChange, onCreated }: P
                   </div>
                 </div>
               </div>
-              <div className='flex items-center gap-4'>
+              <div className='flex flex-wrap items-center gap-3 sm:ml-auto'>
                 <Label className='text-xs font-bold text-slate-600'>Quantity</Label>
-                <div className='flex items-center space-x-2'>
+                <div className='flex items-center gap-2'>
                   <Button
+                    type='button'
                     variant='outline'
                     size='icon'
-                    className='h-7 w-7'
-                    onClick={() => setQuantity(Math.max(1, quantity - 1))}
+                    className='h-8 w-8 shrink-0'
+                    onClick={() => updateQuantity(quantity - 1)}
+                    aria-label='Decrease quantity'
                   >
                     <Minus className='h-3 w-3' />
                   </Button>
                   <Input
-                    type='number'
-                    className='w-12 h-7 text-center text-xs'
-                    value={quantity}
-                    onChange={(e) => setQuantity(Math.max(1, parseInt(e.target.value) || 1))}
+                    type='text'
+                    inputMode='numeric'
+                    pattern='[0-9]*'
+                    className='h-8 w-[4.5rem] shrink-0 px-2 text-center text-sm tabular-nums'
+                    value={quantityInput}
+                    onFocus={(e) => e.currentTarget.select()}
+                    onChange={(e) => {
+                      const next = e.target.value.replace(/\D/g, '').slice(0, 4);
+                      setQuantityInput(next);
+                      if (next) setQuantity(Math.min(1000, Math.max(1, Number(next))));
+                    }}
+                    onBlur={() => updateQuantity(Number(quantityInput) || 1)}
+                    aria-label='Quantity'
                   />
                   <Button
+                    type='button'
                     variant='outline'
                     size='icon'
-                    className='h-7 w-7'
-                    onClick={() => setQuantity(quantity + 1)}
+                    className='h-8 w-8 shrink-0'
+                    onClick={() => updateQuantity(quantity + 1)}
+                    aria-label='Increase quantity'
                   >
                     <Plus className='h-3 w-3' />
                   </Button>
                 </div>
                 <Button
+                  type='button'
                   variant='outline'
                   size='sm'
                   onClick={downloadCSV}

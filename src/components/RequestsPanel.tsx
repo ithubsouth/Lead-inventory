@@ -309,7 +309,7 @@ export default function RequestsPanel({ focusRequestId, onFocusHandled }: Props)
           draft ? (
             <div className='divide-y divide-slate-100'>
               <div
-                className='w-full text-left grid grid-cols-12 gap-3 px-8 py-6 hover:bg-blue-50/30 transition-all group border-l-4 border-l-blue-500/30 hover:border-l-blue-500 cursor-pointer'
+                className='w-full text-left grid grid-cols-12 gap-3 px-6 py-5 hover:bg-blue-50/30 transition-all group border-l-4 border-l-blue-500/30 hover:border-l-blue-500 cursor-pointer'
                 onClick={() => setCreateOpen(true)}
               >
                 <div className='col-span-3 min-w-0'>
@@ -324,21 +324,30 @@ export default function RequestsPanel({ focusRequestId, onFocusHandled }: Props)
                     Saved in browser
                   </div>
                 </div>
-                <div className='col-span-3 flex items-center'>
-                   <Badge variant='outline' className='bg-blue-50 text-blue-600 border-blue-100 font-bold text-[10px] px-3 py-1 rounded-lg uppercase tracking-widest'>
-                     Drafting Stage
-                   </Badge>
+                <div className='col-span-1 min-w-0 text-xs font-semibold text-slate-600 flex items-center'>
+                  <span className='truncate'>{draft.poNumber || '-'}</span>
                 </div>
-                <div className='col-span-2 text-[11px] font-medium text-slate-500 flex flex-col justify-center border-l border-slate-50 pl-3'>
+                <div className='col-span-1 min-w-0 text-xs text-slate-600 flex items-center'>
+                  <span className='truncate'>{draft.warehouse || '-'}</span>
+                </div>
+                <div className='col-span-1 min-w-0 text-xs text-slate-600 flex items-center'>
+                  <span className='truncate'>{draft.assetType || '-'}</span>
+                </div>
+                <div className='col-span-1 text-sm font-black text-slate-700 text-center flex items-center justify-center'>
+                  {draft.quantity || draft.serialEntries?.length || 1}
+                </div>
+                <div className='col-span-2 min-w-0 text-[11px] font-medium text-slate-500 flex flex-col justify-center'>
                   <div className='truncate text-slate-900 font-black'>{profile?.email || 'Drafting User'}</div>
                   <div className='truncate text-[10px] uppercase tracking-wider text-slate-400 mt-0.5'>{profile?.department || 'Browser Storage'}</div>
                 </div>
-                <div className='col-span-1 text-sm font-black text-slate-700 text-center flex items-center justify-center bg-slate-50/50 rounded-lg mx-2'>
-                  {draft.quantity || draft.serialEntries?.length || 0}
+                <div className='col-span-1 min-w-0 text-[10px] font-bold text-slate-400 flex flex-col justify-center'>
+                  <span className='truncate uppercase'>Local Draft</span>
+                  <span className='truncate text-blue-600 mt-0.5'>Active Session</span>
                 </div>
-                <div className='col-span-2 text-[10px] font-black text-slate-400 flex flex-col justify-center pl-3'>
-                   <div className='uppercase tracking-widest'>Local Draft</div>
-                   <div className="text-blue-600 font-bold mt-0.5">Active Session</div>
+                <div className='col-span-1 min-w-0 flex items-center'>
+                  <Badge variant='outline' className='max-w-full bg-blue-50 text-blue-600 border-blue-100 font-bold text-[9px] px-2 py-1 rounded-lg uppercase'>
+                    <span className='truncate'>Drafting</span>
+                  </Badge>
                 </div>
                 <div className='col-span-1 text-right flex items-center justify-end gap-2'>
                    <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-all">
