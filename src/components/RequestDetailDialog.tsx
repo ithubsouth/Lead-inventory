@@ -345,19 +345,6 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
     setBusy(true);
     try {
 
-      await supabase.from('request_stages').insert({
-        request_id: req.id,
-        stage_key: req.current_stage,
-        stage_label: flow[currentIdx]?.label || req.current_stage,
-        order_index: currentIdx,
-        assigned_dept: req.current_stage_dept,
-        action: isBackWithRaiser && action === 'approved' ? 'submitted' : action,
-        actor_id: profile.id,
-        actor_email: profile.email,
-        actor_dept: profile.department,
-        comment: comment || (isBackWithRaiser && action === 'approved' ? 'Resubmitted' : null),
-        acted_at: new Date().toISOString(),
-      });
 
       let nextStatus: RequestStatus = req.status;
       let nextStageKey = req.current_stage;
@@ -365,6 +352,7 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
       let notifTitle = '';
       let notifBody = comment || '';
       let notifTarget: { user_id?: string; target_dept?: string } = { user_id: req.raised_by };
+      let closesRequest = false;
 
       if (opts.reject) {
         nextStatus = 'rejected';
@@ -382,11 +370,7 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
         if (!nxt) {
           nextStatus = 'closed';
           notifTitle = `Request approved & closed: ${req.title || REQUEST_TYPE_LABELS[req.type]}`;
-          if (req.type === 'new_hardware') {
-            await materializeAssets();
-          } else if (req.type === 'asset_movement') {
-            await applyMovement();
-          }
+          closesRequest = true;
         } else {
           nextStageKey = nxt.key;
           nextDept = nxt.dept;
@@ -412,6 +396,32 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
         if (updErr) throw updErr;
         if (!updRows?.length) throw new Error('You do not have permission to update this request.');
       }
+
+      // Create / update the actual assets only once the request is confirmed closed.
+      if (closesRequest) {
+        if (req.type === 'new_hardware') {
+          await materializeAssets();
+        } else if (req.type === 'asset_movement') {
+          await applyMovement();
+        }
+      }
+
+      // Record history only after the request itself has moved, so a blocked update
+      // never leaves an "Approved" entry on a request that didn't advance.
+      const { error: stageErr } = await supabase.from('request_stages').insert({
+        request_id: req.id,
+        stage_key: req.current_stage,
+        stage_label: flow[currentIdx]?.label || req.current_stage,
+        order_index: currentIdx,
+        assigned_dept: req.current_stage_dept,
+        action: isBackWithRaiser && action === 'approved' ? 'submitted' : action,
+        actor_id: profile.id,
+        actor_email: profile.email,
+        actor_dept: profile.department,
+        comment: comment || (isBackWithRaiser && action === 'approved' ? 'Resubmitted' : null),
+        acted_at: new Date().toISOString(),
+      });
+      if (stageErr) throw stageErr;
 
       if (notifTitle) {
         await supabase.from('notifications').insert({
