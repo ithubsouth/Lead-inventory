@@ -327,6 +327,11 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
   };
 
 
+  // Display name for a person: full name, else a readable version of the email ("dhinagaran.v" -> "Dhinagaran V").
+  const personName = (p: { email: string; full_name: string | null }) =>
+    p.full_name?.trim() ||
+    p.email.split('@')[0].split(/[._-]+/).filter(Boolean).map((w) => w[0].toUpperCase() + w.slice(1)).join(' ');
+
   // People accountable for the current stage: everyone who is allowed to act on it.
   const [stageApprovers, setStageApprovers] = useState<{ email: string; full_name: string | null }[]>([]);
   useEffect(() => {
@@ -343,21 +348,21 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
         .select('email, full_name, role, department, location')
         .eq('department', req.current_stage_dept);
       if (cancelled) return;
-      const people = (data || []).filter((u: any) => {
-        const allowed = canActOnStage({
+      const allowed = (data || []).filter((u: any) =>
+        canActOnStage({
           role: u.role,
           department: u.department,
           assignedDept: req.current_stage_dept,
           raisedByRole: req.raised_by_role,
           stageKey: req.current_stage,
-        });
-        if (!allowed) return false;
-        // Technology Team / SCM only handle their own warehouse.
-        if (isLocationScopedDept(u.department) && u.location && u.location !== 'General' && req.warehouse) {
-          return u.location === req.warehouse;
-        }
-        return true;
-      });
+        })
+      );
+      // Technology Team / SCM only handle their own warehouse (or 'General' / no location).
+      const localOnly = allowed.filter((u: any) =>
+        !isLocationScopedDept(u.department) || !u.location || u.location === 'General' || !req.warehouse ||
+        String(u.location).trim().toLowerCase() === String(req.warehouse).trim().toLowerCase()
+      );
+      const people = localOnly.length ? localOnly : allowed;
       setStageApprovers(people.map((u: any) => ({ email: u.email, full_name: u.full_name })));
     })();
     return () => { cancelled = true; };
@@ -1177,7 +1182,7 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
                         <CheckCircle2 className='w-4 h-4 text-green-600 shrink-0' />
                         <div className='min-w-0 leading-tight'>
                           <div className='text-[11px] font-medium text-green-700 truncate'>
-                            {signOff ? (signOff.actor_email || '').split('@')[0] : 'Completed'}
+                            {signOff ? personName({ email: signOff.actor_email || '', full_name: null }) : 'Completed'}
                           </div>
                           {signOff && (
                             <div className='text-[10px] text-muted-foreground'>
@@ -1198,17 +1203,16 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
                       >
                         <Clock className='w-4 h-4 text-amber-500 shrink-0' />
                         <div className='min-w-0 leading-tight'>
-                          <div className='text-[11px] font-medium text-amber-700 truncate'>
+                          <div className='text-[10px] uppercase tracking-wide text-amber-600'>Pending with</div>
+                          <div className='text-[11px] font-semibold text-amber-800 truncate'>
                             {stageApprovers.length
-                              ? stageApprovers
-                                  .slice(0, 2)
-                                  .map((a) => a.full_name || a.email.split('@')[0])
-                                  .join(', ') + (stageApprovers.length > 2 ? ` +${stageApprovers.length - 2}` : '')
-                              : `${s.dept} Admin`}
+                              ? stageApprovers.slice(0, 2).map(personName).join(', ') +
+                                (stageApprovers.length > 2 ? ` +${stageApprovers.length - 2}` : '')
+                              : `${s.dept} Admin (not assigned)`}
                           </div>
                           {pendingSince && (
                             <div className='text-[10px] text-muted-foreground'>
-                              Pending {formatDistanceToNow(new Date(pendingSince))}
+                              Waiting {formatDistanceToNow(new Date(pendingSince))}
                             </div>
                           )}
                         </div>
@@ -1266,7 +1270,9 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
                 ['Asset Status', req.asset_status || serials.find((s) => s.asset_status)?.asset_status],
                 ['Requested At', fmtDateTime(req.created_at)],
                 ['GRN Number', req.grn_number],
-                ['Pending At', req.status === 'open' ? req.current_stage_dept : '—'],
+                ['Pending At', req.status === 'open'
+                  ? `${req.current_stage_dept}${stageApprovers.length ? ` · ${stageApprovers.map(personName).join(', ')}` : ''}`
+                  : '—'],
                 ['Requested By', req.raised_by_email],
               ].map(([k, v]) => (
                 <div key={k as string} className='p-2 rounded border bg-muted/30 min-w-0'>
