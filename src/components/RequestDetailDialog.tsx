@@ -223,6 +223,22 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
     !!req && req.status === 'open' && currentIdx === 0 && lastWorkflowAction === 'revoked';
   const isRaiser = !!req && !!profile?.id && req.raised_by === profile.id;
 
+  // History since the last send-back (stages are newest first). Approvals made before a
+  // request was sent back no longer count for the workflow ticks.
+  const lastRevokeIdx = stages.findIndex((st) => st.action === 'revoked');
+  const activeHistory = lastRevokeIdx >= 0 ? stages.slice(0, lastRevokeIdx) : stages;
+  const stageSignOff = (key: string) =>
+    activeHistory.find((st) => st.stage_key === key && (st.action === 'approved' || st.action === 'submitted'));
+
+  // An approval was recorded for the current stage but the request never moved on
+  // (happened while the database hand-off rule was broken). Offer a one-click repair.
+  const latestWorkflow = stages.find((st) => st.action !== 'commented');
+  const stuckNext =
+    !!req && req.status === 'open' && latestWorkflow?.action === 'approved' &&
+    latestWorkflow.stage_key === req.current_stage
+      ? nextStage(req.type, req.current_stage)
+      : null;
+
   const canAct = !!req &&
     req.status === 'open' &&
     ((isBackWithRaiser && isRaiser) ||
@@ -309,6 +325,39 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
     }
   };
 
+
+  const advanceStuck = async () => {
+    if (!req || !stuckNext) return;
+    setBusy(true);
+    try {
+      const { data: updRows, error } = await supabase
+        .from('requests')
+        .update({ current_stage: stuckNext.key, current_stage_dept: stuckNext.dept })
+        .eq('id', req.id)
+        .select('id');
+      if (error) throw error;
+      if (!updRows?.length) throw new Error('You do not have permission to update this request.');
+      await supabase.from('notifications').insert({
+        target_dept: stuckNext.dept,
+        request_id: req.id,
+        kind: 'approved',
+        title: `Stage advanced: ${stuckNext.label}`,
+        body: null,
+      });
+      await load();
+      onChanged?.();
+      toast.success(`Moved to ${stuckNext.dept}`);
+    } catch (e: any) {
+      console.error(e);
+      toast.error(
+        /row-level security|permission/i.test(e.message || '')
+          ? 'Blocked by the database rule. Run the "update requests" policy fix in Supabase first.'
+          : e.message || 'Could not move the request'
+      );
+    } finally {
+      setBusy(false);
+    }
+  };
 
   const record = async (action: StageAction, opts: { closeAfter?: boolean; reject?: boolean; revoke?: boolean } = {}) => {
     if (!req || !profile?.id) return;
@@ -1041,13 +1090,16 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
             <div className='text-sm font-semibold'>Workflow</div>
             <ol className='space-y-2'>
               {flow.map((s, i) => {
-                const done = i < currentIdx || req.status === 'closed' || req.status === 'approved';
-                const active = i === currentIdx && req.status === 'open';
+                const signOff = stageSignOff(s.key);
+                const done =
+                  i < currentIdx || req.status === 'closed' || req.status === 'approved' ||
+                  (i === currentIdx && req.status === 'open' && signOff?.action === 'approved');
+                const active = i === currentIdx && req.status === 'open' && !done;
                 return (
                   <li
                     key={s.key}
-                    className={`flex gap-3 p-2 rounded border ${
-                      active ? 'border-primary bg-primary/5' : 'border-transparent'
+                    className={`flex items-center gap-3 p-2 rounded border ${
+                      active ? 'border-primary bg-primary/5' : done ? 'border-transparent' : 'border-transparent'
                     }`}
                   >
                     <div
@@ -1057,14 +1109,49 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
                     >
                       {done ? '✓' : i + 1}
                     </div>
-                    <div className='min-w-0'>
+                    <div className='min-w-0 flex-1'>
                       <div className='text-sm font-medium'>{s.label}</div>
                       <div className='text-xs text-muted-foreground'>{s.dept}</div>
                     </div>
+                    {done && (
+                      <div
+                        className='ml-auto flex items-center gap-1.5 text-right shrink-0 max-w-[45%]'
+                        title={signOff ? `${signOff.action === 'submitted' ? 'Submitted' : 'Approved'} by ${signOff.actor_email || ''}` : 'Completed'}
+                      >
+                        <CheckCircle2 className='w-4 h-4 text-green-600 shrink-0' />
+                        <div className='min-w-0 leading-tight'>
+                          <div className='text-[11px] font-medium text-green-700 truncate'>
+                            {signOff ? (signOff.actor_email || '').split('@')[0] : 'Completed'}
+                          </div>
+                          {signOff && (
+                            <div className='text-[10px] text-muted-foreground'>
+                              {fmtDateTime(signOff.acted_at || signOff.created_at)}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                    {active && (
+                      <span className='ml-auto text-[10px] font-semibold uppercase tracking-wide text-primary shrink-0'>
+                        In progress
+                      </span>
+                    )}
                   </li>
                 );
               })}
             </ol>
+            {stuckNext && (
+              <div className='mt-2 rounded border border-amber-300 bg-amber-50 p-2 text-xs text-amber-900 space-y-2'>
+                <div>
+                  This stage was approved but the request didn't move on to <b>{stuckNext.dept}</b>.
+                </div>
+                {(canAct || profile?.role === 'Super Admin' || profile?.department === 'Administrators') && (
+                  <Button size='sm' className='h-7' disabled={busy} onClick={advanceStuck}>
+                    {busy ? <Loader2 className='w-3 h-3 animate-spin' /> : `Move to ${stuckNext.dept}`}
+                  </Button>
+                )}
+              </div>
+            )}
 
             <div className='text-sm font-semibold pt-4 border-t'>History <span className='text-[10px] font-normal text-muted-foreground'>(latest first)</span></div>
             <div className='space-y-2 pr-1'>
