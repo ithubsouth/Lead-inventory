@@ -1,4 +1,4 @@
-import React, { useState, useEffect, lazy, Suspense, useDeferredValue } from 'react';
+import React, { useState, useEffect, useRef, lazy, Suspense, useDeferredValue } from 'react';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Package, BarChart3, Archive, Clock, History, Inbox } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -67,6 +67,9 @@ const InventoryManagement = () => {
   const [userEmail, setUserEmail] = useState<string | null>(null);
   const [userRole, setUserRole] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<string>('');
+  // Realtime handlers are registered once, so they read the current tab through a ref.
+  const activeTabRef = useRef(activeTab);
+  useEffect(() => { activeTabRef.current = activeTab; }, [activeTab]);
   const { allowedTabs, loading: profileLoading } = useUserProfile();
   const canSee = (key: string) => allowedTabs.includes(key);
 
@@ -139,20 +142,28 @@ const InventoryManagement = () => {
     };
     fetchUser();
 
+    // Bulk imports can fire hundreds of change events in a few seconds. Instead of
+    // reloading the whole table on every event, wait for things to settle and then
+    // refresh quietly in the background (only if the user is looking at that data).
+    const ORDER_TABS = ['view', 'create'];
+    const DEVICE_TABS = ['devices', 'audit', 'order'];
+    let ordersTimer: ReturnType<typeof setTimeout> | undefined;
+    let devicesTimer: ReturnType<typeof setTimeout> | undefined;
+
     const ordersChannel = supabase
       .channel('orders-realtime')
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'orders' },
         () => {
-          setDataLoaded(prev => ({ ...prev, orders: false }));
-          if (activeTab === 'view' || activeTab === 'order') {
-            if (activeTab === 'view') {
-              loadOrders();
+          clearTimeout(ordersTimer);
+          ordersTimer = setTimeout(() => {
+            if (ORDER_TABS.includes(activeTabRef.current)) {
+              loadOrders({ background: true });
             } else {
-              loadDevices();
+              setDataLoaded(prev => ({ ...prev, orders: false }));
             }
-          }
+          }, 1500);
         }
       )
       .subscribe();
@@ -163,23 +174,35 @@ const InventoryManagement = () => {
         'postgres_changes',
         { event: '*', schema: 'public', table: 'devices' },
         () => {
-          setDataLoaded(prev => ({ ...prev, devices: false }));
-          if (activeTab === 'devices' || activeTab === 'audit' || activeTab === 'order') {
-            loadDevices();
-          }
+          clearTimeout(devicesTimer);
+          devicesTimer = setTimeout(() => {
+            if (DEVICE_TABS.includes(activeTabRef.current)) {
+              loadDevices({ background: true });
+            } else {
+              setDataLoaded(prev => ({ ...prev, devices: false }));
+            }
+            // Order status depends on device rows too
+            if (ORDER_TABS.includes(activeTabRef.current)) {
+              loadOrders({ background: true });
+            } else {
+              setDataLoaded(prev => ({ ...prev, orders: false }));
+            }
+          }, 1500);
         }
       )
       .subscribe();
 
     return () => {
+      clearTimeout(ordersTimer);
+      clearTimeout(devicesTimer);
       supabase.removeChannel(ordersChannel);
       supabase.removeChannel(devicesChannel);
     };
   }, []);
 
-  const loadOrders = async () => {
+  const loadOrders = async ({ background = false }: { background?: boolean } = {}) => {
     try {
-      setLoading(true);
+      if (!background) setLoading(true);
       const batchSize = 1000;
 
       const [{ count: ordersCount }, { count: devicesCount }] = await Promise.all([
@@ -306,9 +329,9 @@ const InventoryManagement = () => {
     }
   };
 
-  const loadDevices = async () => {
+  const loadDevices = async ({ background = false }: { background?: boolean } = {}) => {
     try {
-      setLoading(true);
+      if (!background) setLoading(true);
       const batchSize = 1000;
 
       const { count } = await supabase.from('devices').select('*', { count: 'exact', head: true });

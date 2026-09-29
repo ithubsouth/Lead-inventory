@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useCallback, useRef } from 'react';
+import React, { useMemo, useState, useCallback, useRef, lazy, Suspense } from 'react';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -24,9 +24,10 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { EnhancedBarcodeScanner } from './EnhancedBarcodeScanner';
-import * as XLSX from 'xlsx/dist/xlsx.full.min.js';
 import { useToast } from '@/hooks/use-toast';
+
+// Camera/barcode library is large; load it only when the scanner is opened.
+const EnhancedBarcodeScanner = lazy(() => import('./EnhancedBarcodeScanner'));
 
 interface AuditTableProps {
   devices: Device[];
@@ -202,6 +203,8 @@ const AuditTable: React.FC<AuditTableProps> = ({
     setUploading(true);
     setUploadResult(null);
     try {
+      // Spreadsheet library is large, so load it only when a file is uploaded.
+      const XLSX = await import('xlsx');
       const buf = await file.arrayBuffer();
       const wb = XLSX.read(buf, { type: 'array' });
       const sheet = wb.Sheets[wb.SheetNames[0]];
@@ -1327,12 +1330,16 @@ const AuditTable: React.FC<AuditTableProps> = ({
           </AlertDialogContent>
         </AlertDialog>
       )}
-      <EnhancedBarcodeScanner
-        isOpen={isScannerOpen}
-        onClose={() => setIsScannerOpen(false)}
-        onScan={handleBarcodeScan}
-        existingSerials={filteredDevices.map((d) => d.serial_number || d.id)}
-      />
+      {isScannerOpen && (
+        <Suspense fallback={null}>
+          <EnhancedBarcodeScanner
+            isOpen={isScannerOpen}
+            onClose={() => setIsScannerOpen(false)}
+            onScan={handleBarcodeScan}
+            existingSerials={filteredDevices.map((d) => d.serial_number || d.id)}
+          />
+        </Suspense>
+      )}
       <Dialog open={uploadOpen} onOpenChange={(o) => { setUploadOpen(o); if (!o) setUploadResult(null); }}>
         <DialogContent className="max-w-md">
           <DialogHeader>

@@ -26,4 +26,28 @@ export default defineConfig(({ mode }) => ({
       "@": path.resolve(__dirname, "./src"),
     },
   },
+  // Strip debug logging from production builds (errors and warnings are kept).
+  esbuild: mode === "production" ? { pure: ["console.log", "console.debug"] } : undefined,
+  build: {
+    rollupOptions: {
+      output: {
+        // Libraries change rarely; separate chunks stay cached in the browser between deploys.
+        manualChunks: {
+          "vendor-react": ["react", "react-dom", "react-router-dom"],
+          "vendor-supabase": ["@supabase/supabase-js"],
+          "vendor-ui": [
+            "@radix-ui/react-dialog",
+            "@radix-ui/react-select",
+            "@radix-ui/react-popover",
+            "@radix-ui/react-tabs",
+            "@radix-ui/react-dropdown-menu",
+            "@radix-ui/react-tooltip",
+            "@radix-ui/react-alert-dialog",
+            "lucide-react",
+            "date-fns",
+          ],
+        },
+      },
+    },
+  },
 }));

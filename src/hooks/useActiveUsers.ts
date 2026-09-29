@@ -51,8 +51,16 @@ export const useActiveUsers = () => {
           table: 'active_users',
         },
         (payload) => {
-          console.log('Active users changed:', payload);
-          fetchActiveUsers(); // Refresh list on any change
+          // Apply the change locally instead of re-querying the table. Every user sends a
+          // heartbeat every 20s, so re-querying on each event multiplied DB load per user.
+          const row = (payload.new || payload.old) as Partial<ActiveUser> | undefined;
+          if (!row?.user_id) return;
+          setActiveUsers((prev) => {
+            const rest = prev.filter(
+              (u) => !(u.user_id === row.user_id && u.session_id === row.session_id)
+            );
+            return payload.eventType === 'DELETE' ? rest : [...rest, row as ActiveUser];
+          });
         }
       )
       .subscribe();
@@ -70,7 +78,14 @@ export const useActiveUsers = () => {
       }
     }, 20000);
 
+    // Drop users whose last heartbeat is older than 5 minutes.
+    const prune = setInterval(() => {
+      const cutoff = Date.now() - 5 * 60 * 1000;
+      setActiveUsers((prev) => prev.filter((u) => new Date(u.last_seen).getTime() >= cutoff));
+    }, 60000);
+
     return () => {
+      clearInterval(prune);
       clearInterval(heartbeat);
       supabase.removeChannel(channel);
     };

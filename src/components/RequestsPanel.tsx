@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState, useMemo, lazy, Suspense } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useUserProfile } from '@/hooks/useUserProfile';
 import { Button } from '@/components/ui/button';
@@ -24,8 +24,9 @@ import { fmtDateTime } from '@/lib/dateFormat';
 
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
-import CreateRequestDialog from './CreateRequestDialog';
-import RequestDetailDialog from './RequestDetailDialog';
+// Loaded on first open so the Requests tab appears faster.
+const CreateRequestDialog = lazy(() => import('./CreateRequestDialog'));
+const RequestDetailDialog = lazy(() => import('./RequestDetailDialog'));
 
 interface RequestRow {
   id: string;
@@ -116,9 +117,9 @@ export default function RequestsPanel({ focusRequestId, onFocusHandled }: Props)
     toast.success('Draft deleted');
   };
 
-  const load = async () => {
+  const load = async ({ background = false }: { background?: boolean } = {}) => {
     try {
-      setLoading(true);
+      if (!background) setLoading(true);
       checkDraft();
       const { data, error } = await supabase
         .from('requests')
@@ -143,12 +144,19 @@ export default function RequestsPanel({ focusRequestId, onFocusHandled }: Props)
 
   useEffect(() => {
     load();
+    // One action writes to several tables at once; wait briefly and reload once.
+    let reloadTimer: ReturnType<typeof setTimeout> | undefined;
+    const scheduleReload = () => {
+      clearTimeout(reloadTimer);
+      reloadTimer = setTimeout(() => load({ background: true }), 800);
+    };
     const ch = supabase
       .channel('requests-list-live')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'requests' }, () => load())
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'request_stages' }, () => load())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'requests' }, () => scheduleReload())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'request_stages' }, () => scheduleReload())
       .subscribe();
     return () => {
+      clearTimeout(reloadTimer);
       supabase.removeChannel(ch);
     };
   }, []);
@@ -451,6 +459,7 @@ export default function RequestsPanel({ focusRequestId, onFocusHandled }: Props)
       </div>
 
 
+      <Suspense fallback={null}>
       {createOpen && (
         <CreateRequestDialog
           open={createOpen}
@@ -470,6 +479,7 @@ export default function RequestsPanel({ focusRequestId, onFocusHandled }: Props)
           onChanged={load}
         />
       )}
+      </Suspense>
 
       <AlertDialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
         <AlertDialogContent>

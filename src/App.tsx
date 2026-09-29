@@ -12,9 +12,6 @@ import { LoginPage } from "./pages/LoginPage";
 const queryClient = new QueryClient();
 
 const App = () => {
-  // Debug: Log to verify App component rendering
-  console.log('App: Rendering with AuthProvider and Routes');
-
   return (
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
@@ -32,8 +29,8 @@ const App = () => {
                   </ProtectedRoute>
                 }
               />
-              {/* Temporary development route - bypasses authentication */}
-              <Route path="/dev" element={<Index />} />
+              {/* Development-only route that bypasses login; never included in production builds */}
+              {import.meta.env.DEV && <Route path="/dev" element={<Index />} />}
               {/* Catch-all route for undefined paths */}
               <Route path="*" element={<NotFound />} />
             </Routes>
