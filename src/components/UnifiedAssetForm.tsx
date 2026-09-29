@@ -26,6 +26,7 @@ import {
   agreementTypes,
 } from './constants';
 import ComboInput from './ComboInput';
+const EnhancedBarcodeScanner = React.lazy(() => import('./EnhancedBarcodeScanner'));
 
 interface AssetItem {
   id: string;
@@ -81,7 +82,8 @@ interface UnifiedAssetFormProps {
   loadOrders: () => Promise<void>;
   loadDevices: () => Promise<void>;
   loadOrderSummary: () => Promise<void>;
-  openScanner: (itemId: string, index: number, assetType: string) => void;
+  /** @deprecated The form now opens its own scanner. */
+  openScanner?: (itemId: string, index: number, assetType: string) => void;
 }
 
 const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
@@ -107,6 +109,16 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
   openScanner,
 }) => {
   const [assets, setAssets] = useState<AssetItem[]>([]);
+  // Camera scanner target. The scanner used to live in the parent and wrote into
+  // state this form never read, so scanned serials silently disappeared.
+  const [scanTarget, setScanTarget] = useState<{ assetId: string; index: number } | null>(null);
+  const focusSerial = (assetId: string, index: number) => {
+    window.requestAnimationFrame(() => {
+      const el = document.getElementById(`serial-${assetId}-${index}`) as HTMLInputElement | null;
+      el?.focus();
+      el?.select();
+    });
+  };
   const [assetErrors, setAssetErrors] = useState<Record<string, (string | null)[]>>({});
   const [userEmail, setUserEmail] = useState<string | null>(null);
   const [showBulk, setShowBulk] = useState(false);
@@ -220,7 +232,8 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
   };
 
   const updateAsset = (id: string, field: keyof AssetItem, value: any) => {
-    setAssets(assets.map(asset => {
+    // Functional update so async serial look-ups that land in between aren't overwritten.
+    setAssets(prev => prev.map(asset => {
       if (asset.id === id) {
         if (field === 'quantity' && typeof value === 'number') {
           const newQuantity = Math.max(1, value);
@@ -610,23 +623,23 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
   // CORRECTED VALIDATION: Deal ID optional when Order Type is "Stock"
   const validateForm = () => {
     if (!orderType) {
-      toast({ title: 'Error', description: 'Please select an order type', variant: 'destructive' });
+      toast({ title: 'Check the order', description: 'Please select an order type', variant: 'destructive' });
       return false;
     }
 
     if (!schoolName.trim()) {
-      toast({ title: 'Error', description: 'School Name is required', variant: 'destructive' });
+      toast({ title: 'Check the order', description: 'School Name is required', variant: 'destructive' });
       return false;
     }
 
     // Deal ID required only if NOT Stock
     if (orderType !== 'Stock' && !dealId.trim()) {
-      toast({ title: 'Error', description: 'Deal ID is required', variant: 'destructive' });
+      toast({ title: 'Check the order', description: 'Deal ID is required', variant: 'destructive' });
       return false;
     }
 
     if (assets.length === 0) {
-      toast({ title: 'Error', description: 'Please add at least one asset', variant: 'destructive' });
+      toast({ title: 'Check the order', description: 'Please add at least one asset', variant: 'destructive' });
       return false;
     }
 
@@ -634,17 +647,17 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
 
     for (const asset of assets) {
       if (!asset.location) {
-        toast({ title: 'Error', description: `Location is required for ${asset.assetType}`, variant: 'destructive' });
+        toast({ title: 'Check the order', description: `Location is required for ${asset.assetType}`, variant: 'destructive' });
         return false;
       }
 
       if (assetTypes.includes(asset.assetType as any) && !asset.model) {
-        toast({ title: 'Error', description: `Model is required for ${asset.assetType}`, variant: 'destructive' });
+        toast({ title: 'Check the order', description: `Model is required for ${asset.assetType}`, variant: 'destructive' });
         return false;
       }
 
       if (additionalAssetTypes.includes(asset.assetType) && hasModels(asset.assetType) && !asset.model) {
-        toast({ title: 'Error', description: `Model is required for ${asset.assetType}`, variant: 'destructive' });
+        toast({ title: 'Check the order', description: `Model is required for ${asset.assetType}`, variant: 'destructive' });
         return false;
       }
 
@@ -652,13 +665,27 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
           asset.assetGroups.length !== asset.quantity ||
           asset.asset_conditions.length !== asset.quantity ||
           asset.farCodes.length !== asset.quantity) {
-        toast({ title: 'Error', description: `Data mismatch for ${asset.assetType}`, variant: 'destructive' });
+        toast({ title: 'Check the order', description: `Data mismatch for ${asset.assetType}`, variant: 'destructive' });
         return false;
+      }
+
+      if (asset.hasSerials) {
+        const seen = new Map<string, number>();
+        for (let i = 0; i < asset.serialNumbers.length; i++) {
+          const k = (asset.serialNumbers[i] || '').trim().toUpperCase();
+          if (!k) continue;
+          if (seen.has(k)) {
+            toast({ title: 'Duplicate serial number', description: `${asset.serialNumbers[i].trim()} appears in boxes ${seen.get(k)! + 1} and ${i + 1} for ${asset.assetType}.`, variant: 'destructive' });
+            focusSerial(asset.id, i);
+            return false;
+          }
+          seen.set(k, i);
+        }
       }
 
       for (let i = 0; i < asset.quantity; i++) {
         if (isInward && asset.assetStatuses[i] === 'Scrap' && !asset.asset_conditions[i]?.trim()) {
-          toast({ title: 'Error', description: `Asset condition required for scrapped item in ${asset.assetType} at position ${i + 1}`, variant: 'destructive' });
+          toast({ title: 'Check the order', description: `Asset condition required for scrapped item in ${asset.assetType} at position ${i + 1}`, variant: 'destructive' });
           return false;
         }
       }
@@ -1016,6 +1043,17 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
     const isMandatorySerial = ['Tablet', 'TV'].includes(asset.assetType);
     const showSerialSection = isMandatorySerial || asset.hasSerials;
     const isInward = ['Stock', 'Return'].includes(orderType);
+    const dupes = (() => {
+      const seen = new Set<string>();
+      const d = new Set<string>();
+      for (const sn of asset.serialNumbers || []) {
+        const k = (sn || '').trim().toUpperCase();
+        if (!k) continue;
+        if (seen.has(k)) d.add(k); else seen.add(k);
+      }
+      return d;
+    })();
+    const filledCount = (asset.serialNumbers || []).filter((sn) => (sn || '').trim()).length;
     const handleSerialPaste = (e: React.ClipboardEvent<HTMLInputElement>, index: number) => {
       e.preventDefault();
       const pastedText = e.clipboardData.getData('text');
@@ -1363,7 +1401,12 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
         {showSerialSection && (
           <div style={{ marginTop: '16px' }}>
             <h5 style={{ fontSize: '12px', fontWeight: 'bold', marginBottom: '8px' }}>
-              Serial Numbers <span style={{ fontWeight: 'normal', color: '#6b7280' }}></span>
+              Serial Numbers{' '}
+              <span style={{ fontWeight: 'normal', color: filledCount === asset.quantity && dupes.size === 0 ? '#16a34a' : '#6b7280' }}>
+                · {filledCount} of {asset.quantity} entered
+                {dupes.size > 0 && <span style={{ color: '#b45309' }}> · {dupes.size} duplicate{dupes.size > 1 ? 's' : ''}</span>}
+              </span>
+              <span style={{ fontWeight: 'normal', color: '#9ca3af', marginLeft: 8 }}>Tip: paste a column from Excel, or scan and press Enter to move to the next box.</span>
             </h5>
             <div style={{ display: 'grid', gap: '8px' }}>
               <div style={{ display: 'flex', gap: '8px', alignItems: 'center', paddingBottom: '4px' }}>
@@ -1377,7 +1420,18 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
               {Array.from({ length: asset.quantity }).map((_, index) => (
                 <div key={index} style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
                   <input
+                    id={`serial-${asset.id}-${index}`}
                     type="text"
+                    autoComplete="off"
+                    spellCheck={false}
+                    title={dupes.has((asset.serialNumbers[index] || '').trim().toUpperCase()) ? 'This serial number is entered more than once' : undefined}
+                    onKeyDown={(e) => {
+                      // Handheld scanners type the serial then press Enter: jump to the next box.
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        if (index + 1 < asset.quantity) focusSerial(asset.id, index + 1);
+                      }
+                    }}
                     value={asset.serialNumbers[index] || ''}
                     onChange={(e) => {
                       const newSerials = [...asset.serialNumbers];
@@ -1390,13 +1444,17 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
                     style={{
                       width: '200px',
                       padding: '8px',
-                      border: `1px solid ${assetErrors[asset.id]?.[index] ? '#ef4444' : '#d1d5db'}`,
+                      border: `1px solid ${assetErrors[asset.id]?.[index] ? '#ef4444' : dupes.has((asset.serialNumbers[index] || '').trim().toUpperCase()) ? '#f59e0b' : '#d1d5db'}`,
+                      background: dupes.has((asset.serialNumbers[index] || '').trim().toUpperCase()) ? '#fffbeb' : undefined,
                       borderRadius: '4px',
                       fontSize: '14px',
                     }}
                   />
                   <button
-                    onClick={() => openScanner(asset.id, index, asset.assetType)}
+                    type="button"
+                    onClick={() => setScanTarget({ assetId: asset.id, index })}
+                    aria-label={`Scan serial ${index + 1}`}
+                    title="Scan with camera"
                     style={{ padding: '8px', border: '1px solid #d1d5db', borderRadius: '4px' }}
                   >
                     <Camera size={16} />
@@ -2229,6 +2287,33 @@ const UnifiedAssetForm: React.FC<UnifiedAssetFormProps> = ({
           serialNumber={salesOrder || 'N/A'}
         />
       )}
+      {scanTarget && (() => {
+        const target = assets.find((a) => a.id === scanTarget.assetId);
+        if (!target) return null;
+        return (
+          <React.Suspense fallback={null}>
+            <EnhancedBarcodeScanner
+              isOpen
+              existingSerials={target.serialNumbers.filter((sn, i) => i !== scanTarget.index && (sn || '').trim())}
+              onClose={() => setScanTarget(null)}
+              onScan={(value) => {
+                const idx = scanTarget.index;
+                setAssets((prev) =>
+                  prev.map((a) => {
+                    if (a.id !== target.id) return a;
+                    const serialNumbers = [...a.serialNumbers];
+                    serialNumbers[idx] = value;
+                    return { ...a, serialNumbers };
+                  })
+                );
+                handleSerialChange(target, idx, value);
+                setScanTarget(null);
+                focusSerial(target.id, Math.min(idx + 1, target.quantity - 1));
+              }}
+            />
+          </React.Suspense>
+        );
+      })()}
     </div>
   </div>
   );
