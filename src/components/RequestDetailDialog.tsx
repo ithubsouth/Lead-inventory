@@ -326,7 +326,20 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
   };
 
 
-  const advanceStuck = async () => {
+  // Requests that were approved but never moved on are advanced automatically the next
+  // time someone who is allowed to act on them opens them — no button needed.
+  const [autoAdvanceFailed, setAutoAdvanceFailed] = useState(false);
+  const autoAdvanceTried = useRef<string | null>(null);
+  const canRepair = canAct || profile?.role === 'Super Admin' || profile?.department === 'Administrators';
+  useEffect(() => {
+    if (!req || !stuckNext || !canRepair || busy) return;
+    if (autoAdvanceTried.current === req.id) return;
+    autoAdvanceTried.current = req.id;
+    advanceStuck({ silent: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [req?.id, stuckNext?.key, canRepair]);
+
+  const advanceStuck = async ({ silent = false }: { silent?: boolean } = {}) => {
     if (!req || !stuckNext) return;
     setBusy(true);
     try {
@@ -349,6 +362,8 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
       toast.success(`Moved to ${stuckNext.dept}`);
     } catch (e: any) {
       console.error(e);
+      setAutoAdvanceFailed(true);
+      if (silent) return;
       toast.error(
         /row-level security|permission/i.test(e.message || '')
           ? 'Blocked by the database rule. Run the "update requests" policy fix in Supabase first.'
@@ -1140,13 +1155,13 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
                 );
               })}
             </ol>
-            {stuckNext && (
+            {stuckNext && (autoAdvanceFailed || !canRepair) && (
               <div className='mt-2 rounded border border-amber-300 bg-amber-50 p-2 text-xs text-amber-900 space-y-2'>
                 <div>
                   This stage was approved but the request didn't move on to <b>{stuckNext.dept}</b>.
                 </div>
-                {(canAct || profile?.role === 'Super Admin' || profile?.department === 'Administrators') && (
-                  <Button size='sm' className='h-7' disabled={busy} onClick={advanceStuck}>
+                {canRepair && (
+                  <Button size='sm' className='h-7' disabled={busy} onClick={() => advanceStuck()}>
                     {busy ? <Loader2 className='w-3 h-3 animate-spin' /> : `Move to ${stuckNext.dept}`}
                   </Button>
                 )}
