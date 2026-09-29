@@ -48,28 +48,34 @@ export const REQUEST_TYPE_LABELS: Record<RequestType, string> = {
   asset_movement: 'Asset Movement (EH to FA)',
 };
 
+// Stages where an Operator of the assigned department may act directly (no admin approval)
+export const OPERATOR_ACTIONABLE_STAGES = ['tech_verify_serials'];
+
 export const canActOnStage = (opts: {
   role: string | null;
   department: string | null;
   assignedDept: string;
   raisedByRole?: string | null;
   action?: StageAction;
+  stageKey?: string | null;
 }) => {
-  const { role, department, assignedDept, raisedByRole, action } = opts;
+  const { role, department, assignedDept, stageKey } = opts;
 
-  // Super Admin can do anything
   if (role === 'Super Admin') return true;
-
-  // Administrators department can act on any request at any stage
   if (department === 'Administrators' && role === 'Admin') return true;
 
-  // Special Rule: If Operator raised it, only Admin/Super Admin can Approve it.
-  // We check if the intent is 'approved' or if we are checking general action permission.
-  if (raisedByRole === 'Operator' && action === 'approved') {
-    return role === 'Admin' || role === 'Super Admin';
+  // Technology Team Operators can verify serials themselves
+  if (
+    role === 'Operator' &&
+    stageKey &&
+    OPERATOR_ACTIONABLE_STAGES.includes(stageKey) &&
+    department === assignedDept
+  ) {
+    return true;
   }
 
-  // Regular rules
+  // Otherwise only the assigned department's Admin can act
+  // (e.g. Procurement Admin approving an Operator-raised request)
   if (role !== 'Admin') return false;
   return department === assignedDept;
 };

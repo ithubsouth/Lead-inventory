@@ -451,7 +451,10 @@ export default function CreateRequestDialog({ open, onOpenChange, onCreated }: P
     try {
       const flow = getFlow(type);
       const first = flow[0];
-      const second = flow[1]; // Auto-advance to second stage
+      // Operators need their department Admin to approve the first stage;
+      // Admins / Super Admins auto-advance to the next stage.
+      const needsDeptApproval = profile.role === 'Operator';
+      const second = needsDeptApproval ? null : flow[1];
 
       const { data: reqRows, error: reqErr } = await supabase
         .from('requests')
