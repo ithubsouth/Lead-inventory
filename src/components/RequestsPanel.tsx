@@ -169,7 +169,9 @@ export default function RequestsPanel({ focusRequestId, onFocusHandled }: Props)
   }, [focusRequestId, onFocusHandled]);
 
   const filtered = rows.filter((r) => {
-    if (!isRelevant(r)) return false;
+    // "All" is a read-only overview of every request for every department.
+    // Inbox / My Requests / Drafts stay limited to requests the user is involved in.
+    if (tab !== 'all' && !isRelevant(r)) return false;
     if (tab === 'mine' && r.raised_by !== profile?.id) return false;
 
     if (tab === 'inbox') {
@@ -257,7 +259,7 @@ export default function RequestsPanel({ focusRequestId, onFocusHandled }: Props)
               {draft && <div className='w-2 h-2 rounded-full bg-blue-500 animate-pulse' />}
             </button>
           )}
-          {seesEverything && (
+          {(
             <button
               onClick={() => setTab('all')}
               className={cn(
