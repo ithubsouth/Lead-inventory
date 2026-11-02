@@ -228,17 +228,35 @@ export default function CreateRequestDialog({ open, onOpenChange, onCreated }: P
       try {
         const { data, error } = await supabase
           .from('devices')
-          .select('serial_number, warehouse')
+          .select('serial_number, warehouse, far_code')
           .in('serial_number', serialsToCheck)
           .eq('is_deleted', false);
 
         if (error) throw error;
 
         const info: Record<string, string> = {};
+        const assetCodes: Record<string, string> = {};
         (data || []).forEach(d => {
           if (d.serial_number) info[d.serial_number] = d.warehouse || 'Unknown Warehouse';
+          if (d.serial_number && d.far_code !== null && d.far_code !== undefined) {
+            assetCodes[d.serial_number] = String(d.far_code);
+          }
         });
         setSystemDuplicateInfo(info);
+
+        setSerialEntries(prev => {
+          let changed = false;
+          const next = prev.map(entry => {
+            const serial = entry.serial_number?.trim();
+            const existingCode = serial ? assetCodes[serial] : undefined;
+            if (existingCode && !entry.asset_code) {
+              changed = true;
+              return { ...entry, asset_code: existingCode };
+            }
+            return entry;
+          });
+          return changed ? next : prev;
+        });
       } catch (err) {
         console.error('System duplicate check failed:', err);
       }
@@ -293,7 +311,27 @@ export default function CreateRequestDialog({ open, onOpenChange, onCreated }: P
   const updateEntry = (index: number, field: keyof SerialEntry, value: string) => {
     setSerialEntries(prev => {
       const next = [...prev];
-      next[index] = { ...next[index], [field]: value };
+      if (field === 'serial_number') {
+        next[index] = value.trim()
+          ? {
+              ...next[index],
+              serial_number: value,
+              asset_status: assetStatus || 'Fresh',
+              asset_group: assetGroup || 'NFA',
+              asset_code: '',
+              asset_condition: '',
+            }
+          : {
+              ...next[index],
+              serial_number: '',
+              asset_status: '',
+              asset_group: '',
+              asset_code: '',
+              asset_condition: '',
+            };
+      } else {
+        next[index] = { ...next[index], [field]: value };
+      }
       return next;
     });
   };
@@ -306,7 +344,7 @@ export default function CreateRequestDialog({ open, onOpenChange, onCreated }: P
       setStockLoading(true);
       let q = supabase
         .from('devices')
-        .select('serial_number, asset_type, model, warehouse, asset_group, asset_status, configuration, asset_condition')
+        .select('serial_number, far_code, asset_type, model, warehouse, asset_group, asset_status, configuration, asset_condition')
         .eq('is_deleted', false)
         .in('status', ['Available', 'Stock'])
         .order('created_at', { ascending: false });
@@ -339,7 +377,7 @@ export default function CreateRequestDialog({ open, onOpenChange, onCreated }: P
         serial_number: d.serial_number,
         asset_status: d.asset_status || assetStatus || 'Fresh',
         asset_group: 'FA',
-        asset_code: '',
+        asset_code: d.far_code !== null && d.far_code !== undefined ? String(d.far_code) : '',
         asset_condition: '',
       };
       const blank = prev.findIndex(e => !e.serial_number?.trim());
@@ -414,7 +452,14 @@ export default function CreateRequestDialog({ open, onOpenChange, onCreated }: P
 
       for (const s of serials) {
         if (currentIdx < next.length) {
-          next[currentIdx] = { ...next[currentIdx], serial_number: s };
+          next[currentIdx] = {
+            ...next[currentIdx],
+            serial_number: s,
+            asset_status: assetStatus || 'Fresh',
+            asset_group: assetGroup || 'NFA',
+            asset_code: '',
+            asset_condition: '',
+          };
         } else {
           next.push({
             serial_number: s,
@@ -765,13 +810,20 @@ export default function CreateRequestDialog({ open, onOpenChange, onCreated }: P
                             {d.warehouse}
                           </div>
                         </div>
-                        <div className="flex flex-col w-full space-y-0.5">
-                          <div className="text-sm font-bold text-slate-800 leading-tight">
-                            {d.model} {d.configuration}
+                        <div className="flex items-center justify-between w-full">
+                          <div className="flex flex-col w-full space-y-0.5">
+                            <div className="text-sm font-bold text-slate-800 leading-tight">
+                              {d.model} {d.configuration}
+                            </div>
+                            {d.asset_condition && (
+                              <div className="text-[11px] font-bold italic text-amber-700 bg-amber-50 px-2 py-0.5 rounded border border-amber-100 mt-1.5 w-fit">
+                                {d.asset_condition}
+                              </div>
+                            )}
                           </div>
-                          {d.asset_condition && (
-                            <div className="text-[11px] font-bold italic text-amber-700 bg-amber-50 px-2 py-0.5 rounded border border-amber-100 mt-1.5 w-fit">
-                              {d.asset_condition}
+                          {d.far_code !== null && d.far_code !== undefined && (
+                            <div className="w-[190px] shrink-0 whitespace-nowrap text-right text-xs font-semibold text-slate-600">
+                              Asset Code: <span className="font-mono text-sm font-bold text-slate-800">{String(d.far_code)}</span>
                             </div>
                           )}
                         </div>
