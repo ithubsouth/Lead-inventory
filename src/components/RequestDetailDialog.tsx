@@ -45,6 +45,7 @@ import {
   Pencil,
   ScanLine,
   Clock,
+  Plus,
 } from 'lucide-react';
 
 interface Props {
@@ -105,10 +106,12 @@ interface SerialRow {
   asset_group: string | null;
   asset_status: string | null;
   asset_code: string | null;
+  asset_condition: string | null;
   verified: boolean | null;
   verify_result: string | null;
   verified_by: string | null;
   verified_at: string | null;
+  notes: string | null;
 }
 
 
@@ -138,6 +141,9 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
   const [busy, setBusy] = useState(false);
   const [grnInput, setGrnInput] = useState('');
   const [scanInput, setScanInput] = useState('');
+  const [receiptIssue, setReceiptIssue] = useState<'missing' | 'incorrect' | 'damaged' | null>(null);
+  const [receivedSerial, setReceivedSerial] = useState('');
+  const [replacementSerials, setReplacementSerials] = useState<Record<string, string>>({});
   const [editingSubject, setEditingSubject] = useState(false);
   const [subjectDraft, setSubjectDraft] = useState('');
   const fileRef = useRef<HTMLInputElement>(null);
@@ -271,6 +277,12 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
   const isGrnStage = !!req && req.current_stage === 'scm_take_grn';
   const isAssetCodeStage = !!req && req.current_stage === 'finance_approve';
   const verifiedCount = serials.filter((s) => s.verified).length;
+  const damagedCount = serials.filter((s) => s.verify_result === 'Damaged').length;
+  const missingCount = serials.filter((s) => s.verify_result === 'Not received').length;
+  const receivedCount = verifiedCount + damagedCount;
+  const pendingReceiptCount = Math.max(0, serials.length - receivedCount - missingCount);
+  const physicalSerials = serials.filter((s) => s.verified || s.verify_result === 'Damaged');
+  const returnDepartment = req?.raised_dept || flow[0]?.dept || 'requester';
 
 
   const notifyMentions = async (text: string) => {
@@ -307,6 +319,30 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
     if (error) throw error;
   };
 
+  const markSerialDamaged = async (serial: SerialRow) => {
+    if (!canAct || !isVerifyStage) return;
+    setBusy(true);
+    try {
+      const { error } = await supabase
+        .from('request_serials')
+        .update({
+          verified: false,
+          verify_result: 'Damaged',
+          asset_condition: 'Damaged',
+          verified_by: profile?.email || null,
+          verified_at: new Date().toISOString(),
+        })
+        .eq('id', serial.id);
+      if (error) throw error;
+      await load();
+      toast.success(`${serial.serial_number} marked as damaged`);
+    } catch (e: any) {
+      toast.error(e.message || 'Could not mark serial as damaged');
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const toggleSerialVerified = async (s: SerialRow) => {
     if (!canAct || !isVerifyStage) return;
     setBusy(true);
@@ -329,6 +365,162 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
       toast.success('All serials marked verified');
     } catch (e: any) {
       toast.error(e.message || 'Could not update verification');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const addReceivedSerial = async () => {
+    if (!req || !canAct || !isVerifyStage) return false;
+    const replacement = receivedSerial.trim();
+    if (!replacement) {
+      toast.error('Enter the serial number physically received.');
+      return false;
+    }
+    if (serials.some((s) => s.serial_number.toLowerCase() === replacement.toLowerCase())) {
+      toast.error('This serial number is already listed in the request.');
+      return false;
+    }
+    const unmatched = serials.filter((s) => !s.verified && s.verify_result !== 'Damaged' && s.verify_result !== 'Not received');
+    if (!unmatched.length) {
+      toast.error('No requested serial is available to mark as not received.');
+      return false;
+    }
+
+    const { error: updateError } = await supabase
+      .from('request_serials')
+      .update({
+        verified: false,
+        verify_result: 'Not received',
+        verified_by: profile?.email || null,
+        verified_at: new Date().toISOString(),
+      })
+      .eq('id', unmatched[0].id);
+    if (updateError) throw updateError;
+
+    const { error: insertError } = await supabase
+      .from('request_serials')
+      .insert({
+        request_id: req.id,
+        serial_number: replacement,
+        asset_group: unmatched[0].asset_group,
+        warehouse: unmatched[0].warehouse,
+        asset_status: unmatched[0].asset_status,
+        asset_code: null,
+        asset_condition: null,
+        exists_in_devices: false,
+        is_duplicate: false,
+        verified: true,
+        verify_result: 'Received',
+        verified_by: profile?.email || null,
+        verified_at: new Date().toISOString(),
+        notes: 'Added received serial',
+      } as any);
+    if (insertError) throw insertError;
+
+    setReceivedSerial('');
+    await load();
+    toast.success('Received serial added.');
+    return true;
+  };
+
+  const sendReceiptIssueBack = async () => {
+    if (!req || !canAct || !isVerifyStage) return;
+    if (!receiptIssue) {
+      toast.error('Select a receipt issue type first.');
+      return;
+    }
+    const reason = comment.trim();
+    if (!reason) {
+      toast.error('Add a comment describing the receipt issue before sending back.');
+      return;
+    }
+
+    if (receiptIssue === 'damaged') {
+      const damaged = serials.filter((s) => s.verify_result === 'Damaged');
+      if (!damaged.length) {
+        toast.error('Mark at least one received serial as damaged first.');
+        return;
+      }
+
+      setBusy(true);
+      try {
+        await record('revoked', {
+          revoke: true,
+          comment: `Damaged serial(s): ${damaged.map((s) => s.serial_number).join(', ')}. Asset Codes preserved. ${reason}`,
+        });
+      } finally {
+        setBusy(false);
+      }
+      return;
+    }
+
+    if (receiptIssue === 'missing') {
+      const missing = serials.filter((s) => !s.verified);
+      if (!missing.length) {
+        toast.error('No unverified serials are available to mark as not received.');
+        return;
+      }
+
+      const missingText = missing.map((s) => s.serial_number).join(', ');
+      setBusy(true);
+      try {
+        const { error } = await supabase
+          .from('request_serials')
+          .update({
+            verified: false,
+            verify_result: 'Not received',
+            verified_by: profile?.email || null,
+            verified_at: new Date().toISOString(),
+          })
+          .in('id', missing.map((s) => s.id));
+        if (error) throw error;
+
+        await record('revoked', {
+          revoke: true,
+          comment: `Not received serial(s): ${missingText}. ${reason}`,
+        });
+      } catch (e: any) {
+        toast.error(e.message || 'Could not send the receipt issue back');
+      } finally {
+        setBusy(false);
+      }
+      return;
+    }
+
+    setBusy(true);
+    try {
+      if (receivedSerial.trim()) {
+        const added = await addReceivedSerial();
+        if (!added) return;
+      } else if (!serials.some((s) => s.notes === 'Added received serial')) {
+        toast.error('Add the received serial before sending this issue back.');
+        return;
+      }
+
+      const manuallyAdded = serials.filter((s) => s.notes === 'Added received serial');
+      const pendingOriginals = serials.filter(
+        (s) => !s.verified && !s.verify_result && s.notes !== 'Added received serial'
+      );
+      if (manuallyAdded.length && pendingOriginals.length) {
+        const { error } = await supabase
+          .from('request_serials')
+          .update({
+            verified: false,
+            verify_result: 'Not received',
+            verified_by: profile?.email || null,
+            verified_at: new Date().toISOString(),
+          })
+          .in('id', pendingOriginals.map((s) => s.id));
+        if (error) throw error;
+      }
+
+      await record('revoked', {
+        revoke: true,
+        comment: `Different serial received. The original requested serial remains Not received, and the received serial is listed separately. Existing Asset Code retained on the original row. ${reason}`,
+      });
+    } catch (e: any) {
+      toast.error(e.message || 'Could not send the corrected serial back');
     } finally {
       setBusy(false);
     }
@@ -428,8 +620,23 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
     }
   };
 
-  const record = async (action: StageAction, opts: { closeAfter?: boolean; reject?: boolean; revoke?: boolean } = {}) => {
+  const record = async (action: StageAction, opts: { closeAfter?: boolean; reject?: boolean; revoke?: boolean; comment?: string } = {}) => {
     if (!req || !profile?.id) return;
+    const actionComment = opts.comment ?? comment;
+    const manuallyAddedSerials = serials.filter((s) => s.notes === 'Added received serial');
+    const pendingSerials = serials.filter(
+      (s) => !s.verified && !s.verify_result && s.notes !== 'Added received serial'
+    );
+    if (action === 'approved' && isVerifyStage && receiptIssue) {
+      toast.error('Use the receipt issue button above to send this request back to the creator.');
+      return;
+    }
+    const hasReceiptException =
+      action === 'approved' &&
+      isVerifyStage &&
+      !isBackWithRaiser &&
+      (serials.some((s) => s.verify_result === 'Not received' || s.verify_result === 'Damaged') ||
+        manuallyAddedSerials.length > 0);
 
     // Check Operator-raised restriction for approvals
     if (action === 'approved' && !opts.reject && !opts.revoke && !(isBackWithRaiser && isRaiser)) {
@@ -447,35 +654,59 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
       }
     }
 
-    if (action === 'approved' && isVerifyStage && serials.length && verifiedCount < serials.length) {
-      toast.error(`Verify all serials first (${verifiedCount}/${serials.length} verified).`);
-      return;
+    if (action === 'approved' && isVerifyStage) {
+      const unclassified = serials.filter(
+        (s) => !s.verified && s.verify_result !== 'Not received' && s.verify_result !== 'Damaged'
+      );
+      const canReconcileReplacement =
+        receiptIssue === 'incorrect' &&
+        manuallyAddedSerials.length > 0 &&
+        pendingSerials.length > 0;
+      if (unclassified.length && !canReconcileReplacement) {
+        toast.error(`Complete verification for all serials first (${unclassified.length} still pending).`);
+        return;
+      }
+      if (hasReceiptException && !actionComment.trim()) {
+        toast.error('Add a comment explaining the receipt difference before sending back to the creator.');
+        return;
+      }
     }
     if (action === 'approved' && isGrnStage && !opts.reject && !opts.revoke && !req.grn_number) {
       toast.error('Enter and save the GRN number before approving.');
       return;
     }
-    if (action === 'approved' && isAssetCodeStage && !opts.reject && !opts.revoke && serials.length && serials.some((s) => !s.asset_code)) {
-      toast.error('Every serial needs a unique Asset Code before final approval.');
+    if (action === 'approved' && isAssetCodeStage && !opts.reject && !opts.revoke && physicalSerials.length && physicalSerials.some((s) => !s.asset_code)) {
+      toast.error('Every physically received serial needs a unique Asset Code before final approval.');
       return;
     }
 
     setBusy(true);
     try {
-
+      if (action === 'approved' && isVerifyStage && manuallyAddedSerials.length && pendingSerials.length) {
+        const { error: reconcileError } = await supabase
+          .from('request_serials')
+          .update({
+            verified: false,
+            verify_result: 'Not received',
+            verified_by: profile?.email || null,
+            verified_at: new Date().toISOString(),
+          })
+          .in('id', pendingSerials.map((s) => s.id));
+        if (reconcileError) throw reconcileError;
+      }
 
       let nextStatus: RequestStatus = req.status;
       let nextStageKey = req.current_stage;
       let nextDept = req.current_stage_dept;
       let notifTitle = '';
-      let notifBody = comment || '';
+      let notifBody = actionComment || '';
       let notifTarget: { user_id?: string; target_dept?: string } = { user_id: req.raised_by };
       let closesRequest = false;
 
       if (opts.reject) {
         nextStatus = 'rejected';
         notifTitle = `Request rejected: ${req.title || REQUEST_TYPE_LABELS[req.type]}`;
-      } else if (opts.revoke) {
+      } else if (opts.revoke || hasReceiptException) {
         // Send back to the person who raised it (first stage) instead of cancelling.
         const first = flow[0];
         nextStatus = 'open';
@@ -501,7 +732,7 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
         notifTitle = `Comment added on: ${req.title || REQUEST_TYPE_LABELS[req.type]}`;
       }
 
-      if (opts.reject || opts.revoke || action === 'approved') {
+      if (opts.reject || opts.revoke || hasReceiptException || action === 'approved') {
         const { data: updRows, error: updErr } = await supabase
           .from('requests')
           .update({
@@ -532,11 +763,13 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
         stage_label: flow[currentIdx]?.label || req.current_stage,
         order_index: currentIdx,
         assigned_dept: req.current_stage_dept,
-        action: isBackWithRaiser && action === 'approved' ? 'submitted' : action,
+        action: isBackWithRaiser && action === 'approved'
+          ? 'submitted'
+          : (hasReceiptException ? 'revoked' : action),
         actor_id: profile.id,
         actor_email: profile.email,
         actor_dept: profile.department,
-        comment: comment || (isBackWithRaiser && action === 'approved' ? 'Resubmitted' : null),
+        comment: actionComment || (isBackWithRaiser && action === 'approved' ? 'Resubmitted' : null),
         acted_at: new Date().toISOString(),
       });
       if (stageErr) throw stageErr;
@@ -551,7 +784,7 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
         });
       }
 
-      await notifyMentions(comment);
+      await notifyMentions(actionComment);
 
 
 
@@ -691,7 +924,7 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
       material_type: 'Inward',
       asset_type: req.asset_type || 'Tablet',
       model: req.model || '-',
-      quantity: serials.length || req.quantity || 0,
+      quantity: physicalSerials.length || req.quantity || 0,
       warehouse: req.warehouse || '-',
       sales_order: req.po_number || null,
       configuration: req.configuration || null,
@@ -706,8 +939,8 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
     if (oErr) { toast.error(`Order create failed: ${oErr.message}`); return; }
     const orderId = orderIns!.id;
 
-    if (serials.length) {
-      const deviceRows = serials.map((s) => {
+    if (physicalSerials.length) {
+      const deviceRows = physicalSerials.map((s) => {
         const parsed = Number(s.asset_code);
         return {
           order_id: orderId,
@@ -743,9 +976,9 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
    * stamp the request reference (PO / GRN).
    */
   const applyMovement = async () => {
-    if (!req || !serials.length) return;
+    if (!req || !physicalSerials.length) return;
     let failed = 0;
-    for (const s of serials) {
+    for (const s of physicalSerials) {
       const parsed = Number(s.asset_code);
       const patch: any = {
         asset_group: s.asset_group || req.asset_group || undefined,
@@ -1021,6 +1254,60 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
       .eq('id', id);
     if (error) toast.error(error.message);
     else await load();
+  };
+
+  const replaceSerial = async (serial: SerialRow) => {
+    const replacement = (replacementSerials[serial.id] || '').trim();
+    if (!replacement) {
+      toast.error('Enter a replacement serial number.');
+      return;
+    }
+    if (serials.some((s) => s.id !== serial.id && s.serial_number.toLowerCase() === replacement.toLowerCase())) {
+      toast.error('That serial number is already listed in this request.');
+      return;
+    }
+    setBusy(true);
+    try {
+      const { error } = await supabase
+        .from('request_serials')
+        .update({
+          serial_number: replacement,
+          verified: false,
+          verify_result: null,
+          asset_condition: null,
+          verified_by: null,
+          verified_at: null,
+        })
+        .eq('id', serial.id);
+      if (error) throw error;
+      setReplacementSerials((prev) => ({ ...prev, [serial.id]: '' }));
+      await load();
+      toast.success('Replacement serial saved. Verify it before resubmitting.');
+    } catch (e: any) {
+      toast.error(e.message || 'Could not save replacement serial');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const deleteSerial = async (serial: SerialRow) => {
+    if (!req || !isVerifyStage || !canAct) return;
+    if (!confirm(`Delete serial ${serial.serial_number} from this request? This cannot be undone.`)) return;
+    setBusy(true);
+    try {
+      const { error } = await supabase
+        .from('request_serials')
+        .delete()
+        .eq('id', serial.id)
+        .eq('request_id', req.id);
+      if (error) throw error;
+      await load();
+      toast.success('Serial deleted from the request');
+    } catch (e: any) {
+      toast.error(e.message || 'Could not delete serial');
+    } finally {
+      setBusy(false);
+    }
   };
 
   const bulkAssetCodes = async (file: File) => {
@@ -1329,7 +1616,9 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
                 ['Asset Type', req.asset_type],
                 ['Model', req.model],
                 ['Configuration', req.configuration],
-                ['Quantity', req.quantity ?? serials.length],
+                ['PO Quantity', req.quantity ?? serials.length],
+                ['Received Quantity', receivedCount],
+                ['Missing Quantity', missingCount],
                 ['Asset Status', req.asset_status || serials.find((s) => s.asset_status)?.asset_status],
                 ['Requested At', fmtDateTime(req.created_at)],
                 ['GRN Number', req.grn_number],
@@ -1367,10 +1656,26 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
               <div className='space-y-3'>
                 <div className='flex items-center justify-between flex-wrap gap-2'>
                   <div className='text-sm font-semibold'>
-                    Serial Numbers ({serials.length}
-                    {req.quantity ? ` / ${req.quantity} PO qty` : ''})
+                    Serial Numbers ({receivedCount}
+                    {req.quantity ? ` / ${req.quantity} received` : ' received'})
+                    <span className='ml-2 text-[10px] font-normal text-muted-foreground'>
+                      {serials.length} listed
+                    </span>
                   </div>
                   <div className='flex items-center gap-2'>
+                    <Badge variant='outline' className='text-[10px] font-bold bg-blue-50 text-blue-700 border-blue-200'>
+                      Received {receivedCount}{req.quantity ? ` / ${req.quantity}` : ''}
+                    </Badge>
+                    {missingCount > 0 && (
+                      <Badge variant='outline' className='text-[10px] font-bold bg-red-50 text-red-700 border-red-200'>
+                        Missing {missingCount}
+                      </Badge>
+                    )}
+                    {pendingReceiptCount > 0 && (
+                      <Badge variant='outline' className='text-[10px] font-bold bg-slate-50 text-slate-600 border-slate-200'>
+                        Pending {pendingReceiptCount}
+                      </Badge>
+                    )}
                     <Badge
                       variant='outline'
                       className={cn(
@@ -1445,6 +1750,107 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
                   </div>
                 )}
 
+                {isVerifyStage && (
+                  <div className='p-3 rounded-xl border border-red-100 bg-red-50/40 space-y-2'>
+                    <div className='text-xs font-black uppercase tracking-widest text-red-700'>
+                      Receipt issue
+                    </div>
+                    <p className='text-[11px] text-slate-600'>
+                      If the shipment is incomplete or a serial is different, record the issue and send this same request back to its creator.
+                    </p>
+                    <div className='flex flex-wrap gap-2'>
+                      <Button
+                        type='button'
+                        size='sm'
+                        variant={receiptIssue === null ? 'default' : 'outline'}
+                        onClick={() => setReceiptIssue(null)}
+                        disabled={!canAct || busy}
+                      >
+                        Standard / No issue
+                      </Button>
+                      <Button
+                        type='button'
+                        size='sm'
+                        variant={receiptIssue === 'missing' ? 'default' : 'outline'}
+                        onClick={() => setReceiptIssue('missing')}
+                        disabled={!canAct || busy}
+                      >
+                        Missing serials
+                      </Button>
+                      <Button
+                        type='button'
+                        size='sm'
+                        variant={receiptIssue === 'incorrect' ? 'default' : 'outline'}
+                        onClick={() => setReceiptIssue('incorrect')}
+                        disabled={!canAct || busy}
+                      >
+                        Different serial received
+                      </Button>
+                      <Button
+                        type='button'
+                        size='sm'
+                        variant={receiptIssue === 'damaged' ? 'default' : 'outline'}
+                        onClick={() => setReceiptIssue('damaged')}
+                        disabled={!canAct || busy}
+                      >
+                        Damaged asset
+                      </Button>
+                    </div>
+                    {receiptIssue === 'incorrect' && (
+                      <div className='space-y-1'>
+                        <Input
+                          value={receivedSerial}
+                          onChange={(e) => setReceivedSerial(e.target.value)}
+                          placeholder='Enter serial number physically received'
+                          className='h-9 text-sm font-mono'
+                          disabled={!canAct || busy}
+                        />
+                        <Button
+                          type='button'
+                          size='sm'
+                          variant='outline'
+                          onClick={async () => {
+                            setBusy(true);
+                            try {
+                              await addReceivedSerial();
+                            } catch (e: any) {
+                              toast.error(e.message || 'Could not add received serial');
+                            } finally {
+                              setBusy(false);
+                            }
+                          }}
+                          disabled={!canAct || busy || !receivedSerial.trim()}
+                        >
+                          <Plus className='w-3.5 h-3.5 mr-1' /> Add received serial
+                        </Button>
+                        <p className='text-[10px] text-muted-foreground'>
+                        The unmatched requested serial stays listed as Not received. The new row is marked
+                        <span className='font-semibold'> Manually added</span> and counted immediately. You can delete it from the table if it was entered incorrectly.
+                        </p>
+                      </div>
+                    )}
+                    {receiptIssue === 'damaged' && (
+                      <p className='text-[11px] text-red-700'>
+                        Mark damaged serials in the table below. Existing Asset Codes will be preserved.
+                      </p>
+                    )}
+                    {receiptIssue && (
+                      <Button
+                        type='button'
+                        size='sm'
+                        variant='destructive'
+                        onClick={sendReceiptIssueBack}
+                        disabled={!canAct || busy}
+                      >
+                        {busy ? <Loader2 className='w-4 h-4 animate-spin' /> : <><RotateCcw className='w-4 h-4 mr-1' /> Send back to {returnDepartment}</>}
+                      </Button>
+                    )}
+                    <p className='text-[10px] text-muted-foreground'>
+                      The comment below is required and remains visible in request history.
+                    </p>
+                  </div>
+                )}
+
 
                 <div className='relative'>
                   <Search className='absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400' />
@@ -1464,24 +1870,34 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
                   )}
                 </div>
 
-                {req.quantity && serials.length !== req.quantity && (
+                {req.quantity && serials.length !== req.quantity && !serials.some((s) => s.notes === 'Added received serial') && (
                   <div className='p-2 rounded border border-amber-300 bg-amber-50 text-xs text-amber-800 flex items-center gap-1'>
                     <AlertTriangle className='w-3 h-3' />
                     Serial count ({serials.length}) does not match PO quantity ({req.quantity}).
                   </div>
                 )}
-                <div className='max-h-52 overflow-y-auto rounded border'>
-                  <table className='w-full text-[11px]'>
+                {req.quantity && (
+                  <div className='p-2 rounded border border-blue-200 bg-blue-50 text-xs text-blue-800 flex items-center justify-between gap-2'>
+                    <span>
+                      Physical receipt total updates automatically. PO quantity remains {req.quantity} for audit history.
+                    </span>
+                    <span className='font-bold whitespace-nowrap'>
+                      {receivedCount} received · {missingCount} missing
+                    </span>
+                  </div>
+                )}
+                <div className='max-h-72 overflow-auto rounded border'>
+                  <table className='w-full table-auto text-xs'>
                     <thead className='bg-muted/40 sticky top-0'>
                       <tr>
-                        <th className='text-left px-2 py-1.5'>Serial</th>
-                        <th className='text-left px-2 py-1.5'>Status</th>
-                        <th className='text-left px-2 py-1.5'>Group</th>
-                        <th className='text-left px-2 py-1.5'>Asset Code</th>
-                        <th className='text-left px-2 py-1.5'>Verification</th>
-                        <th className='text-left px-2 py-1.5'>Verified By</th>
-                        <th className='text-left px-2 py-1.5'>Verified At</th>
-                        <th className='text-left px-2 py-1.5'>Flag</th>
+                        <th className='whitespace-nowrap text-left align-middle px-2 py-1.5'>Serial</th>
+                        <th className='whitespace-nowrap text-left align-middle px-2 py-1.5'>Status</th>
+                        <th className='whitespace-nowrap text-left align-middle px-2 py-1.5'>Group</th>
+                        <th className='whitespace-nowrap text-left align-middle px-2 py-1.5'>Asset Code</th>
+                        <th className='whitespace-nowrap text-left align-middle px-2 py-1.5'>Verification</th>
+                        <th className='whitespace-nowrap text-left align-middle px-2 py-1.5'>Verified By</th>
+                        <th className='whitespace-nowrap text-left align-middle px-2 py-1.5'>Verified At</th>
+                        <th className='whitespace-nowrap text-left align-middle px-2 py-1.5'>Flag</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -1489,10 +1905,23 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
                         .filter(s => !serialSearchQuery || s.serial_number?.toLowerCase().includes(serialSearchQuery.toLowerCase()))
                         .map((s) => (
                         <tr key={s.id} className='border-t hover:bg-muted/10'>
-                          <td className='px-2 py-1.5 font-mono'>{s.serial_number}</td>
-                          <td className='px-2 py-1.5'>{s.asset_status || req.asset_status || '-'}</td>
-                          <td className='px-2 py-1.5'>{s.asset_group || '-'}</td>
-                          <td className='px-2 py-1.5 font-mono'>
+                          <td className='px-2 py-1.5 align-middle whitespace-nowrap'>
+                            <div className='flex items-center gap-1.5'>
+                              <span className='whitespace-nowrap font-mono'>{s.serial_number}</span>
+                              {s.notes === 'Added received serial' && (
+                                <Badge
+                                  variant='outline'
+                                  className='shrink-0 border-blue-200 bg-blue-50 px-1.5 text-[10px] font-bold text-blue-700'
+                                  title='This serial was manually added as the received serial'
+                                >
+                                  MANUAL
+                                </Badge>
+                              )}
+                            </div>
+                          </td>
+                          <td className='px-2 py-1.5 align-middle'>{s.asset_status || req.asset_status || '-'}</td>
+                          <td className='px-2 py-1.5 align-middle'>{s.asset_group || '-'}</td>
+                          <td className='px-2 py-1.5 align-middle font-mono'>
                             {isAssetCodeStage && canAct ? (
                               <Input
                                 defaultValue={s.asset_code || ''}
@@ -1509,14 +1938,14 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
                             )}
                           </td>
 
-                          <td className='px-2 py-1.5'>
+                          <td className='px-2 py-1.5 align-middle'>
                             <button
                               type='button'
                               onClick={() => toggleSerialVerified(s)}
                               disabled={!canAct || !isVerifyStage || busy}
                               title={isVerifyStage && canAct ? 'Toggle verification' : 'Verification status'}
                               className={cn(
-                                'px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-widest border',
+                                'px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-widest border',
                                 s.verified
                                   ? 'bg-green-100 text-green-700 border-green-200'
                                   : 'bg-slate-100 text-slate-500 border-slate-200',
@@ -1526,15 +1955,67 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
                               {s.verified ? 'Verified' : s.verify_result || 'Pending'}
                             </button>
                           </td>
-                          <td className='px-2 py-1.5 text-muted-foreground'>{s.verified_by || '-'}</td>
-                          <td className='px-2 py-1.5 text-muted-foreground'>
+                          <td className='px-2 py-1.5 align-middle text-muted-foreground whitespace-nowrap'>
+                            {s.verified_by || '-'}
+                          </td>
+                          <td className='px-2 py-1.5 align-middle text-muted-foreground whitespace-nowrap'>
                             {s.verified_at ? fmtDateTime(s.verified_at) : '-'}
                           </td>
-                          <td className='px-2 py-1.5'>
-                            {s.exists_in_devices && (
-                              <Badge variant='destructive' className='mr-1 text-[9px] h-4'>Exists</Badge>
+                          <td className='px-2 py-1.5 align-middle whitespace-nowrap'>
+                            <div className='flex min-h-5 items-center gap-1'>
+                              <div className='flex min-w-[64px] items-center gap-1'>
+                                {s.exists_in_devices && (
+                                  <Badge variant='destructive' className='shrink-0 text-[10px] h-5'>Exists</Badge>
+                                )}
+                                {s.is_duplicate && <Badge variant='outline' className='shrink-0 text-[10px] h-5'>Duplicate</Badge>}
+                              </div>
+                              {isVerifyStage && canAct ? (
+                                <Button
+                                  type='button'
+                                  size='sm'
+                                  variant='ghost'
+                                  className='h-5 w-5 shrink-0 p-0 text-red-600 hover:text-red-700'
+                                  onClick={() => deleteSerial(s)}
+                                  disabled={busy}
+                                  title='Delete this serial from the request'
+                                  aria-label={`Delete serial ${s.serial_number}`}
+                                >
+                                  <Trash2 className='w-3.5 h-3.5' />
+                                </Button>
+                              ) : <span className='h-5 w-5 shrink-0' />}
+                              {isVerifyStage && canAct ? (
+                                <Button
+                                  type='button'
+                                  size='sm'
+                                  variant={s.verify_result === 'Damaged' ? 'destructive' : 'outline'}
+                                  className='h-6 w-[88px] shrink-0 justify-center px-1.5 text-[10px]'
+                                  onClick={() => markSerialDamaged(s)}
+                                  disabled={busy}
+                                >
+                                  {s.verify_result === 'Damaged' ? 'Damaged' : 'Mark damaged'}
+                                </Button>
+                              ) : <span className='h-6 w-[88px] shrink-0' />}
+                            </div>
+                            {isBackWithRaiser && isRaiser && s.verify_result === 'Damaged' && (
+                              <div className='mt-1 flex items-center gap-1'>
+                                <Input
+                                  value={replacementSerials[s.id] || ''}
+                                  onChange={(e) => setReplacementSerials((prev) => ({ ...prev, [s.id]: e.target.value }))}
+                                  placeholder='Replacement serial'
+                                  className='h-6 w-32 text-[10px] font-mono'
+                                  disabled={busy}
+                                />
+                                <Button
+                                  type='button'
+                                  size='sm'
+                                  className='h-6 px-1.5 text-[9px]'
+                                  onClick={() => replaceSerial(s)}
+                                  disabled={busy}
+                                >
+                                  Save
+                                </Button>
+                              </div>
                             )}
-                            {s.is_duplicate && <Badge variant='outline' className='text-[9px] h-4'>Duplicate</Badge>}
                           </td>
                         </tr>
                       ))}
@@ -1738,11 +2219,11 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
                   {!isBackWithRaiser && currentIdx > 0 && (
                     <Button
                       variant='outline'
-                      disabled={!canAct || busy || (profile?.department !== 'Administrators' && !comment.trim())}
+                      disabled={!canAct || busy || !comment.trim()}
                       onClick={() => record('revoked', { revoke: true })}
                       title='Send this request back to the person who raised it'
                     >
-                      {busy ? <Loader2 className='w-4 h-4 animate-spin' /> : <><RotateCcw className='w-4 h-4 mr-1' /> Send back to requester</>}
+                      {busy ? <Loader2 className='w-4 h-4 animate-spin' /> : <><RotateCcw className='w-4 h-4 mr-1' /> Send back to {returnDepartment}</>}
                     </Button>
                   )}
                   <Button
@@ -1752,12 +2233,14 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
                   >
                     {busy ? <Loader2 className='w-4 h-4 animate-spin' /> : <><X className='w-4 h-4 mr-1' /> Reject</>}
                   </Button>
-                  <Button
-                    disabled={!canAct || busy}
-                    onClick={() => record('approved')}
-                  >
-                    {busy ? <Loader2 className='w-4 h-4 animate-spin' /> : <><Check className='w-4 h-4 mr-1' /> {isBackWithRaiser ? 'Resubmit' : 'Approve'}</>}
-                  </Button>
+                  {!(isVerifyStage && (receiptIssue === 'missing' || receiptIssue === 'incorrect')) && (
+                    <Button
+                      disabled={!canAct || busy}
+                      onClick={() => record('approved')}
+                    >
+                      {busy ? <Loader2 className='w-4 h-4 animate-spin' /> : <><Check className='w-4 h-4 mr-1' /> {isBackWithRaiser ? 'Resubmit' : 'Approve'}</>}
+                    </Button>
+                  )}
                 </div>
                 {!canAct && (
                   <p className='text-xs text-muted-foreground text-right'>
