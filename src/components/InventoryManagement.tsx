@@ -22,6 +22,7 @@ const ActivityLogs = lazy(() => import('./ActivityLogs'));
 const EnhancedBarcodeScanner = lazy(() => import('./EnhancedBarcodeScanner'));
 const VersionHistoryDialog = lazy(() => import('./VersionHistoryDialog'));
 import RequestsPanel from './RequestsPanel';
+import NotificationsPage from './NotificationsPage';
 
 const TabFallback = () => (
   <div className='flex items-center justify-center py-16 text-sm text-muted-foreground'>Loading…</div>
@@ -64,6 +65,7 @@ const InventoryManagement = () => {
   const [logoLoaded, setLogoLoaded] = useState(false);
   const [versionHistoryOpen, setVersionHistoryOpen] = useState(false);
   const [focusRequestId, setFocusRequestId] = useState<string | null>(null);
+  const [showNotificationsPage, setShowNotificationsPage] = useState(false);
   const { toast } = useToast();
   const [userEmail, setUserEmail] = useState<string | null>(null);
   const [userRole, setUserRole] = useState<string | null>(null);
@@ -858,7 +860,10 @@ const InventoryManagement = () => {
             >
               <History className='w-5 h-5' />
             </Button>
-            <NotificationBell onOpenRequest={(id) => { setFocusRequestId(id); setActiveTab('requests'); }} />
+            <NotificationBell
+              onOpenRequest={(id) => { setFocusRequestId(id); setActiveTab('requests'); }}
+              onViewAll={() => setShowNotificationsPage(true)}
+            />
             <ActiveUsers />
             <UserProfile />
           </div>
@@ -871,7 +876,16 @@ const InventoryManagement = () => {
       )}
 
       <main className='flex-1 overflow-y-auto custom-scrollbar bg-white/40 pb-16'>
-        {!activeTab ? (
+        {showNotificationsPage ? (
+          <NotificationsPage
+            onBack={() => setShowNotificationsPage(false)}
+            onOpenRequest={(id) => {
+              setShowNotificationsPage(false);
+              setFocusRequestId(id);
+              setActiveTab('requests');
+            }}
+          />
+        ) : !activeTab ? (
           <div className="flex h-full items-center justify-center py-32">
             <div className="inline-block w-8 h-8 border-4 border-primary/30 border-t-primary rounded-full animate-spin"></div>
           </div>

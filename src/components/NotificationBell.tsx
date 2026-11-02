@@ -26,9 +26,10 @@ interface Notification {
 
 interface Props {
   onOpenRequest: (requestId: string) => void;
+  onViewAll: () => void;
 }
 
-export function NotificationBell({ onOpenRequest }: Props) {
+export function NotificationBell({ onOpenRequest, onViewAll }: Props) {
   const { profile } = useUserProfile();
   const [items, setItems] = useState<Notification[]>([]);
   const [open, setOpen] = useState(false);
@@ -49,10 +50,7 @@ export function NotificationBell({ onOpenRequest }: Props) {
       query = query.or(`user_id.eq.${profile.id},target_dept.eq.${profile.department}`);
     }
 
-    const { data, error } = await query
-      .order('created_at', { ascending: false })
-      .limit(100);
-
+    const { data, error } = await query.order('created_at', { ascending: false }).limit(100);
     if (error) {
       console.error('Failed to load notifications:', error);
       return;
@@ -110,6 +108,23 @@ export function NotificationBell({ onOpenRequest }: Props) {
     }
   };
 
+  const markUnread = async (n: Notification) => {
+    if (n.read_at) {
+      const { error } = await supabase
+        .from('notifications')
+        .update({ read_at: null })
+        .eq('id', n.id);
+
+      if (error) {
+        console.error('Failed to mark notification as unread:', error);
+        toast.error('Failed to mark as unread');
+        return;
+      }
+
+      setItems((prev) => prev.map((x) => (x.id === n.id ? { ...x, read_at: null } : x)));
+    }
+  };
+
   const markAllRead = async () => {
     const ids = items.filter((n) => !n.read_at).map((n) => n.id);
     if (!ids.length) return;
@@ -146,7 +161,7 @@ export function NotificationBell({ onOpenRequest }: Props) {
           )}
         </Button>
       </PopoverTrigger>
-      <PopoverContent align='end' className='w-96 p-0'>
+      <PopoverContent align='end' className='w-96 max-w-[calc(100vw-2rem)] p-0'>
         <div className='flex items-center justify-between px-3 py-2 border-b'>
           <div className='font-semibold text-sm'>Notifications</div>
           {unread > 0 && (
@@ -184,29 +199,50 @@ export function NotificationBell({ onOpenRequest }: Props) {
           )}
           {visible.map((n) => (
 
-            <button
+            <div
               key={n.id}
-              onClick={() => markRead(n)}
               className={`w-full text-left px-3 py-2 border-b last:border-0 hover:bg-muted/50 ${
                 !n.read_at ? 'bg-primary/5' : ''
               }`}
             >
-              <div className='flex items-start gap-2'>
-                {!n.read_at && (
-                  <span className='mt-1.5 w-2 h-2 rounded-full bg-primary flex-shrink-0' />
-                )}
-                <div className='flex-1 min-w-0'>
-                  <div className='text-sm font-medium truncate'>{n.title}</div>
-                  {n.body && (
-                    <div className='text-xs text-muted-foreground line-clamp-2'>{n.body}</div>
+              <button type='button' onClick={() => markRead(n)} className='w-full text-left'>
+                <div className='flex items-start gap-2'>
+                  {!n.read_at && (
+                    <span className='mt-1.5 w-2 h-2 rounded-full bg-primary flex-shrink-0' />
                   )}
-                  <div className='text-[10px] text-muted-foreground mt-1'>
-                    {formatDistanceToNow(new Date(n.created_at), { addSuffix: true })}
+                  <div className='flex-1 min-w-0'>
+                    <div className='text-sm font-medium whitespace-normal break-words'>{n.title}</div>
+                    {n.body && (
+                      <div className='text-xs text-muted-foreground line-clamp-2'>{n.body}</div>
+                    )}
                   </div>
                 </div>
+              </button>
+              <div className='ml-4 mt-1 flex items-center justify-between gap-2'>
+                {n.read_at ? (
+                  <button
+                    type='button'
+                    onClick={() => markUnread(n)}
+                    className='text-[10px] font-medium text-primary hover:underline'
+                  >
+                    Mark unread
+                  </button>
+                ) : <span />}
+                <span className='text-[10px] text-muted-foreground'>
+                  {formatDistanceToNow(new Date(n.created_at), { addSuffix: true })}
+                </span>
               </div>
-            </button>
+            </div>
           ))}
+        </div>
+        <div className='border-t px-3 py-2 text-center'>
+          <button
+            type='button'
+            onClick={() => { setOpen(false); onViewAll(); }}
+            className='text-xs font-medium text-primary hover:underline'
+          >
+            View all
+          </button>
         </div>
       </PopoverContent>
     </Popover>

@@ -8,6 +8,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
 import { useUserProfile } from '@/hooks/useUserProfile';
@@ -1237,11 +1238,40 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
                         <Clock className='w-4 h-4 text-amber-500 shrink-0' />
                         <div className='min-w-0 leading-tight'>
                           <div className='text-[10px] uppercase tracking-wide text-amber-600'>Pending with</div>
-                          <div className='text-[11px] font-semibold text-amber-800 truncate'>
-                            {stageApprovers.length
-                              ? stageApprovers.slice(0, 2).map(personName).join(', ') +
-                                (stageApprovers.length > 2 ? ` +${stageApprovers.length - 2}` : '')
-                              : `${s.dept} Admin (not assigned)`}
+                          <div className='flex min-w-0 items-center gap-1 text-[11px] font-semibold text-amber-800'>
+                            {stageApprovers.length ? (
+                              <>
+                                <span className='min-w-0 truncate'>
+                                  {stageApprovers.slice(0, 2).map(personName).join(', ')}
+                                </span>
+                                {stageApprovers.length > 2 && (
+                                  <Popover>
+                                    <PopoverTrigger asChild>
+                                      <button
+                                        type='button'
+                                        className='shrink-0 whitespace-nowrap text-[11px] font-semibold text-amber-800 underline decoration-dotted underline-offset-2 hover:text-amber-950'
+                                        aria-label={`Show ${stageApprovers.length - 2} additional approver${stageApprovers.length - 2 === 1 ? '' : 's'}`}
+                                      >
+                                        +{stageApprovers.length - 2}
+                                      </button>
+                                    </PopoverTrigger>
+                                    <PopoverContent align='end' className='w-64 p-3'>
+                                      <div className='mb-2 text-xs font-semibold'>Additional approvers</div>
+                                      <div className='space-y-2'>
+                                        {stageApprovers.slice(2).map((approver) => (
+                                          <div key={approver.email} className='text-xs'>
+                                            <div className='font-medium'>{personName(approver)}</div>
+                                            <div className='text-muted-foreground break-all'>{approver.email}</div>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    </PopoverContent>
+                                  </Popover>
+                                )}
+                              </>
+                            ) : (
+                              <span className='truncate'>{s.dept} Admin (not assigned)</span>
+                            )}
                           </div>
                           {pendingSince && (
                             <div className='text-[10px] text-muted-foreground'>
