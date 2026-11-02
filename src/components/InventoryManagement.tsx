@@ -233,7 +233,7 @@ const InventoryManagement = () => {
       const [ordersResults, devicesResults] = await Promise.all([
         Promise.all(Array.from({ length: ordersPages }, (_, i) =>
           supabase.from('orders')
-            .select('id, order_type, asset_type, model, warehouse, sales_order, deal_id, nucleus_id, school_name, configuration, product, sd_card_size, profile_id, serial_numbers, quantity, order_date, created_at, updated_at, updated_by, is_deleted, material_type')
+            .select('id, order_type, asset_type, model, warehouse, sales_order, deal_id, brand, nucleus_id, school_name, configuration, product, sd_card_size, profile_id, serial_numbers, quantity, order_date, created_at, updated_at, updated_by, is_deleted, material_type')
             .order('created_at', { ascending: false })
             .range(i * batchSize, (i + 1) * batchSize - 1)
         )),

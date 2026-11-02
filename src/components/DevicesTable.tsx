@@ -667,7 +667,7 @@ const DevicesTable: React.FC<DevicesTableProps> = ({
               ref={tableContainerRef}
               tabIndex={0}
             >
-              <Table wrapperOverflow="visible" style={{ minWidth: '2000px' }}>
+              <Table wrapperOverflow="visible" style={{ minWidth: '2760px', tableLayout: 'fixed' }}>
                 <TableHeader>
                   <TableRow>
                     <TableHead style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', textAlign: 'left', position: 'sticky', top: 0, background: '#fff', zIndex: 20, width: columnWidths.s_no }}>S.No.</TableHead>
@@ -714,18 +714,18 @@ const DevicesTable: React.FC<DevicesTableProps> = ({
                         <TableCell style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', width: columnWidths.deal_id }}>{device.deal_id || ''}</TableCell>
                         <TableCell style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', width: columnWidths.brand }}>{device.brand || ''}</TableCell>
                         <TableCell style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', width: columnWidths.nucleus_id }}>{device.nucleus_id || ''}</TableCell>
-                        <TableCell style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', width: columnWidths.school_name }}>{device.school_name || ''}</TableCell>
+                        <TableCell style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', width: columnWidths.school_name, overflowWrap: 'anywhere' }}>{device.school_name || ''}</TableCell>
                         <TableCell style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', width: columnWidths.asset_type }}>{device.asset_type || ''}</TableCell>
                         <TableCell style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', width: columnWidths.model }}>{device.model || ''}</TableCell>
-                        <TableCell style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', width: columnWidths.configuration }}>{device.configuration || ''}</TableCell>
-                        <TableCell style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', width: columnWidths.serial_number }}>{device.serial_number || ''}</TableCell>
+                        <TableCell style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', width: columnWidths.configuration, overflowWrap: 'anywhere' }}>{device.configuration || ''}</TableCell>
+                        <TableCell style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', width: columnWidths.serial_number, whiteSpace: 'nowrap' }}>{device.serial_number || ''}</TableCell>
                         <TableCell style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', width: columnWidths.sd_card_size }}>{device.sd_card_size || ''}</TableCell>
                         <TableCell style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', width: columnWidths.profile_id }}>{device.profile_id || ''}</TableCell>
                         <TableCell style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', width: columnWidths.product }}>{device.product || ''}</TableCell>
                         <TableCell style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', width: columnWidths.asset_status }}>{device.asset_status || ''}</TableCell>
                         <TableCell style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', width: columnWidths.asset_condition }}>{device.asset_condition || ''}</TableCell>
                         <TableCell style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', width: columnWidths.asset_group }}>{device.asset_group || ''}</TableCell>
-                        <TableCell style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', width: columnWidths.far_code }}>{device.far_code || ''}</TableCell>
+                        <TableCell style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', width: columnWidths.far_code, whiteSpace: 'nowrap' }}>{device.far_code || ''}</TableCell>
                         <TableCell style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', width: columnWidths.status }}>
                           <span
                             style={{
@@ -740,7 +740,7 @@ const DevicesTable: React.FC<DevicesTableProps> = ({
                           </span>
                         </TableCell>
                         <TableCell style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', width: columnWidths.created_at }}>{formatDate(device.created_at) || ''}</TableCell>
-                        <TableCell style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', width: columnWidths.updated_by }}>{device.updated_by || ''}</TableCell>
+                        <TableCell style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', width: columnWidths.updated_by, overflowWrap: 'anywhere' }}>{device.updated_by || ''}</TableCell>
                         <TableCell style={{ fontSize: '12px', padding: '8px', borderBottom: '1px solid #d1d5db', width: columnWidths.actions }}>
                           <div style={{ display: 'flex', gap: 4 }}>
                             <Button
