@@ -53,6 +53,9 @@ interface Props {
   onFocusHandled?: () => void;
 }
 
+// Request No. gets its own fixed first column; the remaining 12 columns are unchanged.
+const ROW_GRID = 'grid grid-cols-[104px_repeat(12,minmax(0,1fr))]';
+
 const statusColors: Record<RequestStatus, string> = {
   open: 'bg-blue-100 text-blue-700',
   approved: 'bg-green-100 text-green-700',
@@ -336,8 +339,9 @@ export default function RequestsPanel({ focusRequestId, onFocusHandled }: Props)
       </div>
 
       <div className='bg-white border-y border-slate-100 overflow-x-auto relative'>
-        <div className='min-w-[1180px]'>
-          <div className='sticky top-0 z-20 grid grid-cols-12 gap-3 px-6 py-4 text-[10px] font-black uppercase tracking-[0.15em] text-slate-400 border-b bg-slate-50/80 backdrop-blur-md shadow-sm'>
+        <div className='min-w-[1290px]'>
+          <div className={cn('sticky top-0 z-20 gap-3 px-6 py-4 text-[10px] font-black uppercase tracking-[0.15em] text-slate-400 border-b bg-slate-50/80 backdrop-blur-md shadow-sm', ROW_GRID)}>
+            <div>Request No.</div>
             <div className='col-span-3'>Subject</div>
             <div className='col-span-1'>PO Number</div>
             <div className='col-span-1'>Warehouse</div>
@@ -356,9 +360,10 @@ export default function RequestsPanel({ focusRequestId, onFocusHandled }: Props)
           draft ? (
             <div className='divide-y divide-slate-100'>
               <div
-                className='w-full text-left grid grid-cols-12 gap-3 px-6 py-5 hover:bg-blue-50/30 transition-all group border-l-4 border-l-blue-500/30 hover:border-l-blue-500 cursor-pointer'
+                className={cn('w-full text-left gap-3 px-6 py-5 hover:bg-blue-50/30 transition-all group border-l-4 border-l-blue-500/30 hover:border-l-blue-500 cursor-pointer', ROW_GRID)}
                 onClick={() => setCreateOpen(true)}
               >
+                <div className='min-w-0 flex items-center text-xs font-bold text-slate-400 italic'>Draft</div>
                 <div className='col-span-3 min-w-0'>
                   <div className='font-bold text-sm text-slate-700 truncate group-hover:text-blue-600 transition-colors'>
                     {draft.title || 'Untitled Draft Request'}
@@ -454,19 +459,22 @@ export default function RequestsPanel({ focusRequestId, onFocusHandled }: Props)
                 onClick={() => setDetailId(r.id)}
                 aria-label={`${r.title || 'Request'}${mine ? ', waiting for your action' : ''}`}
                 className={cn(
-                  'w-full text-left grid grid-cols-12 gap-3 px-6 py-4 transition-all group border-l-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-inset',
+                  'w-full text-left gap-3 px-6 py-4 transition-all group border-l-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-inset',
+                  ROW_GRID,
                   mine ? 'bg-amber-50/60 border-l-amber-500 hover:bg-amber-50' : 'border-l-transparent hover:bg-blue-50/30 hover:border-l-blue-500'
                 )}
               >
+                <div className='min-w-0 flex items-center'>
+                  <span className='font-mono text-xs font-bold text-blue-600 truncate'>
+                    {formatRequestNo(r.request_no) || '-'}
+                  </span>
+                </div>
                 <div className='col-span-3 min-w-0'>
                   <div className='font-bold text-sm text-slate-700 truncate group-hover:text-blue-600 transition-colors flex items-center gap-2'>
                     {mine && <BellRing className='w-3.5 h-3.5 text-amber-500 flex-shrink-0' aria-hidden />}
                     <span className='truncate'>{r.title || (r.type ? REQUEST_TYPE_LABELS[r.type] : 'Untitled Request')}</span>
                   </div>
                   <div className='text-[11px] font-medium text-slate-400 mt-0.5 truncate'>
-                    {r.request_no ? (
-                      <span className='font-mono font-bold text-blue-600 mr-1.5'>{formatRequestNo(r.request_no)}</span>
-                    ) : null}
                     {r.type ? REQUEST_TYPE_LABELS[r.type] : 'General'}
                   </div>
                 </div>
