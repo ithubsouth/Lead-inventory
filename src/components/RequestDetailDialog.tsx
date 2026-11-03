@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { Suspense, lazy, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Dialog,
   DialogContent,
@@ -30,7 +30,9 @@ import {
   SERIAL_ENTRY_STAGE,
   sendBackStage,
 } from '@/lib/requestFlows';
-import { assetGroups, assetStatuses } from './constants';
+import { assetStatuses } from './constants';
+
+const EnhancedBarcodeScanner = lazy(() => import('./EnhancedBarcodeScanner'));
 import { format, formatDistanceToNow } from 'date-fns';
 import { fmtDateTime } from '@/lib/dateFormat';
 import {
@@ -50,6 +52,7 @@ import {
   Search,
   Pencil,
   ScanLine,
+  Camera,
   Clock,
   Plus,
 } from 'lucide-react';
@@ -176,7 +179,16 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
     setPoInput(((r as any)?.po_number as string) || '');
     setSubjectDraft(((r as any)?.title as string) || '');
     setStages((s as StageRow[]) || []);
-    setSerials((sn as SerialRow[]) || []);
+    // Keep scans that are still being saved shown as verified.
+    const savingScans = pendingScans.current;
+    setSerials(
+      ((sn as SerialRow[]) || []).map((row) => {
+        const stamp = savingScans.get(row.id);
+        return stamp && !row.verified
+          ? { ...row, verified: true, verify_result: 'Matched', verified_by: profile?.email || null, verified_at: stamp }
+          : row;
+      })
+    );
     setDocs((d as DocRow[]) || []);
 
   };
@@ -1605,26 +1617,70 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
   };
 
   /** ---- Manual serial verification entry (audit-table style) ---- */
-  const checkSerialEntry = async (raw?: string) => {
-    const value = (raw ?? scanInput).trim();
+  // Handheld scanners send serials faster than the database answers. Each scan is taken
+  // out of the box straight away, shown as Verified at once, and saved in order, so no
+  // scan is lost or glued onto the next one.
+  const scanQueue = useRef<Promise<void>>(Promise.resolve());
+  const pendingScans = useRef<Map<string, string>>(new Map());
+  const serialsRef = useRef(serials);
+  serialsRef.current = serials;
+  const [lastScan, setLastScan] = useState<{ value: string; ok: boolean; msg: string } | null>(null);
+  const scanInputRef = useRef<HTMLInputElement>(null);
+  const [cameraOpen, setCameraOpen] = useState(false);
+
+  // Scanners can add invisible control characters or spaces; compare without them.
+  const normalizeSerial = (v: string) => v.replace(/[\u0000-\u001f\u007f-\u009f]/g, '').trim();
+  const looseSerial = (v: string) => normalizeSerial(v).replace(/[^a-z0-9]/gi, '').toLowerCase();
+
+  const checkSerialEntry = (raw?: string) => {
+    const value = normalizeSerial(raw ?? scanInput);
+    setScanInput('');
+    scanInputRef.current?.focus();
     if (!value) return;
-    const match = serials.find((s) => s.serial_number.toLowerCase() === value.toLowerCase());
+    const list = serialsRef.current;
+    const match =
+      list.find((s) => s.serial_number.trim().toLowerCase() === value.toLowerCase()) ||
+      list.find((s) => s.serial_number && looseSerial(s.serial_number) === looseSerial(value));
     if (!match) {
+      setLastScan({ value, ok: false, msg: 'Not part of this request' });
       toast.error(`${value} is not part of this request`);
-      setScanInput('');
       return;
     }
-    setBusy(true);
-    try {
-      await setSerialVerification([match.id], true, 'Matched');
-      await load();
-      toast.success(`${value} verified`);
-      setScanInput('');
-    } catch (e: any) {
-      toast.error(e.message || 'Could not verify');
-    } finally {
-      setBusy(false);
+    if (match.verified) {
+      setLastScan({ value: match.serial_number, ok: true, msg: 'Already verified' });
+      return;
     }
+    const stamp = new Date().toISOString();
+    // Show it as verified immediately.
+    setSerials((prev) =>
+      prev.map((s) =>
+        s.id === match.id
+          ? { ...s, verified: true, verify_result: 'Matched', verified_by: profile?.email || null, verified_at: stamp }
+          : s
+      )
+    );
+    setLastScan({ value: match.serial_number, ok: true, msg: 'Verified' });
+    pendingScans.current.set(match.id, stamp);
+    scanQueue.current = scanQueue.current.then(async () => {
+      try {
+        const { data, error } = await supabase
+          .from('request_serials')
+          .update({ verified: true, verify_result: 'Matched', verified_by: profile?.email || null, verified_at: stamp })
+          .eq('id', match.id)
+          .select('id');
+        if (error) throw error;
+        if (!data?.length) throw new Error('You do not have permission to verify serials on this request.');
+      } catch (e: any) {
+        // Undo the instant tick so the screen never shows a save that didn't happen.
+        setSerials((prev) =>
+          prev.map((s) => (s.id === match.id ? { ...s, verified: false, verify_result: null, verified_by: null, verified_at: null } : s))
+        );
+        setLastScan({ value: match.serial_number, ok: false, msg: 'Not saved' });
+        toast.error(`${match.serial_number}: ${e.message || 'Could not verify'}`);
+      } finally {
+        pendingScans.current.delete(match.id);
+      }
+    });
   };
 
   const clearAllVerification = async () => {
@@ -2066,10 +2122,12 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
                     </div>
                     <div className='flex flex-wrap gap-2'>
                       <Input
+                        ref={scanInputRef}
                         value={scanInput}
                         onChange={(e) => setScanInput(e.target.value)}
                         onKeyDown={(e) => {
-                          if (e.key === 'Enter') {
+                          // Handheld scanners end each read with Enter (some with Tab).
+                          if (e.key === 'Enter' || (e.key === 'Tab' && scanInput.trim())) {
                             e.preventDefault();
                             checkSerialEntry();
                           }
@@ -2077,13 +2135,38 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
                         placeholder='Scan or type a serial number, then press Enter'
                         className='h-9 text-sm flex-1 min-w-[240px] font-mono'
                         autoComplete='off'
+                        autoFocus
                       />
-                      <Button size='sm' onClick={() => checkSerialEntry()} disabled={busy || !scanInput.trim()}>
+                      <Button size='sm' onClick={() => checkSerialEntry()} disabled={!scanInput.trim()}>
                         <Check className='w-3.5 h-3.5 mr-1' /> Check
                       </Button>
+                      <Button size='sm' variant='outline' onClick={() => setCameraOpen(true)} title='Scan with camera'>
+                        <Camera className='w-3.5 h-3.5 mr-1' /> Camera
+                      </Button>
                     </div>
+                    <div className='flex flex-wrap items-center gap-2 text-xs'>
+                      <span className='font-semibold'>
+                        {verifiedCount} of {serials.length} verified
+                      </span>
+                      {lastScan && (
+                        <span
+                          className={cn(
+                            'rounded-full border px-2 py-0.5 font-mono',
+                            lastScan.ok ? 'border-green-200 bg-green-50 text-green-700' : 'border-red-200 bg-red-50 text-red-700'
+                          )}
+                        >
+                          {lastScan.value}: {lastScan.msg}
+                        </span>
+                      )}
+                    </div>
+                    {serials.length > 0 && verifiedCount === serials.length && (
+                      <div className='p-2 rounded border border-green-200 bg-green-50 text-xs text-green-800 flex items-center gap-1'>
+                        <CheckCircle2 className='w-3 h-3 shrink-0' />
+                        All serials are verified. Click <b className='mx-0.5'>Approve</b> below to send this to {stageAfterCurrent()?.dept || 'the next team'}.
+                      </div>
+                    )}
                     <p className='text-[10px] text-muted-foreground'>
-                      Scanner-friendly: each scan verifies the serial instantly. Use Bulk Verify to upload a CSV of physically received serials.
+                      Scanner-friendly: scan one after another. Each serial turns Verified straight away. Use Bulk Verify to upload a CSV of physically received serials.
                     </p>
                   </div>
                 )}
@@ -2662,6 +2745,16 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
             )}
           </div>
         </div>
+        {cameraOpen && (
+          <Suspense fallback={null}>
+            <EnhancedBarcodeScanner
+              isOpen={cameraOpen}
+              onClose={() => { setCameraOpen(false); scanInputRef.current?.focus(); }}
+              onScan={(text) => checkSerialEntry(text)}
+              continuous
+            />
+          </Suspense>
+        )}
       </DialogContent>
     </Dialog>
   );
