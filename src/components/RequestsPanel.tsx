@@ -16,7 +16,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Plus, Inbox, User, Layers, Search, FileEdit, Trash2, BellRing, CheckCircle2 } from 'lucide-react';
-import { REQUEST_TYPE_LABELS, getFlow, canActOnStage, RequestType, RequestStatus } from '@/lib/requestFlows';
+import { REQUEST_TYPE_LABELS, getFlow, canActOnStage, RequestType, RequestStatus, formatRequestNo } from '@/lib/requestFlows';
 import { TableSkeleton } from './TableSkeleton';
 import { hasFullAccess, isLocationScopedDept } from '@/lib/appTabs';
 
@@ -31,6 +31,7 @@ const RequestDetailDialog = lazy(() => import('./RequestDetailDialog'));
 
 interface RequestRow {
   id: string;
+  request_no?: number | null;
   type: RequestType;
   status: RequestStatus;
   title: string | null;
@@ -204,7 +205,7 @@ export default function RequestsPanel({ focusRequestId, onFocusHandled }: Props)
     }
     if (q) {
       const term = q.toLowerCase();
-      const hay = [r.title, r.po_number, r.warehouse, r.asset_type, r.raised_by_email]
+      const hay = [formatRequestNo(r.request_no), r.request_no, r.title, r.po_number, r.warehouse, r.asset_type, r.raised_by_email]
         .filter(Boolean)
         .join(' ')
         .toLowerCase();
@@ -326,7 +327,7 @@ export default function RequestsPanel({ focusRequestId, onFocusHandled }: Props)
             <Input
               value={q}
               onChange={(e) => setQ(e.target.value)}
-              placeholder='Search requests...'
+              placeholder='Search by REQ no., subject, PO...'
               className='w-72 pl-10 h-10 rounded-xl border-slate-200 focus-visible:ring-blue-500'
             />
             <Search className='absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none' />
@@ -463,6 +464,9 @@ export default function RequestsPanel({ focusRequestId, onFocusHandled }: Props)
                     <span className='truncate'>{r.title || (r.type ? REQUEST_TYPE_LABELS[r.type] : 'Untitled Request')}</span>
                   </div>
                   <div className='text-[11px] font-medium text-slate-400 mt-0.5 truncate'>
+                    {r.request_no ? (
+                      <span className='font-mono font-bold text-blue-600 mr-1.5'>{formatRequestNo(r.request_no)}</span>
+                    ) : null}
                     {r.type ? REQUEST_TYPE_LABELS[r.type] : 'General'}
                   </div>
                 </div>

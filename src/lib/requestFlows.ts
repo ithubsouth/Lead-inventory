@@ -129,8 +129,14 @@ export const REQUEST_TYPE_LABELS: Record<RequestType, string> = {
   asset_movement: 'Asset Movement (EH to FA)',
 };
 
-// Stages where an Operator of the assigned department may act directly (no admin approval)
-export const OPERATOR_ACTIONABLE_STAGES = ['tech_verify_serials'];
+// Stages where an Operator of the assigned department may act directly (no admin approval).
+// Procurement Operators handle the serial step, including when a request is sent back to it.
+// (Each needs a matching database rule — see supabase/migrations.)
+export const OPERATOR_ACTIONABLE_STAGES = ['tech_verify_serials', 'proc_add_serials'];
+
+/** "REQ-00042" style number shown everywhere a request is listed. */
+export const formatRequestNo = (n: number | null | undefined) =>
+  n ? `REQ-${String(n).padStart(5, '0')}` : '';
 
 export const canActOnStage = (opts: {
   role: string | null;

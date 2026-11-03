@@ -37,6 +37,7 @@ import {
   getFlow,
   canRaiseRequest,
   nextRequiredStage,
+  formatRequestNo,
   isFaGroup,
 } from '@/lib/requestFlows';
 import {
@@ -544,10 +545,11 @@ export default function CreateRequestDialog({ open, onOpenChange, onCreated }: P
           raised_dept: profile.department || 'Administrators',
           raised_by_role: profile.role,
         })
-        .select('id')
+        .select('*') // '*' keeps working before the request_no migration is run
         .single();
       if (reqErr) throw reqErr;
       const requestId = reqRows!.id as string;
+      const requestNo = formatRequestNo((reqRows as { request_no?: number | null }).request_no);
 
       // Record first stage as "Submitted"
       await supabase.from('request_stages').insert({
@@ -593,7 +595,7 @@ export default function CreateRequestDialog({ open, onOpenChange, onCreated }: P
         target_dept: notifyDept,
         request_id: requestId,
         kind: 'stage_assigned',
-        title: `New ${REQUEST_TYPE_LABELS[type]} request`,
+        title: `New ${REQUEST_TYPE_LABELS[type]} request${requestNo ? ` ${requestNo}` : ''}`,
         body: `${title} · assigned to ${notifyDept} (${notifyLabel})`,
       });
 
@@ -629,7 +631,7 @@ export default function CreateRequestDialog({ open, onOpenChange, onCreated }: P
         }
       }
 
-      toast.success('Request created');
+      toast.success(requestNo ? `Request ${requestNo} created` : 'Request created');
       onCreated?.(requestId);
       onOpenChange(false);
     } catch (e: any) {

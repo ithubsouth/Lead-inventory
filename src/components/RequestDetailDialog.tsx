@@ -29,6 +29,7 @@ import {
   RELEASE_PO_STAGE,
   SERIAL_ENTRY_STAGE,
   sendBackStage,
+  formatRequestNo,
 } from '@/lib/requestFlows';
 import { assetStatuses } from './constants';
 
@@ -67,6 +68,7 @@ interface Props {
 
 interface RequestFull {
   id: string;
+  request_no?: number | null;
   type: RequestType;
   status: RequestStatus;
   title: string | null;
@@ -236,6 +238,10 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
   }, [open, requestId]);
 
   const flow = useMemo(() => (req ? getFlow(req.type) : []), [req]);
+  // "REQ-00042 · Subject" — used in notifications so every message names the request.
+  const reqName = req
+    ? [formatRequestNo(req.request_no), req.title || REQUEST_TYPE_LABELS[req.type]].filter(Boolean).join(' · ')
+    : '';
   const currentIdx = req ? flow.findIndex((s) => s.key === req.current_stage) : -1;
 
   // Technology Team / Supply Chain Management only handle their own location's stock.
@@ -362,7 +368,7 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
         user_id: u.id,
         request_id: req.id,
         kind: 'mention',
-        title: `${profile?.full_name || profile?.email || 'Someone'} tagged you on: ${req.title || REQUEST_TYPE_LABELS[req.type]}`,
+        title: `${profile?.full_name || profile?.email || 'Someone'} tagged you on: ${reqName}`,
         body: text,
       }))
     );
@@ -796,7 +802,7 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
 
       if (opts.reject) {
         nextStatus = 'rejected';
-        notifTitle = `Request rejected: ${req.title || REQUEST_TYPE_LABELS[req.type]}`;
+        notifTitle = `Request rejected: ${reqName}`;
       } else if (opts.revoke || hasReceiptException) {
         // Send back instead of cancelling: to Procurement for new hardware past their
         // step, otherwise to the person who raised it (first stage).
@@ -805,29 +811,29 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
         nextStageKey = target.key;
         if (target.key === flow[0].key) {
           nextDept = req.raised_dept || target.dept;
-          notifTitle = `Request sent back to you: ${req.title || REQUEST_TYPE_LABELS[req.type]}`;
+          notifTitle = `Request sent back to you: ${reqName}`;
           notifTarget = { user_id: req.raised_by };
         } else {
           nextDept = target.dept;
-          notifTitle = `Request sent back to ${target.dept}: ${req.title || REQUEST_TYPE_LABELS[req.type]}`;
+          notifTitle = `Request sent back to ${target.dept}: ${reqName}`;
           notifTarget = { target_dept: target.dept };
         }
       } else if (action === 'approved') {
         const nxt = stageAfterCurrent();
         if (!nxt) {
           nextStatus = 'closed';
-          notifTitle = `Request approved & closed: ${req.title || REQUEST_TYPE_LABELS[req.type]}`;
+          notifTitle = `Request approved & closed: ${reqName}`;
           closesRequest = true;
         } else {
           nextStageKey = nxt.key;
           nextDept = nxt.dept;
           notifTitle = isSentBack
-            ? `Request resubmitted: ${req.title || REQUEST_TYPE_LABELS[req.type]}`
-            : `Stage advanced: ${nxt.label}`;
+            ? `Request resubmitted: ${reqName}`
+            : `Stage advanced: ${nxt.label} · ${reqName}`;
           notifTarget = { target_dept: nxt.dept };
         }
       } else if (action === 'commented') {
-        notifTitle = `Comment added on: ${req.title || REQUEST_TYPE_LABELS[req.type]}`;
+        notifTitle = `Comment added on: ${reqName}`;
       }
 
       if (opts.reject || opts.revoke || hasReceiptException || action === 'approved') {
@@ -1132,7 +1138,7 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
     const byS = new Map(devs.map((d) => [d.serial_number, d]));
     const rows = [
       [
-        'Subject', 'Request Type', 'PO Number', 'GRN Number', 'Warehouse', 'Asset Type', 'Model', 'Configuration',
+        'Request No', 'Subject', 'Request Type', 'PO Number', 'GRN Number', 'Warehouse', 'Asset Type', 'Model', 'Configuration',
         'Quantity', 'Serial Number', 'Asset Status', 'Asset Group', 'Asset Code', 'Asset Condition',
         'Verified', 'Verification Result', 'Verified By', 'Verified At',
         'Duplicate', 'Existed Before', 'Current Stage', 'Pending At', 'Request Status',
@@ -1141,6 +1147,7 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
       ...serials.map((s) => {
         const d: any = byS.get(s.serial_number) || {};
         return [
+          formatRequestNo(req.request_no),
           req.title ?? '',
           REQUEST_TYPE_LABELS[req.type],
           req.po_number ?? '',
@@ -1175,7 +1182,7 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `request_${req.po_number || req.id}_serials.csv`;
+    a.download = `${formatRequestNo(req.request_no) || `request_${req.po_number || req.id}`}_serials.csv`;
     a.click();
     URL.revokeObjectURL(url);
   };
@@ -1764,7 +1771,7 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
                 </DialogTitle>
               )}
               <div className='text-xs text-muted-foreground mt-1 break-words'>
-                {REQUEST_TYPE_LABELS[req.type]}
+                {req.request_no ? <span className="font-mono font-bold text-blue-600">{formatRequestNo(req.request_no)} · </span> : null}{REQUEST_TYPE_LABELS[req.type]}
                 {req.po_number ? ` · PO ${req.po_number}` : ''} · Raised by {req.raised_by_email} ({req.raised_dept}) · {fmtDateTime(req.created_at)}
               </div>
             </div>
