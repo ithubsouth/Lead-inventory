@@ -22,8 +22,11 @@ import {
   StageAction,
   canActOnStage,
   getFlow,
-  nextStage,
-  isTerminalStage,
+  nextRequiredStage,
+  skippedStages,
+  isFaGroup,
+  ASSET_CODE_STAGE,
+  RELEASE_PO_STAGE,
 } from '@/lib/requestFlows';
 import { format, formatDistanceToNow } from 'date-fns';
 import { fmtDateTime } from '@/lib/dateFormat';
@@ -140,6 +143,7 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
   const [comment, setComment] = useState('');
   const [busy, setBusy] = useState(false);
   const [grnInput, setGrnInput] = useState('');
+  const [poInput, setPoInput] = useState('');
   const [scanInput, setScanInput] = useState('');
   const [receiptIssue, setReceiptIssue] = useState<'missing' | 'incorrect' | 'damaged' | null>(null);
   const [receivedSerial, setReceivedSerial] = useState('');
@@ -166,6 +170,7 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
     ]);
     setReq(r as any);
     setGrnInput(((r as any)?.grn_number as string) || '');
+    setPoInput(((r as any)?.po_number as string) || '');
     setSubjectDraft(((r as any)?.title as string) || '');
     setStages((s as StageRow[]) || []);
     setSerials((sn as SerialRow[]) || []);
@@ -244,6 +249,22 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
   const activeHistory = lastRevokeIdx >= 0 ? stages.slice(0, lastRevokeIdx) : stages;
   const stageSignOff = (key: string) =>
     activeHistory.find((st) => st.stage_key === key && (st.action === 'approved' || st.action === 'submitted'));
+  const signedOff = new Set(
+    activeHistory
+      .filter((st) => st.action === 'approved' || st.action === 'submitted')
+      .map((st) => st.stage_key)
+  );
+
+  // FA serials need an asset code before Procurement can release the PO. Serials that
+  // were not received don't count. A request with only NFA serials skips the asset code step.
+  const serialGroup = (s: SerialRow) => s.asset_group || req?.asset_group || null;
+  const countedSerials = serials.filter((s) => s.verify_result !== 'Not received');
+  const hasFA = countedSerials.length
+    ? countedSerials.some((s) => isFaGroup(serialGroup(s)))
+    : isFaGroup(req?.asset_group);
+  const skipped = req ? skippedStages(req.type, { hasFA }) : [];
+  const stageAfterCurrent = () =>
+    req ? nextRequiredStage(req.type, req.current_stage, { hasFA, signedOff }) : null;
 
   // An approval was recorded for the current stage but the request never moved on
   // (happened while the database hand-off rule was broken). Offer a one-click repair.
@@ -251,7 +272,7 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
   const stuckNext =
     !!req && req.status === 'open' && latestWorkflow?.action === 'approved' &&
     latestWorkflow.stage_key === req.current_stage
-      ? nextStage(req.type, req.current_stage)
+      ? stageAfterCurrent()
       : null;
 
   const canAct = !!req &&
@@ -275,13 +296,15 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
 
   const isVerifyStage = !!req && req.current_stage === 'tech_verify_serials';
   const isGrnStage = !!req && req.current_stage === 'scm_take_grn';
-  const isAssetCodeStage = !!req && req.current_stage === 'finance_approve';
+  const isAssetCodeStage = !!req && req.current_stage === ASSET_CODE_STAGE;
+  const isReleasePoStage = !!req && req.current_stage === RELEASE_PO_STAGE;
   const verifiedCount = serials.filter((s) => s.verified).length;
   const damagedCount = serials.filter((s) => s.verify_result === 'Damaged').length;
   const missingCount = serials.filter((s) => s.verify_result === 'Not received').length;
   const receivedCount = verifiedCount + damagedCount;
   const pendingReceiptCount = Math.max(0, serials.length - receivedCount - missingCount);
   const physicalSerials = serials.filter((s) => s.verified || s.verify_result === 'Damaged');
+  const faSerialsMissingCode = physicalSerials.filter((s) => isFaGroup(serialGroup(s)) && !s.asset_code);
   const returnDepartment = req?.raised_dept || flow[0]?.dept || 'requester';
 
 
@@ -675,9 +698,19 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
       toast.error('Enter and save the GRN number before approving.');
       return;
     }
-    if (action === 'approved' && isAssetCodeStage && !opts.reject && !opts.revoke && physicalSerials.length && physicalSerials.some((s) => !s.asset_code)) {
-      toast.error('Every physically received serial needs a unique Asset Code before final approval.');
+    if (action === 'approved' && isAssetCodeStage && !opts.reject && !opts.revoke && faSerialsMissingCode.length) {
+      toast.error(`Every received FA serial needs a unique Asset Code before approving (${faSerialsMissingCode.length} missing).`);
       return;
+    }
+    if (action === 'approved' && isReleasePoStage && !opts.reject && !opts.revoke) {
+      if (faSerialsMissingCode.length) {
+        toast.error(`The PO can't be released until Finance gives every FA serial an Asset Code (${faSerialsMissingCode.length} missing).`);
+        return;
+      }
+      if (!req.po_number) {
+        toast.error('Enter and save the PO number before releasing the PO.');
+        return;
+      }
     }
 
     setBusy(true);
@@ -715,7 +748,7 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
         notifTitle = `Request sent back to you: ${req.title || REQUEST_TYPE_LABELS[req.type]}`;
         notifTarget = { user_id: req.raised_by };
       } else if (action === 'approved') {
-        const nxt = nextStage(req.type, req.current_stage);
+        const nxt = stageAfterCurrent();
         if (!nxt) {
           nextStatus = 'closed';
           notifTitle = `Request approved & closed: ${req.title || REQUEST_TYPE_LABELS[req.type]}`;
@@ -1167,6 +1200,40 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
     }
   };
 
+  const savePo = async () => {
+    if (!req) return;
+    const po = poInput.trim();
+    if (!po) return;
+    setBusy(true);
+    try {
+      const { data: updRows, error } = await supabase
+        .from('requests')
+        .update({ po_number: po })
+        .eq('id', req.id)
+        .select('id');
+      if (error) throw error;
+      if (!updRows?.length) throw new Error('You do not have permission to update this request.');
+      await supabase.from('request_stages').insert({
+        request_id: req.id,
+        stage_key: req.current_stage,
+        stage_label: `PO Number saved: ${po}`,
+        order_index: currentIdx,
+        assigned_dept: req.current_stage_dept,
+        action: 'commented',
+        actor_id: profile?.id,
+        actor_email: profile?.email,
+        actor_dept: profile?.department,
+        comment: null,
+      });
+      toast.success('PO number saved');
+      await load();
+    } catch (e: any) {
+      toast.error(e.message || 'Could not save PO number');
+    } finally {
+      setBusy(false);
+    }
+  };
+
   /** Reject if a database call hangs, so the button never spins forever. */
   const withTimeout = <T,>(p: PromiseLike<T>, ms: number, what: string): Promise<T> =>
     Promise.race([
@@ -1221,9 +1288,9 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
     if (!req) return;
     setBusy(true);
     try {
-      const targets = serials.filter((s) => !s.asset_code);
+      const targets = faSerialsMissingCode;
       if (!targets.length) {
-        toast.info('All serials already have an asset code');
+        toast.info('All received FA serials already have an asset code');
         return;
       }
       let code = await nextFreeAssetCode();
@@ -1473,9 +1540,14 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
             <ol className='space-y-2'>
               {flow.map((s, i) => {
                 const signOff = stageSignOff(s.key);
-                const done =
-                  i < currentIdx || req.status === 'closed' || req.status === 'approved' ||
-                  (i === currentIdx && req.status === 'open' && signOff?.action === 'approved');
+                const notNeeded = skipped.includes(s.key);
+                // Asset code / PO release only count as done when someone signed them off
+                // (requests started under the old order may have passed them by).
+                const mustSignOff = s.key === ASSET_CODE_STAGE || s.key === RELEASE_PO_STAGE;
+                const done = !notNeeded && (
+                  ((req.status === 'closed' || req.status === 'approved' || i < currentIdx) &&
+                    (!mustSignOff || !!signOff)) ||
+                  (i === currentIdx && req.status === 'open' && signOff?.action === 'approved'));
                 const active = i === currentIdx && req.status === 'open' && !done;
                 return (
                   <li
@@ -1491,9 +1563,11 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
                     >
                       {done ? '✓' : i + 1}
                     </div>
-                    <div className='min-w-0 flex-1'>
-                      <div className='text-sm font-medium'>{s.label}</div>
-                      <div className='text-xs text-muted-foreground'>{s.dept}</div>
+                    <div className={cn('min-w-0 flex-1', notNeeded && 'opacity-50')}>
+                      <div className={cn('text-sm font-medium', notNeeded && 'line-through')}>{s.label}</div>
+                      <div className='text-xs text-muted-foreground'>
+                        {s.dept}{notNeeded ? ' · Not needed (NFA only)' : ''}
+                      </div>
                     </div>
                     {done && (
                       <div
@@ -2169,9 +2243,51 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
               </div>
             )}
 
+            {req.status === 'open' && isReleasePoStage && (
+              <div className='p-3 rounded-xl border border-violet-100 bg-violet-50/40 space-y-2'>
+                <div className='text-xs font-black uppercase tracking-widest text-violet-700'>Release PO</div>
+                {faSerialsMissingCode.length > 0 ? (
+                  <div className='p-2 rounded border border-red-200 bg-red-50 text-xs text-red-800 flex items-center gap-1'>
+                    <AlertTriangle className='w-3 h-3 shrink-0' />
+                    {faSerialsMissingCode.length} FA serial(s) have no Asset Code. The PO can't be released until Finance
+                    adds them. Use "Send back" or ask Finance to fill them in.
+                  </div>
+                ) : (
+                  <div className='p-2 rounded border border-green-200 bg-green-50 text-xs text-green-800 flex items-center gap-1'>
+                    <CheckCircle2 className='w-3 h-3 shrink-0' />
+                    {hasFA ? 'All received FA serials have an Asset Code.' : 'NFA only, so no Asset Code is needed.'}
+                  </div>
+                )}
+                {canAct && (
+                  <div className='flex gap-2'>
+                    <Input
+                      value={poInput}
+                      onChange={(e) => setPoInput(e.target.value)}
+                      placeholder='Enter PO number'
+                      className='h-9 text-sm'
+                    />
+                    <Button
+                      size='sm'
+                      onClick={savePo}
+                      disabled={busy || !poInput.trim() || poInput.trim() === (req.po_number || '')}
+                    >
+                      Save PO
+                    </Button>
+                  </div>
+                )}
+                <p className='text-[10px] text-muted-foreground'>
+                  Check the PO number, then click Approve to release the PO. It then goes to Supply Chain Management for GRN.
+                </p>
+              </div>
+            )}
+
             {req.status === 'open' && isAssetCodeStage && canAct && (
               <div className='p-3 rounded-xl border border-emerald-100 bg-emerald-50/40 space-y-2'>
-                <div className='text-xs font-black uppercase tracking-widest text-emerald-700'>Generate Asset Code</div>
+                <div className='text-xs font-black uppercase tracking-widest text-emerald-700'>Generate Asset Code (FA)</div>
+                <p className='text-[11px] text-slate-600'>
+                  Every received FA serial needs an Asset Code. Procurement can only release the PO once they're all filled in.
+                  {faSerialsMissingCode.length > 0 && <b> {faSerialsMissingCode.length} still missing.</b>}
+                </p>
                 <div className='flex flex-wrap gap-2'>
                   <Button size='sm' variant='outline' onClick={autoGenerateAssetCodes} disabled={busy}>
                     Auto-generate for missing

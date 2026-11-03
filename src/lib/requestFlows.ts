@@ -9,12 +9,54 @@ export interface StageDef {
   hint?: string;
 }
 
+// Asset codes are created before the PO is released: Procurement can only release the
+// PO for FA assets once Finance has given every FA serial an asset code. NFA-only
+// requests skip the asset code step. (The asset code key stays 'finance_approve' so
+// requests already in progress keep working.)
 export const NEW_HARDWARE_FLOW: StageDef[] = [
   { key: 'proc_add_serials', label: 'Created', dept: 'Procurement Team' },
   { key: 'tech_verify_serials', label: 'Verify Serial Numbers with Physical Assets', dept: 'Technology Team' },
+  { key: 'finance_approve', label: 'Generate Asset Code (FA)', dept: 'Finance' },
+  { key: 'proc_release_po', label: 'Release PO', dept: 'Procurement Team' },
   { key: 'scm_take_grn', label: 'Take GRN', dept: 'Supply Chain Management' },
-  { key: 'finance_approve', label: 'Generate Asset Code', dept: 'Finance' },
 ];
+
+export const ASSET_CODE_STAGE = 'finance_approve';
+export const RELEASE_PO_STAGE = 'proc_release_po';
+
+/** True when an asset group needs an asset code. Anything not explicitly NFA counts as FA. */
+export const isFaGroup = (group: string | null | undefined) =>
+  (group || '').trim().toUpperCase() !== 'NFA';
+
+/** Stages that don't apply to a request (e.g. asset code for an NFA-only request). */
+export const skippedStages = (type: RequestType, opts: { hasFA: boolean }): string[] =>
+  type === 'new_hardware' && !opts.hasFA ? [ASSET_CODE_STAGE] : [];
+
+/**
+ * Where a request goes after the current stage is approved.
+ * - Skips stages that don't apply (asset code for NFA-only requests).
+ * - Goes back to any earlier required stage that was never signed off first. This
+ *   catches requests started under the old order (GRN before asset code), so they
+ *   still get an asset code and a PO release before closing.
+ * - Skips later stages that were already signed off (same reason).
+ * Returns null when the request should close.
+ */
+export const nextRequiredStage = (
+  type: RequestType,
+  currentKey: string,
+  opts: { hasFA: boolean; signedOff: Set<string> }
+): StageDef | null => {
+  const flow = getFlow(type);
+  const skip = new Set(skippedStages(type, opts));
+  const cur = flow.findIndex((s) => s.key === currentKey);
+  if (cur < 0) return null;
+  const pending = (s: StageDef, i: number) =>
+    i > 0 && s.key !== currentKey && !skip.has(s.key) && !opts.signedOff.has(s.key);
+  const catchUp = new Set([ASSET_CODE_STAGE, RELEASE_PO_STAGE]);
+  const earlier = flow.slice(0, cur).find((s, i) => catchUp.has(s.key) && pending(s, i));
+  if (earlier) return earlier;
+  return flow.slice(cur + 1).find((s, i) => pending(s, cur + 1 + i)) || null;
+};
 
 
 export const ASSET_MOVEMENT_FLOW: StageDef[] = [
