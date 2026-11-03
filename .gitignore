@@ -22,3 +22,7 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Claude Code local-only files
+.claude/settings.local.json
+.claude/autopublish.off

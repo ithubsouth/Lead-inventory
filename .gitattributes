@@ -1,0 +1,2 @@
+# Keep shell scripts with Unix line endings (Claude Code hooks run in bash, also on Windows)
+*.sh text eol=lf
