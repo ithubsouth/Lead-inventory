@@ -9,17 +9,20 @@ export interface StageDef {
   hint?: string;
 }
 
-// Planning Team raises the procurement request (what is needed and how many). Procurement
-// then adds the PO and serial numbers. Asset codes are created before the PO is released:
-// Procurement can only release the PO for FA assets once Finance has given every FA serial
-// an asset code. NFA-only requests skip the asset code step. (Existing stage keys are kept
-// so requests already in progress keep working.)
+// 1. Planning Team raises the procurement request (what is needed and how many).
+// 2. Finance generates the asset codes, one per unit requested. No FA procurement goes
+//    ahead without asset codes; NFA requests skip this step.
+// 3. Procurement releases the PO (needs the asset codes for FA).
+// 4. Once the material reaches the warehouse, Procurement shares the serial numbers
+//    against those asset codes.
+// 5. Technology verifies the serials physically. 6. SCM takes the GRN and it closes.
+// (Existing stage keys are kept so requests already in progress keep working.)
 export const NEW_HARDWARE_FLOW: StageDef[] = [
   { key: 'planning_raise_request', label: 'Raise Procurement Request', dept: 'Planning Team' },
-  { key: 'proc_add_serials', label: 'Add PO & Serial Numbers', dept: 'Procurement Team' },
-  { key: 'tech_verify_serials', label: 'Verify Serial Numbers with Physical Assets', dept: 'Technology Team' },
-  { key: 'finance_approve', label: 'Generate Asset Code (FA)', dept: 'Finance' },
+  { key: 'finance_approve', label: 'Generate Asset Codes (FA only)', dept: 'Finance' },
   { key: 'proc_release_po', label: 'Release PO', dept: 'Procurement Team' },
+  { key: 'proc_add_serials', label: 'Add Serial Numbers (material at WH)', dept: 'Procurement Team' },
+  { key: 'tech_verify_serials', label: 'Verify Serial Numbers with Physical Assets', dept: 'Technology Team' },
   { key: 'scm_take_grn', label: 'Take GRN', dept: 'Supply Chain Management' },
 ];
 
@@ -44,8 +47,8 @@ export const canRaiseRequest = (
 };
 
 /**
- * Where "Send back" sends a request. New hardware requests past Procurement go back to
- * Procurement (they own the serials and PO); otherwise back to whoever raised it.
+ * Where "Send back" sends a request. New hardware requests past the serial step go back
+ * to Procurement's serial step (they own the serials); otherwise back to whoever raised it.
  */
 export const sendBackStage = (type: RequestType, currentKey: string): StageDef => {
   const flow = getFlow(type);
@@ -68,16 +71,16 @@ export const skippedStages = (type: RequestType, opts: { hasFA: boolean }): stri
 /**
  * Where a request goes after the current stage is approved.
  * - Skips stages that don't apply (asset code for NFA-only requests).
- * - Goes back to any earlier required stage that was never signed off first. This
- *   catches requests started under the old order (GRN before asset code), so they
- *   still get an asset code and a PO release before closing.
- * - Skips later stages that were already signed off (same reason).
+ * - Goes back first to an earlier asset code / PO release stage that was never signed
+ *   off (ever). This catches requests started under an older order, so they still get
+ *   asset codes and a PO release before closing.
+ * - Skips later stages already signed off since the last send-back (same reason).
  * Returns null when the request should close.
  */
 export const nextRequiredStage = (
   type: RequestType,
   currentKey: string,
-  opts: { hasFA: boolean; signedOff: Set<string> }
+  opts: { hasFA: boolean; signedOff: Set<string>; everSignedOff?: Set<string> }
 ): StageDef | null => {
   const flow = getFlow(type);
   const skip = new Set(skippedStages(type, opts));
@@ -86,7 +89,10 @@ export const nextRequiredStage = (
   const pending = (s: StageDef, i: number) =>
     i > 0 && s.key !== currentKey && !skip.has(s.key) && !opts.signedOff.has(s.key);
   const catchUp = new Set([ASSET_CODE_STAGE, RELEASE_PO_STAGE]);
-  const earlier = flow.slice(0, cur).find((s, i) => catchUp.has(s.key) && pending(s, i));
+  const ever = opts.everSignedOff || opts.signedOff;
+  const earlier = flow
+    .slice(0, cur)
+    .find((s, i) => catchUp.has(s.key) && i > 0 && !skip.has(s.key) && !ever.has(s.key));
   if (earlier) return earlier;
   return flow.slice(cur + 1).find((s, i) => pending(s, cur + 1 + i)) || null;
 };

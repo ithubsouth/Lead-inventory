@@ -36,6 +36,8 @@ import {
   RequestType,
   getFlow,
   canRaiseRequest,
+  nextRequiredStage,
+  isFaGroup,
 } from '@/lib/requestFlows';
 import {
   assetTypes, locations, assetGroups, assetStatuses,
@@ -515,7 +517,10 @@ export default function CreateRequestDialog({ open, onOpenChange, onCreated }: P
       // Operators need their department Admin to approve the first stage;
       // Admins / Super Admins auto-advance to the next stage.
       const needsDeptApproval = profile.role === 'Operator';
-      const second = needsDeptApproval ? null : flow[1];
+      // (NFA hardware requests skip Finance's asset code step.)
+      const second = needsDeptApproval
+        ? null
+        : nextRequiredStage(type, first.key, { hasFA: isFaGroup(assetGroup), signedOff: new Set([first.key]) }) || flow[1];
 
       const { data: reqRows, error: reqErr } = await supabase
         .from('requests')
@@ -662,9 +667,10 @@ export default function CreateRequestDialog({ open, onOpenChange, onCreated }: P
             </div>
             {isPlanningRequest ? (
               <div className='col-span-2 rounded-lg border border-indigo-100 bg-indigo-50/50 p-3 text-xs text-indigo-800'>
-                You're raising a procurement request. Say what's needed and how many. Procurement adds the PO
-                and serial numbers after this. Then Technology verifies, Finance creates asset codes (FA), Procurement
-                releases the PO, and SCM takes the GRN.
+                You're raising a procurement request. Say what's needed, how many, and whether it's <b>FA</b> or <b>NFA</b>
+                (Asset Group, below). For FA, Finance generates the asset codes first, and Procurement can only release
+                the PO once they exist. NFA skips that step. When the material reaches the warehouse, Procurement adds
+                the serial numbers, Technology verifies them, and SCM takes the GRN.
               </div>
             ) : (
               <>

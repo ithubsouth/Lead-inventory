@@ -272,8 +272,22 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
     ? countedSerials.some((s) => isFaGroup(serialGroup(s)))
     : isFaGroup(req?.asset_group);
   const skipped = req ? skippedStages(req.type, { hasFA }) : [];
+  const everSignedOff = new Set(
+    stages.filter((st) => st.action === 'approved' || st.action === 'submitted').map((st) => st.stage_key)
+  );
   const stageAfterCurrent = () =>
-    req ? nextRequiredStage(req.type, req.current_stage, { hasFA, signedOff }) : null;
+    req ? nextRequiredStage(req.type, req.current_stage, { hasFA, signedOff, everSignedOff }) : null;
+
+  // Finance creates the asset codes before any serial exists: one row per unit requested,
+  // with the code filled in and the serial left blank. Procurement fills the serials in later.
+  const codeRows = countedSerials.filter((s) => isFaGroup(serialGroup(s)));
+  const codeRowsMissing = codeRows.filter((s) => !s.asset_code);
+  const hasRealSerials = serials.some((s) => s.serial_number.trim());
+  const blankSerialRows = serials.filter((s) => !s.serial_number.trim());
+  const codesShort = hasFA && !hasRealSerials
+    ? Math.max(0, (req?.quantity || 1) - codeRows.filter((s) => s.asset_code).length)
+    : 0;
+  const faCodesReady = !hasFA || (codeRowsMissing.length === 0 && codesShort === 0);
 
   // An approval was recorded for the current stage but the request never moved on
   // (happened while the database hand-off rule was broken). Offer a one-click repair.
@@ -708,21 +722,35 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
         return;
       }
     }
-    if (action === 'approved' && isSerialEntryStage && !opts.reject && !opts.revoke && !serials.length) {
-      toast.error('Add the serial numbers before sending this to the Technology Team.');
-      return;
+    if (action === 'approved' && isSerialEntryStage && !opts.reject && !opts.revoke) {
+      if (!hasRealSerials) {
+        toast.error('Add the serial numbers before sending this to the Technology Team.');
+        return;
+      }
+      if (blankSerialRows.length) {
+        toast.error(`${blankSerialRows.length} asset code row(s) still have no serial number. Fill them in or delete the unused rows.`);
+        return;
+      }
+      if (codeRowsMissing.length) {
+        toast.error(`${codeRowsMissing.length} FA serial(s) have no asset code. Only serials with an asset code from Finance can be added.`);
+        return;
+      }
     }
     if (action === 'approved' && isGrnStage && !opts.reject && !opts.revoke && !req.grn_number) {
       toast.error('Enter and save the GRN number before approving.');
       return;
     }
-    if (action === 'approved' && isAssetCodeStage && !opts.reject && !opts.revoke && faSerialsMissingCode.length) {
-      toast.error(`Every received FA serial needs a unique Asset Code before approving (${faSerialsMissingCode.length} missing).`);
+    if (action === 'approved' && isAssetCodeStage && !opts.reject && !opts.revoke && !faCodesReady) {
+      toast.error(
+        codesShort
+          ? `Generate an asset code for every unit requested first (${codesShort} still needed).`
+          : `Every FA serial needs a unique Asset Code before approving (${codeRowsMissing.length} missing).`
+      );
       return;
     }
     if (action === 'approved' && isReleasePoStage && !opts.reject && !opts.revoke) {
-      if (faSerialsMissingCode.length) {
-        toast.error(`The PO can't be released until Finance gives every FA serial an Asset Code (${faSerialsMissingCode.length} missing).`);
+      if (!faCodesReady || faSerialsMissingCode.length) {
+        toast.error("The PO can't be released for FA assets until Finance has generated the asset codes.");
         return;
       }
       if (!req.po_number) {
@@ -1261,7 +1289,6 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
 
   /** ---- Procurement step: add serial numbers to a request raised by Planning ---- */
   const [serialPaste, setSerialPaste] = useState('');
-  const [newGroup, setNewGroup] = useState<string>('');
   const [newStatus, setNewStatus] = useState<string>('');
   const serialFileRef = useRef<HTMLInputElement>(null);
 
@@ -1292,27 +1319,55 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
         .in('serial_number', fresh)
         .eq('is_deleted', false);
       const known = new Set((inDevices || []).map((d: any) => d.serial_number));
-      const group = newGroup || req.asset_group || 'NFA';
+      const group = req.asset_group || 'NFA';
       const status = newStatus || req.asset_status || 'Fresh';
-      const { error } = await (supabase as any).from('request_serials').insert(
-        fresh.map((s) => ({
-          request_id: req.id,
-          serial_number: s,
-          asset_group: group,
-          asset_status: status,
-          warehouse: req.warehouse || null,
-          exists_in_devices: known.has(s),
-          is_duplicate: false,
-        }))
+
+      // Fill the rows Finance already gave an asset code (lowest code first).
+      const blanks = [...blankSerialRows].sort((a, b) =>
+        String(a.asset_code || '').localeCompare(String(b.asset_code || ''), undefined, { numeric: true })
       );
-      if (error) throw error;
+      const fillCount = Math.min(blanks.length, fresh.length);
+      const fills = fresh.slice(0, fillCount);
+      const extra = fresh.slice(fillCount);
+      // FA serials can only go against an asset code; NFA requests can add as many as arrived.
+      const extraAllowed = isFaGroup(group) ? [] : extra;
+      const refused = extra.length - extraAllowed.length;
+
+      if (fills.length) {
+        await updateSerials(
+          fills.map((sn, i) => ({
+            id: blanks[i].id,
+            patch: { serial_number: sn, asset_status: status, exists_in_devices: known.has(sn) },
+          }))
+        );
+      }
+      if (extraAllowed.length) {
+        const { error } = await (supabase as any).from('request_serials').insert(
+          extraAllowed.map((sn) => ({
+            request_id: req.id,
+            serial_number: sn,
+            asset_group: group,
+            asset_status: status,
+            warehouse: req.warehouse || null,
+            exists_in_devices: known.has(sn),
+            is_duplicate: false,
+          }))
+        );
+        if (error) throw error;
+      }
       setSerialPaste('');
       await load();
-      toast.success(
-        `Added ${fresh.length} serial(s)` +
-          (skippedCount ? ` · ${skippedCount} skipped (already listed)` : '') +
-          (known.size ? ` · ${known.size} already exist in Devices` : '')
-      );
+      const added = fills.length + extraAllowed.length;
+      if (added) {
+        toast.success(
+          `Added ${added} serial(s)` +
+            (skippedCount ? ` · ${skippedCount} skipped (already listed)` : '') +
+            (known.size ? ` · ${known.size} already exist in Devices` : '')
+        );
+      }
+      if (refused) {
+        toast.error(`${refused} serial(s) not added: there are no more asset codes. Ask Finance if more units arrived.`);
+      }
     } catch (e: any) {
       toast.error(e.message || 'Could not add serials');
     } finally {
@@ -1320,8 +1375,14 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
     }
   };
 
-  const setSerialGroup = async (id: string, group: string) => {
-    const { error } = await supabase.from('request_serials').update({ asset_group: group }).eq('id', id);
+  const setSerialNumber = async (id: string, value: string) => {
+    const v = value.trim();
+    if (v && serials.some((s) => s.id !== id && s.serial_number.toLowerCase() === v.toLowerCase())) {
+      toast.error(`${v} is already listed in this request`);
+      await load();
+      return;
+    }
+    const { error } = await supabase.from('request_serials').update({ serial_number: v }).eq('id', id);
     if (error) toast.error(error.message);
     else await load();
   };
@@ -1376,13 +1437,36 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
     return Math.max(Number(data?.[0]?.far_code || 100000), maxUsed, 100000) + 1;
   };
 
+  /** Asset code rows created before the material arrives: the serial is filled in later. */
+  const insertCodeRows = async (codes: string[]) => {
+    if (!req || !codes.length) return;
+    const { error } = await withTimeout(
+      (supabase as any).from('request_serials').insert(
+        codes.map((c) => ({
+          request_id: req.id,
+          serial_number: '',
+          asset_code: c,
+          asset_group: req.asset_group || 'FA',
+          asset_status: req.asset_status || 'Fresh',
+          warehouse: req.warehouse || null,
+          exists_in_devices: false,
+          is_duplicate: false,
+        }))
+      ) as PromiseLike<{ error: any }>,
+      60000,
+      'Saving asset codes'
+    );
+    if (error) throw error;
+  };
+
   const autoGenerateAssetCodes = async () => {
     if (!req) return;
     setBusy(true);
     try {
-      const targets = faSerialsMissingCode;
-      if (!targets.length) {
-        toast.info('All received FA serials already have an asset code');
+      // Existing FA rows without a code, then one new (serial-less) row per unit still needed.
+      const targets = codeRowsMissing;
+      if (!targets.length && !codesShort) {
+        toast.info('Every unit already has an asset code');
         return;
       }
       let code = await nextFreeAssetCode();
@@ -1391,7 +1475,8 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
         60000,
         'Saving asset codes'
       );
-      toast.success(`Generated ${targets.length} asset codes`);
+      await insertCodeRows(Array.from({ length: codesShort }, () => String(code++)));
+      toast.success(`Generated ${targets.length + codesShort} asset codes`);
       await load();
     } catch (e: any) {
       console.error(e);
@@ -1474,12 +1559,34 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
     try {
       const text = await file.text();
       const map = new Map<string, string>();
+      // A file with one column is a plain list of asset codes (before serials exist).
+      const codeList: string[] = [];
       text.split(/\r?\n/).forEach((line) => {
         const [a, b] = line.split(',').map((c) => (c || '').trim().replace(/^"|"$/g, ''));
-        if (!a || !b) return;
-        if (/serial/i.test(a)) return;
-        map.set(a, b);
+        if (!a) return;
+        if (/serial|asset.?code/i.test(a)) return;
+        if (!b) codeList.push(a);
+        else map.set(a, b);
       });
+      if (codeList.length) {
+        const taken = new Set(serials.map((s) => s.asset_code).filter(Boolean));
+        const fresh = codeList.filter((c, i) => !taken.has(c) && codeList.indexOf(c) === i);
+        const fillRows = codeRowsMissing.slice(0, fresh.length);
+        await withTimeout(
+          updateSerials(fillRows.map((s, i) => ({ id: s.id, patch: { asset_code: fresh[i] } }))),
+          60000,
+          'Saving asset codes'
+        );
+        const rest = fresh.slice(fillRows.length, fillRows.length + codesShort);
+        await insertCodeRows(rest);
+        const ignored = codeList.length - fillRows.length - rest.length;
+        toast.success(
+          `Added ${fillRows.length + rest.length} asset codes` +
+            (ignored ? ` · ${ignored} ignored (duplicate or more than the quantity)` : '')
+        );
+        await load();
+        return;
+      }
       const updates = serials
         .filter((s) => {
           const code = map.get(s.serial_number);
@@ -1821,28 +1928,17 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
             {req.status === 'open' && isSerialEntryStage && canAct && (
               <div className='p-3 rounded-xl border border-indigo-100 bg-indigo-50/40 space-y-3'>
                 <div className='text-xs font-black uppercase tracking-widest text-indigo-700'>
-                  Add PO & serial numbers
+                  Add serial numbers (material received at warehouse)
                 </div>
                 <p className='text-[11px] text-slate-600'>
                   Planning requested <b>{req.quantity ?? '-'}</b> {req.asset_type || 'asset'}(s)
-                  {req.model ? ` · ${req.model}` : ''}{req.warehouse ? ` for ${req.warehouse}` : ''}.
-                  Add the serial numbers, then click Approve to send it to the Technology Team for verification.
+                  {req.model ? ` · ${req.model}` : ''}{req.warehouse ? ` for ${req.warehouse}` : ''}
+                  {req.po_number ? <> · PO <b>{req.po_number}</b></> : ''}.
+                  {isFaGroup(req.asset_group)
+                    ? ' Each serial is matched to an asset code from Finance, lowest code first. You can also type serials straight into the table below.'
+                    : ' NFA request, so no asset codes are needed.'}
+                  {' '}Then click Approve to send it to the Technology Team for verification.
                 </p>
-                <div className='flex gap-2'>
-                  <Input
-                    value={poInput}
-                    onChange={(e) => setPoInput(e.target.value)}
-                    placeholder='PO number (can also be added at Release PO)'
-                    className='h-9 text-sm'
-                  />
-                  <Button
-                    size='sm'
-                    onClick={savePo}
-                    disabled={busy || !poInput.trim() || poInput.trim() === (req.po_number || '')}
-                  >
-                    Save PO
-                  </Button>
-                </div>
                 <textarea
                   value={serialPaste}
                   onChange={(e) => setSerialPaste(e.target.value)}
@@ -1852,14 +1948,6 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
                   disabled={busy}
                 />
                 <div className='flex flex-wrap items-center gap-2'>
-                  <select
-                    value={newGroup || req.asset_group || 'NFA'}
-                    onChange={(e) => setNewGroup(e.target.value)}
-                    className='h-8 rounded border bg-background px-2 text-xs'
-                    aria-label='Asset group for new serials'
-                  >
-                    {assetGroups.map((g) => <option key={g} value={g}>{g}</option>)}
-                  </select>
                   <select
                     value={newStatus || req.asset_status || 'Fresh'}
                     onChange={(e) => setNewStatus(e.target.value)}
@@ -1890,11 +1978,13 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
                     <Upload className='w-3.5 h-3.5 mr-1' /> Upload CSV
                   </Button>
                   <span className='text-[11px] text-muted-foreground ml-auto'>
-                    {serials.length} added{req.quantity ? ` of ${req.quantity} requested` : ''}
+                    {serials.length - blankSerialRows.length} serial(s) added
+                    {blankSerialRows.length ? ` · ${blankSerialRows.length} asset code(s) waiting for a serial` : ''}
+                    {req.quantity ? ` · ${req.quantity} requested` : ''}
                   </span>
                 </div>
                 <p className='text-[10px] text-muted-foreground'>
-                  Change a serial's asset group (FA / NFA) or delete it in the table below. FA serials will need an asset code from Finance before the PO can be released.
+                  If fewer units arrived, delete the unused rows in the table below before approving.
                 </p>
               </div>
             )}
@@ -2155,7 +2245,25 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
                         <tr key={s.id} className='border-t hover:bg-muted/10'>
                           <td className='px-2 py-1.5 align-middle whitespace-nowrap'>
                             <div className='flex items-center gap-1.5'>
-                              <span className='whitespace-nowrap font-mono'>{s.serial_number}</span>
+                              {isSerialEntryStage && canAct ? (
+                                <Input
+                                  key={`${s.id}:${s.serial_number}`}
+                                  defaultValue={s.serial_number}
+                                  onBlur={(e) => {
+                                    if (e.target.value.trim() !== s.serial_number) setSerialNumber(s.id, e.target.value);
+                                  }}
+                                  onKeyDown={(e) => {
+                                    if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
+                                  }}
+                                  placeholder='Enter serial'
+                                  className='h-7 w-40 text-[11px] font-mono'
+                                  disabled={busy}
+                                />
+                              ) : s.serial_number ? (
+                                <span className='whitespace-nowrap font-mono'>{s.serial_number}</span>
+                              ) : (
+                                <span className='whitespace-nowrap italic text-muted-foreground'>Awaiting serial</span>
+                              )}
                               {s.notes === 'Added received serial' && (
                                 <Badge
                                   variant='outline'
@@ -2168,22 +2276,7 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
                             </div>
                           </td>
                           <td className='px-2 py-1.5 align-middle'>{s.asset_status || req.asset_status || '-'}</td>
-                          <td className='px-2 py-1.5 align-middle'>
-                            {isSerialEntryStage && canAct ? (
-                              <select
-                                value={s.asset_group || ''}
-                                onChange={(e) => setSerialGroup(s.id, e.target.value)}
-                                disabled={busy}
-                                className='h-7 rounded border bg-background px-1 text-[11px]'
-                                aria-label={`Asset group for ${s.serial_number}`}
-                              >
-                                {!s.asset_group && <option value=''>-</option>}
-                                {assetGroups.map((g) => <option key={g} value={g}>{g}</option>)}
-                              </select>
-                            ) : (
-                              s.asset_group || '-'
-                            )}
-                          </td>
+                          <td className='px-2 py-1.5 align-middle'>{s.asset_group || '-'}</td>
                           <td className='px-2 py-1.5 align-middle font-mono'>
                             {isAssetCodeStage && canAct ? (
                               <Input
@@ -2435,16 +2528,18 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
             {req.status === 'open' && isReleasePoStage && (
               <div className='p-3 rounded-xl border border-violet-100 bg-violet-50/40 space-y-2'>
                 <div className='text-xs font-black uppercase tracking-widest text-violet-700'>Release PO</div>
-                {faSerialsMissingCode.length > 0 ? (
+                {!faCodesReady || faSerialsMissingCode.length > 0 ? (
                   <div className='p-2 rounded border border-red-200 bg-red-50 text-xs text-red-800 flex items-center gap-1'>
                     <AlertTriangle className='w-3 h-3 shrink-0' />
-                    {faSerialsMissingCode.length} FA serial(s) have no Asset Code. The PO can't be released until Finance
-                    adds them. Use "Send back" or ask Finance to fill them in.
+                    Asset codes are missing ({codesShort || codeRowsMissing.length || faSerialsMissingCode.length}).
+                    The PO can't be released for FA assets until Finance generates them.
                   </div>
                 ) : (
                   <div className='p-2 rounded border border-green-200 bg-green-50 text-xs text-green-800 flex items-center gap-1'>
                     <CheckCircle2 className='w-3 h-3 shrink-0' />
-                    {hasFA ? 'All received FA serials have an Asset Code.' : 'NFA only, so no Asset Code is needed.'}
+                    {hasFA
+                      ? `${codeRows.filter((s) => s.asset_code).length} asset code(s) ready from Finance.`
+                      : 'NFA request, so no asset codes are needed.'}
                   </div>
                 )}
                 {canAct && (
@@ -2465,21 +2560,26 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
                   </div>
                 )}
                 <p className='text-[10px] text-muted-foreground'>
-                  Check the PO number, then click Approve to release the PO. It then goes to Supply Chain Management for GRN.
+                  Save the PO number, then click Approve to release the PO. When the material reaches the warehouse,
+                  Procurement adds the serial numbers in the next step.
                 </p>
               </div>
             )}
 
             {req.status === 'open' && isAssetCodeStage && canAct && (
               <div className='p-3 rounded-xl border border-emerald-100 bg-emerald-50/40 space-y-2'>
-                <div className='text-xs font-black uppercase tracking-widest text-emerald-700'>Generate Asset Code (FA)</div>
+                <div className='text-xs font-black uppercase tracking-widest text-emerald-700'>Generate Asset Codes (FA)</div>
                 <p className='text-[11px] text-slate-600'>
-                  Every received FA serial needs an Asset Code. Procurement can only release the PO once they're all filled in.
-                  {faSerialsMissingCode.length > 0 && <b> {faSerialsMissingCode.length} still missing.</b>}
+                  Planning requested <b>{req.quantity ?? '-'}</b> {req.asset_type || 'asset'}(s). Generate one asset code per unit.
+                  Procurement can only release the PO once they're all done. The serial numbers are matched to these codes
+                  later, when the material reaches the warehouse.
+                  {(codesShort > 0 || codeRowsMissing.length > 0) && <b> {codesShort + codeRowsMissing.length} still needed.</b>}
                 </p>
                 <div className='flex flex-wrap gap-2'>
                   <Button size='sm' variant='outline' onClick={autoGenerateAssetCodes} disabled={busy}>
-                    Auto-generate for missing
+                    {codesShort || codeRowsMissing.length
+                      ? `Auto-generate ${codesShort + codeRowsMissing.length} asset code(s)`
+                      : 'Auto-generate for missing'}
                   </Button>
                   <input
                     ref={codeRef}
@@ -2496,7 +2596,8 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
                   </Button>
                 </div>
                 <p className='text-[10px] text-muted-foreground'>
-                  CSV format: <span className='font-mono'>serial_number,asset_code</span>. Asset codes must be unique; you can also edit them one by one in the table above.
+                  Upload a list of asset codes (one per line), or <span className='font-mono'>serial_number,asset_code</span> if serials
+                  already exist. Asset codes must be unique. You can also edit them one by one in the table above.
                 </p>
               </div>
             )}
