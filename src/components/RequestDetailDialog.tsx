@@ -27,7 +27,10 @@ import {
   isFaGroup,
   ASSET_CODE_STAGE,
   RELEASE_PO_STAGE,
+  SERIAL_ENTRY_STAGE,
+  sendBackStage,
 } from '@/lib/requestFlows';
+import { assetGroups, assetStatuses } from './constants';
 import { format, formatDistanceToNow } from 'date-fns';
 import { fmtDateTime } from '@/lib/dateFormat';
 import {
@@ -238,10 +241,16 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
   // can correct it and resubmit. We only treat it as "sent back" when the latest
   // workflow action (ignoring comments) was a revoke — an Operator's fresh request
   // also sits at the first stage while it waits for their department Admin.
+  // New hardware requests sent back after Procurement land on Procurement's step instead.
   const lastWorkflowAction = stages.find((st) => st.action !== 'commented')?.action;
-  const isBackWithRaiser =
-    !!req && req.status === 'open' && currentIdx === 0 && lastWorkflowAction === 'revoked';
+  const isSentBack =
+    !!req && req.status === 'open' && lastWorkflowAction === 'revoked' &&
+    (currentIdx === 0 || req.current_stage === SERIAL_ENTRY_STAGE);
   const isRaiser = !!req && !!profile?.id && req.raised_by === profile.id;
+  // Sent back to the first step: only the person who raised it acts. Requests raised by
+  // Procurement under the old flow can still be resubmitted by their raiser.
+  const isBackWithRaiser =
+    isSentBack && (currentIdx === 0 || (isRaiser && req?.raised_dept === 'Procurement Team'));
 
   // History since the last send-back (stages are newest first). Approvals made before a
   // request was sent back no longer count for the workflow ticks.
@@ -294,6 +303,7 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
       req.raised_by === profile?.id ||
       req.current_stage_dept === profile?.department);
 
+  const isSerialEntryStage = !!req && req.type === 'new_hardware' && req.current_stage === SERIAL_ENTRY_STAGE;
   const isVerifyStage = !!req && req.current_stage === 'tech_verify_serials';
   const isGrnStage = !!req && req.current_stage === 'scm_take_grn';
   const isAssetCodeStage = !!req && req.current_stage === ASSET_CODE_STAGE;
@@ -305,7 +315,11 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
   const pendingReceiptCount = Math.max(0, serials.length - receivedCount - missingCount);
   const physicalSerials = serials.filter((s) => s.verified || s.verify_result === 'Damaged');
   const faSerialsMissingCode = physicalSerials.filter((s) => isFaGroup(serialGroup(s)) && !s.asset_code);
-  const returnDepartment = req?.raised_dept || flow[0]?.dept || 'requester';
+  const backTarget = req ? sendBackStage(req.type, req.current_stage) : null;
+  const backToRaiser = !!backTarget && backTarget.key === flow[0]?.key;
+  const returnDepartment = backToRaiser
+    ? req?.raised_dept || flow[0]?.dept || 'requester'
+    : backTarget?.dept || 'requester';
 
 
   const notifyMentions = async (text: string) => {
@@ -694,6 +708,10 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
         return;
       }
     }
+    if (action === 'approved' && isSerialEntryStage && !opts.reject && !opts.revoke && !serials.length) {
+      toast.error('Add the serial numbers before sending this to the Technology Team.');
+      return;
+    }
     if (action === 'approved' && isGrnStage && !opts.reject && !opts.revoke && !req.grn_number) {
       toast.error('Enter and save the GRN number before approving.');
       return;
@@ -740,13 +758,20 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
         nextStatus = 'rejected';
         notifTitle = `Request rejected: ${req.title || REQUEST_TYPE_LABELS[req.type]}`;
       } else if (opts.revoke || hasReceiptException) {
-        // Send back to the person who raised it (first stage) instead of cancelling.
-        const first = flow[0];
+        // Send back instead of cancelling: to Procurement for new hardware past their
+        // step, otherwise to the person who raised it (first stage).
+        const target = sendBackStage(req.type, req.current_stage);
         nextStatus = 'open';
-        nextStageKey = first.key;
-        nextDept = req.raised_dept || first.dept;
-        notifTitle = `Request sent back to you: ${req.title || REQUEST_TYPE_LABELS[req.type]}`;
-        notifTarget = { user_id: req.raised_by };
+        nextStageKey = target.key;
+        if (target.key === flow[0].key) {
+          nextDept = req.raised_dept || target.dept;
+          notifTitle = `Request sent back to you: ${req.title || REQUEST_TYPE_LABELS[req.type]}`;
+          notifTarget = { user_id: req.raised_by };
+        } else {
+          nextDept = target.dept;
+          notifTitle = `Request sent back to ${target.dept}: ${req.title || REQUEST_TYPE_LABELS[req.type]}`;
+          notifTarget = { target_dept: target.dept };
+        }
       } else if (action === 'approved') {
         const nxt = stageAfterCurrent();
         if (!nxt) {
@@ -756,7 +781,7 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
         } else {
           nextStageKey = nxt.key;
           nextDept = nxt.dept;
-          notifTitle = isBackWithRaiser
+          notifTitle = isSentBack
             ? `Request resubmitted: ${req.title || REQUEST_TYPE_LABELS[req.type]}`
             : `Stage advanced: ${nxt.label}`;
           notifTarget = { target_dept: nxt.dept };
@@ -796,13 +821,13 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
         stage_label: flow[currentIdx]?.label || req.current_stage,
         order_index: currentIdx,
         assigned_dept: req.current_stage_dept,
-        action: isBackWithRaiser && action === 'approved'
+        action: isSentBack && action === 'approved'
           ? 'submitted'
           : (hasReceiptException ? 'revoked' : action),
         actor_id: profile.id,
         actor_email: profile.email,
         actor_dept: profile.department,
-        comment: actionComment || (isBackWithRaiser && action === 'approved' ? 'Resubmitted' : null),
+        comment: actionComment || (isSentBack && action === 'approved' ? 'Resubmitted' : null),
         acted_at: new Date().toISOString(),
       });
       if (stageErr) throw stageErr;
@@ -1234,6 +1259,73 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
     }
   };
 
+  /** ---- Procurement step: add serial numbers to a request raised by Planning ---- */
+  const [serialPaste, setSerialPaste] = useState('');
+  const [newGroup, setNewGroup] = useState<string>('');
+  const [newStatus, setNewStatus] = useState<string>('');
+  const serialFileRef = useRef<HTMLInputElement>(null);
+
+  const addSerials = async (raw: string) => {
+    if (!req || !canAct || !isSerialEntryStage) return;
+    const list = raw
+      .split(/[\n\r\t,; ]+/)
+      .map((s) => s.trim().replace(/^"|"$/g, ''))
+      .filter((s) => s && !/^serial(_| )?(number|no)?$/i.test(s));
+    const existing = new Set(serials.map((s) => s.serial_number.toLowerCase()));
+    const seen = new Set<string>();
+    const fresh = list.filter((s) => {
+      const k = s.toLowerCase();
+      if (existing.has(k) || seen.has(k)) return false;
+      seen.add(k);
+      return true;
+    });
+    const skippedCount = list.length - fresh.length;
+    if (!fresh.length) {
+      toast.error(list.length ? 'All of these serials are already in this request.' : 'Enter at least one serial number.');
+      return;
+    }
+    setBusy(true);
+    try {
+      const { data: inDevices } = await supabase
+        .from('devices')
+        .select('serial_number')
+        .in('serial_number', fresh)
+        .eq('is_deleted', false);
+      const known = new Set((inDevices || []).map((d: any) => d.serial_number));
+      const group = newGroup || req.asset_group || 'NFA';
+      const status = newStatus || req.asset_status || 'Fresh';
+      const { error } = await (supabase as any).from('request_serials').insert(
+        fresh.map((s) => ({
+          request_id: req.id,
+          serial_number: s,
+          asset_group: group,
+          asset_status: status,
+          warehouse: req.warehouse || null,
+          exists_in_devices: known.has(s),
+          is_duplicate: false,
+        }))
+      );
+      if (error) throw error;
+      setSerialPaste('');
+      await load();
+      toast.success(
+        `Added ${fresh.length} serial(s)` +
+          (skippedCount ? ` · ${skippedCount} skipped (already listed)` : '') +
+          (known.size ? ` · ${known.size} already exist in Devices` : '')
+      );
+    } catch (e: any) {
+      toast.error(e.message || 'Could not add serials');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const setSerialGroup = async (id: string, group: string) => {
+    const { error } = await supabase.from('request_serials').update({ asset_group: group }).eq('id', id);
+    if (error) toast.error(error.message);
+    else await load();
+  };
+
   /** Reject if a database call hangs, so the button never spins forever. */
   const withTimeout = <T,>(p: PromiseLike<T>, ms: number, what: string): Promise<T> =>
     Promise.race([
@@ -1358,7 +1450,7 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
   };
 
   const deleteSerial = async (serial: SerialRow) => {
-    if (!req || !isVerifyStage || !canAct) return;
+    if (!req || !(isVerifyStage || isSerialEntryStage) || !canAct) return;
     if (!confirm(`Delete serial ${serial.serial_number} from this request? This cannot be undone.`)) return;
     setBusy(true);
     try {
@@ -1725,6 +1817,88 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
               </div>
             )}
 
+            {/* Procurement: add PO + serial numbers to Planning's request */}
+            {req.status === 'open' && isSerialEntryStage && canAct && (
+              <div className='p-3 rounded-xl border border-indigo-100 bg-indigo-50/40 space-y-3'>
+                <div className='text-xs font-black uppercase tracking-widest text-indigo-700'>
+                  Add PO & serial numbers
+                </div>
+                <p className='text-[11px] text-slate-600'>
+                  Planning requested <b>{req.quantity ?? '-'}</b> {req.asset_type || 'asset'}(s)
+                  {req.model ? ` · ${req.model}` : ''}{req.warehouse ? ` for ${req.warehouse}` : ''}.
+                  Add the serial numbers, then click Approve to send it to the Technology Team for verification.
+                </p>
+                <div className='flex gap-2'>
+                  <Input
+                    value={poInput}
+                    onChange={(e) => setPoInput(e.target.value)}
+                    placeholder='PO number (can also be added at Release PO)'
+                    className='h-9 text-sm'
+                  />
+                  <Button
+                    size='sm'
+                    onClick={savePo}
+                    disabled={busy || !poInput.trim() || poInput.trim() === (req.po_number || '')}
+                  >
+                    Save PO
+                  </Button>
+                </div>
+                <textarea
+                  value={serialPaste}
+                  onChange={(e) => setSerialPaste(e.target.value)}
+                  placeholder='Type, scan or paste serial numbers (one per line, or separated by commas)'
+                  rows={4}
+                  className='w-full rounded-md border bg-background px-3 py-2 text-sm font-mono'
+                  disabled={busy}
+                />
+                <div className='flex flex-wrap items-center gap-2'>
+                  <select
+                    value={newGroup || req.asset_group || 'NFA'}
+                    onChange={(e) => setNewGroup(e.target.value)}
+                    className='h-8 rounded border bg-background px-2 text-xs'
+                    aria-label='Asset group for new serials'
+                  >
+                    {assetGroups.map((g) => <option key={g} value={g}>{g}</option>)}
+                  </select>
+                  <select
+                    value={newStatus || req.asset_status || 'Fresh'}
+                    onChange={(e) => setNewStatus(e.target.value)}
+                    className='h-8 rounded border bg-background px-2 text-xs'
+                    aria-label='Asset status for new serials'
+                  >
+                    {assetStatuses.map((s) => <option key={s} value={s}>{s}</option>)}
+                  </select>
+                  <Button size='sm' onClick={() => addSerials(serialPaste)} disabled={busy || !serialPaste.trim()}>
+                    <Plus className='w-3.5 h-3.5 mr-1' /> Add serials
+                  </Button>
+                  <input
+                    ref={serialFileRef}
+                    type='file'
+                    accept='.csv,.txt'
+                    className='hidden'
+                    onChange={async (e) => {
+                      const f = e.target.files?.[0];
+                      if (f) {
+                        // First column of each line is the serial number.
+                        const text = await f.text();
+                        await addSerials(text.split(/\r?\n/).map((l) => l.split(',')[0]).join('\n'));
+                      }
+                      if (serialFileRef.current) serialFileRef.current.value = '';
+                    }}
+                  />
+                  <Button size='sm' variant='outline' onClick={() => serialFileRef.current?.click()} disabled={busy}>
+                    <Upload className='w-3.5 h-3.5 mr-1' /> Upload CSV
+                  </Button>
+                  <span className='text-[11px] text-muted-foreground ml-auto'>
+                    {serials.length} added{req.quantity ? ` of ${req.quantity} requested` : ''}
+                  </span>
+                </div>
+                <p className='text-[10px] text-muted-foreground'>
+                  Change a serial's asset group (FA / NFA) or delete it in the table below. FA serials will need an asset code from Finance before the PO can be released.
+                </p>
+              </div>
+            )}
+
             {/* Serials */}
             {serials.length > 0 && (
               <div className='space-y-3'>
@@ -1994,7 +2168,22 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
                             </div>
                           </td>
                           <td className='px-2 py-1.5 align-middle'>{s.asset_status || req.asset_status || '-'}</td>
-                          <td className='px-2 py-1.5 align-middle'>{s.asset_group || '-'}</td>
+                          <td className='px-2 py-1.5 align-middle'>
+                            {isSerialEntryStage && canAct ? (
+                              <select
+                                value={s.asset_group || ''}
+                                onChange={(e) => setSerialGroup(s.id, e.target.value)}
+                                disabled={busy}
+                                className='h-7 rounded border bg-background px-1 text-[11px]'
+                                aria-label={`Asset group for ${s.serial_number}`}
+                              >
+                                {!s.asset_group && <option value=''>-</option>}
+                                {assetGroups.map((g) => <option key={g} value={g}>{g}</option>)}
+                              </select>
+                            ) : (
+                              s.asset_group || '-'
+                            )}
+                          </td>
                           <td className='px-2 py-1.5 align-middle font-mono'>
                             {isAssetCodeStage && canAct ? (
                               <Input
@@ -2043,7 +2232,7 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
                                 )}
                                 {s.is_duplicate && <Badge variant='outline' className='shrink-0 text-[10px] h-5'>Duplicate</Badge>}
                               </div>
-                              {isVerifyStage && canAct ? (
+                              {(isVerifyStage || isSerialEntryStage) && canAct ? (
                                 <Button
                                   type='button'
                                   size='sm'
@@ -2070,7 +2259,7 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
                                 </Button>
                               ) : <span className='h-6 w-[88px] shrink-0' />}
                             </div>
-                            {isBackWithRaiser && isRaiser && s.verify_result === 'Damaged' && (
+                            {isSentBack && canAct && s.verify_result === 'Damaged' && (
                               <div className='mt-1 flex items-center gap-1'>
                                 <Input
                                   value={replacementSerials[s.id] || ''}
@@ -2354,7 +2543,7 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
                       disabled={!canAct || busy}
                       onClick={() => record('approved')}
                     >
-                      {busy ? <Loader2 className='w-4 h-4 animate-spin' /> : <><Check className='w-4 h-4 mr-1' /> {isBackWithRaiser ? 'Resubmit' : 'Approve'}</>}
+                      {busy ? <Loader2 className='w-4 h-4 animate-spin' /> : <><Check className='w-4 h-4 mr-1' /> {isSentBack ? 'Resubmit' : 'Approve'}</>}
                     </Button>
                   )}
                 </div>

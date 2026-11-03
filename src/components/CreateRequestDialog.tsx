@@ -35,6 +35,7 @@ import {
   REQUEST_TYPE_LABELS,
   RequestType,
   getFlow,
+  canRaiseRequest,
 } from '@/lib/requestFlows';
 import {
   assetTypes, locations, assetGroups, assetStatuses,
@@ -65,6 +66,13 @@ interface SerialEntry {
 export default function CreateRequestDialog({ open, onOpenChange, onCreated }: Props) {
   const { profile } = useUserProfile();
   const [type, setType] = useState<RequestType>('new_hardware');
+  const canRaiseHardware = canRaiseRequest('new_hardware', profile);
+  // New hardware requests are raised by Planning: what is needed and how many. Procurement
+  // adds the PO and serial numbers inside the request afterwards.
+  const isPlanningRequest = type === 'new_hardware';
+  useEffect(() => {
+    if (profile && !canRaiseHardware && type === 'new_hardware') setType('asset_movement');
+  }, [profile, canRaiseHardware, type]);
   const [title, setTitle] = useState('');
   const [poNumber, setPoNumber] = useState('');
   const [receivedFrom, setReceivedFrom] = useState('');
@@ -488,6 +496,14 @@ export default function CreateRequestDialog({ open, onOpenChange, onCreated }: P
       toast.error('You must be signed in.');
       return;
     }
+    if (!canRaiseRequest(type, profile)) {
+      toast.error('Only the Planning Team can raise a New Hardware Procurement request.');
+      return;
+    }
+    if (isPlanningRequest && (!assetType || !warehouse)) {
+      toast.error('Select the asset type and warehouse for the procurement request.');
+      return;
+    }
     if (!title.trim()) {
       toast.error('Please add a short title.');
       return;
@@ -509,7 +525,7 @@ export default function CreateRequestDialog({ open, onOpenChange, onCreated }: P
           title: title.trim(),
           current_stage: second ? second.key : first.key,
           current_stage_dept: second ? second.dept : first.dept,
-          po_number: poNumber || null,
+          po_number: isPlanningRequest ? null : poNumber || null,
           received_from: receivedFrom.trim() || (type === 'new_hardware' ? 'Stock' : null),
           warehouse: warehouse || null,
           asset_type: assetType || null,
@@ -543,8 +559,7 @@ export default function CreateRequestDialog({ open, onOpenChange, onCreated }: P
         acted_at: new Date().toISOString(),
       });
 
-      if (serialEntries.length) {
-        // ... (serials logic remains same)
+      if (!isPlanningRequest && serialEntries.length) {
         const seen = new Set<string>();
         const rows = serialEntries.map((e) => {
           const s = e.serial_number?.trim();
@@ -634,7 +649,9 @@ export default function CreateRequestDialog({ open, onOpenChange, onCreated }: P
               <Select value={type} onValueChange={(v) => setType(v as RequestType)}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value='new_hardware'>{REQUEST_TYPE_LABELS.new_hardware}</SelectItem>
+                  {canRaiseHardware && (
+                    <SelectItem value='new_hardware'>{REQUEST_TYPE_LABELS.new_hardware}</SelectItem>
+                  )}
                   <SelectItem value='asset_movement'>{REQUEST_TYPE_LABELS.asset_movement}</SelectItem>
                 </SelectContent>
               </Select>
@@ -643,20 +660,30 @@ export default function CreateRequestDialog({ open, onOpenChange, onCreated }: P
               <Label>Title *</Label>
               <Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder='Short description' />
             </div>
+            {isPlanningRequest ? (
+              <div className='col-span-2 rounded-lg border border-indigo-100 bg-indigo-50/50 p-3 text-xs text-indigo-800'>
+                You're raising a procurement request. Say what's needed and how many. Procurement adds the PO
+                and serial numbers after this. Then Technology verifies, Finance creates asset codes (FA), Procurement
+                releases the PO, and SCM takes the GRN.
+              </div>
+            ) : (
+              <>
+                <div>
+                  <Label>PO Number (Sales Order)</Label>
+                  <Input value={poNumber} onChange={(e) => setPoNumber(e.target.value)} />
+                </div>
+                <div>
+                  <Label>Received From (School Name)</Label>
+                  <Input
+                    value={receivedFrom}
+                    onChange={(e) => setReceivedFrom(e.target.value)}
+                    placeholder='Stock'
+                  />
+                </div>
+              </>
+            )}
             <div>
-              <Label>PO Number (Sales Order)</Label>
-              <Input value={poNumber} onChange={(e) => setPoNumber(e.target.value)} />
-            </div>
-            <div>
-              <Label>Received From (School Name)</Label>
-              <Input
-                value={receivedFrom}
-                onChange={(e) => setReceivedFrom(e.target.value)}
-                placeholder='Stock'
-              />
-            </div>
-            <div>
-              <Label>Warehouse</Label>
+              <Label>Warehouse{isPlanningRequest ? ' *' : ''}</Label>
               <Select value={warehouse} onValueChange={setWarehouse}>
                 <SelectTrigger><SelectValue placeholder='Select' /></SelectTrigger>
                 <SelectContent>
@@ -667,7 +694,7 @@ export default function CreateRequestDialog({ open, onOpenChange, onCreated }: P
               </Select>
             </div>
             <div>
-              <Label>Asset Type</Label>
+              <Label>Asset Type{isPlanningRequest ? ' *' : ''}</Label>
               <Select value={assetType} onValueChange={setAssetType}>
                 <SelectTrigger><SelectValue placeholder='Select' /></SelectTrigger>
                 <SelectContent>
@@ -841,7 +868,7 @@ export default function CreateRequestDialog({ open, onOpenChange, onCreated }: P
           <div className='space-y-4 pt-4 border-t'>
             <div className='flex flex-wrap items-center justify-between gap-3 p-3 bg-slate-50 rounded-xl border border-slate-200'>
               <div className='flex min-w-0 flex-wrap items-center gap-3'>
-                <span className='text-[10px] font-bold text-slate-500 uppercase tracking-widest'>Bulk Apply to All Rows:</span>
+                <span className='text-[10px] font-bold text-slate-500 uppercase tracking-widest'>{isPlanningRequest ? 'Asset Status / Group:' : 'Bulk Apply to All Rows:'}</span>
                 <div className='flex gap-2'>
                   <div className='w-[120px]'>
                     <Select value={assetStatus} onValueChange={handleBulkAssetStatusChange}>
@@ -904,7 +931,7 @@ export default function CreateRequestDialog({ open, onOpenChange, onCreated }: P
                     <Plus className='h-3 w-3' />
                   </Button>
                 </div>
-                <Button
+                {!isPlanningRequest && <Button
                   type='button'
                   variant='outline'
                   size='sm'
@@ -913,11 +940,11 @@ export default function CreateRequestDialog({ open, onOpenChange, onCreated }: P
                   title="Download CSV Template"
                 >
                   <Download className='w-3 h-3' />
-                </Button>
+                </Button>}
               </div>
             </div>
 
-            <div className='space-y-4 pt-4 border-t'>
+            {!isPlanningRequest && <div className='space-y-4 pt-4 border-t'>
               <div className='flex items-center gap-4 mb-2'>
                 <div className='relative flex-1'>
                   <Search className='absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400' />
@@ -1032,7 +1059,7 @@ export default function CreateRequestDialog({ open, onOpenChange, onCreated }: P
                   );
                 })}
               </div>
-            </div>
+            </div>}
           </div>
 
           <div className='col-span-2 pt-4 border-t space-y-4'>

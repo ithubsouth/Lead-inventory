@@ -9,20 +9,53 @@ export interface StageDef {
   hint?: string;
 }
 
-// Asset codes are created before the PO is released: Procurement can only release the
-// PO for FA assets once Finance has given every FA serial an asset code. NFA-only
-// requests skip the asset code step. (The asset code key stays 'finance_approve' so
-// requests already in progress keep working.)
+// Planning Team raises the procurement request (what is needed and how many). Procurement
+// then adds the PO and serial numbers. Asset codes are created before the PO is released:
+// Procurement can only release the PO for FA assets once Finance has given every FA serial
+// an asset code. NFA-only requests skip the asset code step. (Existing stage keys are kept
+// so requests already in progress keep working.)
 export const NEW_HARDWARE_FLOW: StageDef[] = [
-  { key: 'proc_add_serials', label: 'Created', dept: 'Procurement Team' },
+  { key: 'planning_raise_request', label: 'Raise Procurement Request', dept: 'Planning Team' },
+  { key: 'proc_add_serials', label: 'Add PO & Serial Numbers', dept: 'Procurement Team' },
   { key: 'tech_verify_serials', label: 'Verify Serial Numbers with Physical Assets', dept: 'Technology Team' },
   { key: 'finance_approve', label: 'Generate Asset Code (FA)', dept: 'Finance' },
   { key: 'proc_release_po', label: 'Release PO', dept: 'Procurement Team' },
   { key: 'scm_take_grn', label: 'Take GRN', dept: 'Supply Chain Management' },
 ];
 
+export const SERIAL_ENTRY_STAGE = 'proc_add_serials';
 export const ASSET_CODE_STAGE = 'finance_approve';
 export const RELEASE_PO_STAGE = 'proc_release_po';
+
+/** Departments that may raise each request type (Administrators / Super Admin can raise anything). */
+export const RAISING_DEPTS: Record<RequestType, string[] | null> = {
+  new_hardware: ['Planning Team'],
+  asset_movement: null, // anyone
+};
+
+export const canRaiseRequest = (
+  type: RequestType,
+  profile: { role?: string | null; department?: string | null } | null | undefined
+) => {
+  if (!profile) return false;
+  if (profile.role === 'Super Admin' || profile.department === 'Administrators') return true;
+  const depts = RAISING_DEPTS[type];
+  return !depts || depts.includes(profile.department || '');
+};
+
+/**
+ * Where "Send back" sends a request. New hardware requests past Procurement go back to
+ * Procurement (they own the serials and PO); otherwise back to whoever raised it.
+ */
+export const sendBackStage = (type: RequestType, currentKey: string): StageDef => {
+  const flow = getFlow(type);
+  if (type === 'new_hardware') {
+    const entryIdx = flow.findIndex((s) => s.key === SERIAL_ENTRY_STAGE);
+    const cur = flow.findIndex((s) => s.key === currentKey);
+    if (cur > entryIdx) return flow[entryIdx];
+  }
+  return flow[0];
+};
 
 /** True when an asset group needs an asset code. Anything not explicitly NFA counts as FA. */
 export const isFaGroup = (group: string | null | undefined) =>
