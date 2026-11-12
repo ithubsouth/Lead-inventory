@@ -16,7 +16,16 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Plus, Inbox, User, Layers, Search, FileEdit, Trash2, BellRing, CheckCircle2 } from 'lucide-react';
-import { REQUEST_TYPE_LABELS, getFlow, canActOnStage, RequestType, RequestStatus, formatRequestNo } from '@/lib/requestFlows';
+import {
+  REQUEST_TYPE_LABELS,
+  getFlow,
+  canActOnStage,
+  RequestType,
+  RequestStatus,
+  ReceiptIdentity,
+  formatRequestNo,
+  getReceiptIdentity,
+} from '@/lib/requestFlows';
 import { TableSkeleton } from './TableSkeleton';
 import { hasFullAccess, isLocationScopedDept } from '@/lib/appTabs';
 
@@ -67,9 +76,14 @@ const statusColors: Record<RequestStatus, string> = {
 export default function RequestsPanel({ focusRequestId, onFocusHandled }: Props) {
   const { profile, loading: profileLoading } = useUserProfile();
   const [rows, setRows] = useState<RequestRow[]>([]);
+  const [receiptIdentities, setReceiptIdentities] = useState<Record<string, ReceiptIdentity>>({});
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState<'inbox' | 'mine' | 'drafts' | 'all'>('inbox');
   const [q, setQ] = useState('');
+  const [statusFilter, setStatusFilter] = useState<RequestStatus | 'all'>('all');
+  const [receiptFilter, setReceiptFilter] = useState<ReceiptIdentity | 'all'>('all');
+  const [currentPage, setCurrentPage] = useState(1);
+  const [rowsPerPage, setRowsPerPage] = useState(10);
   const [createOpen, setCreateOpen] = useState(false);
   const [detailId, setDetailId] = useState<string | null>(null);
   const [draft, setDraft] = useState<any>(null);
@@ -140,6 +154,32 @@ export default function RequestsPanel({ focusRequestId, onFocusHandled }: Props)
         if (!background) setRows([]);
       } else {
         setRows((data as RequestRow[]) || []);
+        const requestIds = (data || []).map((request) => request.id);
+        if (!requestIds.length) {
+          setReceiptIdentities({});
+          return;
+        }
+        const { data: receiptStages, error: stagesError } = await supabase
+          .from('request_stages')
+          .select('request_id, action, comment')
+          .in('request_id', requestIds)
+          .eq('stage_key', 'tech_verify_serials')
+          .in('action', ['approved', 'revoked'])
+          .order('created_at', { ascending: false })
+          .limit(2000);
+        if (stagesError) {
+          console.error('Error fetching receipt outcomes:', stagesError);
+          toast.error("Couldn't load receipt outcomes", { action: { label: 'Retry', onClick: () => load() } });
+          return;
+        }
+        const identities: Record<string, ReceiptIdentity> = {};
+        for (const stage of receiptStages || []) {
+          if (identities[stage.request_id]) continue;
+          const identity = getReceiptIdentity(stage.comment) ||
+            (stage.action === 'approved' ? 'Standard' : null);
+          if (identity) identities[stage.request_id] = identity;
+        }
+        setReceiptIdentities(identities);
       }
     } catch (e) {
       console.error('Crash in load requests:', e);
@@ -199,6 +239,8 @@ export default function RequestsPanel({ focusRequestId, onFocusHandled }: Props)
     // Inbox / My Requests / Drafts stay limited to requests the user is involved in.
     if (tab !== 'all' && !isRelevant(r)) return false;
     if (tab === 'mine' && r.raised_by !== profile?.id) return false;
+    if (statusFilter !== 'all' && r.status !== statusFilter) return false;
+    if (receiptFilter !== 'all' && receiptIdentities[r.id] !== receiptFilter) return false;
 
     if (tab === 'inbox') {
       const mine = r.raised_by === profile?.id;
@@ -221,6 +263,26 @@ export default function RequestsPanel({ focusRequestId, onFocusHandled }: Props)
   const filtered = tab === 'inbox'
     ? [...filteredUnsorted].sort((a, b) => Number(needsMyAction(b)) - Number(needsMyAction(a)))
     : filteredUnsorted;
+  const totalPages = Math.ceil(filtered.length / rowsPerPage);
+  const safeCurrentPage = Math.min(currentPage, Math.max(totalPages, 1));
+  const paginatedRequests = filtered.slice((safeCurrentPage - 1) * rowsPerPage, safeCurrentPage * rowsPerPage);
+  const pageRange: (number | '...')[] = [];
+  for (let page = Math.max(1, safeCurrentPage - 2); page <= Math.min(totalPages, safeCurrentPage + 2); page++) {
+    pageRange.push(page);
+  }
+  if (pageRange[0] > 1) pageRange.unshift('...');
+  if (pageRange[0] !== 1 && totalPages > 0) pageRange.unshift(1);
+  if (pageRange[pageRange.length - 1] < totalPages) pageRange.push('...');
+  if (pageRange[pageRange.length - 1] !== totalPages && totalPages > 0) pageRange.push(totalPages);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [tab, q, statusFilter, receiptFilter, rowsPerPage]);
+
+  useEffect(() => {
+    setCurrentPage((page) => Math.min(page, Math.max(totalPages, 1)));
+  }, [totalPages]);
+
   const actionCount = rows.filter((r) => isRelevant(r) && needsMyAction(r)).length;
   const mineOpenCount = rows.filter((r) => r.raised_by === profile?.id && r.status === 'open').length;
 
@@ -325,6 +387,35 @@ export default function RequestsPanel({ focusRequestId, onFocusHandled }: Props)
               <Trash2 className='w-4 h-4 mr-2' />
               Delete All Drafts
             </Button>
+          )}
+          {tab !== 'inbox' && tab !== 'drafts' && (
+            <select
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value as RequestStatus | 'all')}
+              aria-label='Filter requests by status'
+              className='h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500'
+            >
+              <option value='all'>All statuses</option>
+              <option value='open'>Open</option>
+              <option value='closed'>Closed</option>
+              <option value='approved'>Approved</option>
+              <option value='rejected'>Rejected</option>
+              <option value='revoked'>Revoked</option>
+            </select>
+          )}
+          {tab !== 'drafts' && (
+            <select
+              value={receiptFilter}
+              onChange={(e) => setReceiptFilter(e.target.value as ReceiptIdentity | 'all')}
+              aria-label='Filter requests by receipt outcome'
+              className='h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500'
+            >
+              <option value='all'>All receipt types</option>
+              <option value='Standard'>Standard</option>
+              <option value='Missing Serial'>Missing Serial</option>
+              <option value='Different Serial Received'>Different Serial Received</option>
+              <option value='Damaged asset'>Damaged asset</option>
+            </select>
           )}
           <div className='relative'>
             <Input
@@ -450,14 +541,14 @@ export default function RequestsPanel({ focusRequestId, onFocusHandled }: Props)
           </div>
         ) : (
           <div className='divide-y divide-slate-100'>
-            {filtered.map((r) => {
+            {paginatedRequests.map((r) => {
               const mine = needsMyAction(r);
               const prog = stageProgress(r);
               return (
               <button
                 key={r.id || Math.random()}
                 onClick={() => setDetailId(r.id)}
-                aria-label={`${r.title || 'Request'}${mine ? ', waiting for your action' : ''}`}
+                aria-label={`${r.title || 'Request'}${receiptIdentities[r.id] ? `, receipt outcome ${receiptIdentities[r.id]}` : ''}${mine ? ', waiting for your action' : ''}`}
                 className={cn(
                   'w-full text-left gap-3 px-6 py-4 transition-all group border-l-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-inset',
                   ROW_GRID,
@@ -474,8 +565,22 @@ export default function RequestsPanel({ focusRequestId, onFocusHandled }: Props)
                     {mine && <BellRing className='w-3.5 h-3.5 text-amber-500 flex-shrink-0' aria-hidden />}
                     <span className='truncate'>{r.title || (r.type ? REQUEST_TYPE_LABELS[r.type] : 'Untitled Request')}</span>
                   </div>
-                  <div className='text-[11px] font-medium text-slate-400 mt-0.5 truncate'>
+                  <div className='text-[11px] font-medium text-slate-400 mt-0.5 truncate flex items-center gap-1.5'>
                     {r.type ? REQUEST_TYPE_LABELS[r.type] : 'General'}
+                    {receiptIdentities[r.id] && (
+                      <Badge
+                        variant='outline'
+                        className={cn(
+                          'shrink-0 text-[9px] px-1.5 py-0 rounded-md',
+                          receiptIdentities[r.id] === 'Standard' && 'border-green-200 bg-green-50 text-green-700',
+                          receiptIdentities[r.id] === 'Missing Serial' && 'border-amber-200 bg-amber-50 text-amber-700',
+                          receiptIdentities[r.id] === 'Different Serial Received' && 'border-orange-200 bg-orange-50 text-orange-700',
+                          receiptIdentities[r.id] === 'Damaged asset' && 'border-red-200 bg-red-50 text-red-700'
+                        )}
+                      >
+                        {receiptIdentities[r.id]}
+                      </Badge>
+                    )}
                   </div>
                 </div>
                 <div className='col-span-1 min-w-0 text-xs font-semibold text-slate-600 flex items-center truncate'>
@@ -531,6 +636,62 @@ export default function RequestsPanel({ focusRequestId, onFocusHandled }: Props)
               </button>
               );
             })}
+          </div>
+        )}
+        {tab !== 'drafts' && !loading && filtered.length > 0 && (
+          <div className='flex flex-wrap items-center justify-between gap-3 px-4 py-3 text-xs text-slate-600 border-t border-slate-100'>
+            <div className='flex items-center gap-2'>
+              <span>
+                Showing {((safeCurrentPage - 1) * rowsPerPage) + 1} to {Math.min(safeCurrentPage * rowsPerPage, filtered.length)} of {filtered.length} requests
+              </span>
+              <select
+                value={rowsPerPage}
+                onChange={(e) => {
+                  setRowsPerPage(Number(e.target.value));
+                  setCurrentPage(1);
+                }}
+                aria-label='Requests per page'
+                className='h-7 rounded border border-slate-300 bg-white px-2 text-xs'
+              >
+                <option value={10}>10</option>
+                <option value={25}>25</option>
+                <option value={50}>50</option>
+                <option value={100}>100</option>
+              </select>
+              <span>per page</span>
+            </div>
+            <div className='flex items-center gap-1'>
+              <Button
+                variant='outline'
+                size='sm'
+                className='h-7 px-2'
+                disabled={safeCurrentPage === 1}
+                onClick={() => setCurrentPage((page) => Math.max(page - 1, 1))}
+              >
+                Previous
+              </Button>
+              {pageRange.map((page, index) => (
+                <Button
+                  key={`${page}-${index}`}
+                  variant={safeCurrentPage === page ? 'default' : 'outline'}
+                  size='sm'
+                  className='h-7 min-w-7 px-2'
+                  disabled={typeof page !== 'number'}
+                  onClick={() => typeof page === 'number' && setCurrentPage(page)}
+                >
+                  {page}
+                </Button>
+              ))}
+              <Button
+                variant='outline'
+                size='sm'
+                className='h-7 px-2'
+                disabled={safeCurrentPage >= totalPages}
+                onClick={() => setCurrentPage((page) => Math.min(page + 1, totalPages))}
+              >
+                Next
+              </Button>
+            </div>
           </div>
         )}
         </div>

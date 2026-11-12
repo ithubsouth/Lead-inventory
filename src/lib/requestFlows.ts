@@ -1,6 +1,23 @@
 export type RequestType = 'new_hardware' | 'asset_movement';
 export type RequestStatus = 'open' | 'approved' | 'rejected' | 'revoked' | 'closed';
 export type StageAction = 'pending' | 'approved' | 'rejected' | 'revoked' | 'commented' | 'submitted';
+export type ReceiptIdentity = 'Standard' | 'Missing Serial' | 'Different Serial Received' | 'Damaged asset';
+
+export const getReceiptIdentity = (comment: string | null | undefined): ReceiptIdentity | null => {
+  if (!comment) return null;
+  const explicit = comment.match(/^Receipt type:\s*(Standard|Missing Serial|Different Serial Received|Damaged asset)\./i)?.[1];
+  if (explicit) {
+    const normalized = explicit.toLowerCase();
+    if (normalized === 'standard') return 'Standard';
+    if (normalized === 'missing serial') return 'Missing Serial';
+    if (normalized === 'different serial received') return 'Different Serial Received';
+    return 'Damaged asset';
+  }
+  if (/^Not received serial\(s\):/i.test(comment)) return 'Missing Serial';
+  if (/^Different serial received\./i.test(comment)) return 'Different Serial Received';
+  if (/^Damaged serial\(s\):/i.test(comment)) return 'Damaged asset';
+  return null;
+};
 
 export interface StageDef {
   key: string;

@@ -30,6 +30,8 @@ import {
   SERIAL_ENTRY_STAGE,
   sendBackStage,
   formatRequestNo,
+  getReceiptIdentity,
+  ReceiptIdentity,
 } from '@/lib/requestFlows';
 import { assetStatuses } from './constants';
 
@@ -276,6 +278,16 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
   const activeHistory = lastRevokeIdx >= 0 ? stages.slice(0, lastRevokeIdx) : stages;
   const stageSignOff = (key: string) =>
     activeHistory.find((st) => st.stage_key === key && (st.action === 'approved' || st.action === 'submitted'));
+  const serialVerifiers = [...new Set(
+    serials
+      .filter((serial) => serial.verified || serial.verify_result === 'Damaged')
+      .map((serial) => serial.verified_by)
+      .filter((email): email is string => !!email)
+  )];
+  const latestSerialVerification = serials
+    .filter((serial) => (serial.verified || serial.verify_result === 'Damaged') && serial.verified_at)
+    .map((serial) => serial.verified_at as string)
+    .sort((a, b) => new Date(b).getTime() - new Date(a).getTime())[0];
   const signedOff = new Set(
     activeHistory
       .filter((st) => st.action === 'approved' || st.action === 'submitted')
@@ -516,7 +528,7 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
       try {
         await record('revoked', {
           revoke: true,
-          comment: `Damaged serial(s): ${damaged.map((s) => s.serial_number).join(', ')}. Asset Codes preserved. ${reason}`,
+          comment: `Receipt type: Damaged Asset. Damaged serial(s): ${damaged.map((s) => s.serial_number).join(', ')}. Asset Codes preserved. ${reason}`,
         });
       } finally {
         setBusy(false);
@@ -547,7 +559,7 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
 
         await record('revoked', {
           revoke: true,
-          comment: `Not received serial(s): ${missingText}. ${reason}`,
+          comment: `Receipt type: Missing Serial. Not received serial(s): ${missingText}. ${reason}`,
         });
       } catch (e: any) {
         toast.error(e.message || 'Could not send the receipt issue back');
@@ -586,7 +598,7 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
 
       await record('revoked', {
         revoke: true,
-        comment: `Different serial received. The original requested serial remains Not received, and the received serial is listed separately. Existing Asset Code retained on the original row. ${reason}`,
+        comment: `Receipt type: Different Serial Received. The original requested serial remains Not received, and the received serial is listed separately. Existing Asset Code retained on the original row. ${reason}`,
       });
     } catch (e: any) {
       toast.error(e.message || 'Could not send the corrected serial back');
@@ -689,20 +701,43 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
     }
   };
 
-  const record = async (action: StageAction, opts: { closeAfter?: boolean; reject?: boolean; revoke?: boolean; comment?: string } = {}) => {
+  const record = async (action: StageAction, opts: {
+    closeAfter?: boolean;
+    reject?: boolean;
+    revoke?: boolean;
+    proceedWithReceived?: boolean;
+    comment?: string;
+  } = {}) => {
     if (!req || !profile?.id) return;
     const actionComment = opts.comment ?? comment;
+    const proceedWithReceived = !!opts.proceedWithReceived;
     const manuallyAddedSerials = serials.filter((s) => s.notes === 'Added received serial');
     const pendingSerials = serials.filter(
       (s) => !s.verified && !s.verify_result && s.notes !== 'Added received serial'
     );
-    if (action === 'approved' && isVerifyStage && receiptIssue) {
-      toast.error('Use the receipt issue button above to send this request back to the creator.');
+    if (action === 'approved' && isVerifyStage && receiptIssue &&
+      !(receiptIssue === 'missing' && proceedWithReceived)) {
+      toast.error('Use the receipt issue action above to send this request back for review.');
+      return;
+    }
+    if (proceedWithReceived && (!isSentBack || !isSerialEntryStage || missingCount === 0)) {
+      toast.error('This partial-receipt approval is only available for a returned request with missing serials.');
+      return;
+    }
+    if (
+      proceedWithReceived &&
+      (serials.some((s) =>
+        s.verify_result === 'Damaged' ||
+        (!s.verified && s.verify_result !== 'Not received')
+      ) || manuallyAddedSerials.length > 0)
+    ) {
+      toast.error('Complete verification and handle damaged or different serials before approving the partial receipt.');
       return;
     }
     const hasReceiptException =
       action === 'approved' &&
       isVerifyStage &&
+      !proceedWithReceived &&
       !isBackWithRaiser &&
       (serials.some((s) => s.verify_result === 'Not received' || s.verify_result === 'Damaged') ||
         manuallyAddedSerials.length > 0);
@@ -735,8 +770,12 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
         toast.error(`Complete verification for all serials first (${unclassified.length} still pending).`);
         return;
       }
-      if (hasReceiptException && !actionComment.trim()) {
-        toast.error('Add a comment explaining the receipt difference before sending back to the creator.');
+      if ((hasReceiptException || proceedWithReceived) && !actionComment.trim()) {
+        toast.error(
+          proceedWithReceived
+            ? 'Add a comment explaining why Procurement is proceeding with the received quantity.'
+            : 'Add a comment explaining the receipt difference before sending it back.'
+        );
         return;
       }
     }
@@ -819,7 +858,9 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
           notifTarget = { target_dept: target.dept };
         }
       } else if (action === 'approved') {
-        const nxt = stageAfterCurrent();
+        const nxt = proceedWithReceived
+          ? nextRequiredStage(req.type, 'tech_verify_serials', { hasFA, signedOff, everSignedOff })
+          : stageAfterCurrent();
         if (!nxt) {
           nextStatus = 'closed';
           notifTitle = `Request approved & closed: ${reqName}`;
@@ -827,7 +868,9 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
         } else {
           nextStageKey = nxt.key;
           nextDept = nxt.dept;
-          notifTitle = isSentBack
+          notifTitle = proceedWithReceived
+            ? `Partial receipt approved (${receivedCount} received): ${reqName}`
+            : isSentBack
             ? `Request resubmitted: ${reqName}`
             : `Stage advanced: ${nxt.label} · ${reqName}`;
           notifTarget = { target_dept: nxt.dept };
@@ -867,13 +910,17 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
         stage_label: flow[currentIdx]?.label || req.current_stage,
         order_index: currentIdx,
         assigned_dept: req.current_stage_dept,
-        action: isSentBack && action === 'approved'
+        action: isSentBack && action === 'approved' && !proceedWithReceived
           ? 'submitted'
           : (hasReceiptException ? 'revoked' : action),
         actor_id: profile.id,
         actor_email: profile.email,
         actor_dept: profile.department,
-        comment: actionComment || (isSentBack && action === 'approved' ? 'Resubmitted' : null),
+        comment: proceedWithReceived
+          ? `Receipt type: Missing Serial. Partially approved: ${receivedCount}/${req.quantity ?? serials.length} received. ${actionComment}`.trim()
+          : action === 'approved' && isVerifyStage && !hasReceiptException
+            ? `Receipt type: Standard.${actionComment ? ` ${actionComment}` : ''}`
+            : actionComment || (isSentBack && action === 'approved' ? 'Resubmitted' : null),
         acted_at: new Date().toISOString(),
       });
       if (stageErr) throw stageErr;
@@ -1764,6 +1811,18 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
   }
 
   const dupCount = serials.filter((s) => s.is_duplicate || s.exists_in_devices).length;
+  const partialApproval = stages.find(
+    (stage) => stage.action === 'approved' && stage.comment?.includes('Partially approved:')
+  );
+  const partialApprovalQuantity = partialApproval?.comment?.match(/Partially approved:\s*([\d/]+\s+received)\./)?.[1];
+  const latestReceiptStage = stages.find(
+    (stage) => stage.stage_key === 'tech_verify_serials' &&
+      (stage.action === 'approved' || stage.action === 'revoked')
+  );
+  const receiptIdentity: ReceiptIdentity | null = latestReceiptStage
+    ? getReceiptIdentity(latestReceiptStage.comment) ||
+      (latestReceiptStage.action === 'approved' ? 'Standard' : null)
+    : null;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -1805,6 +1864,30 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
               </div>
             </div>
             <div className='flex items-center gap-2 shrink-0 pr-8'>
+              {receiptIdentity && (
+                <Badge
+                  variant='outline'
+                  className={cn(
+                    'font-bold text-[10px] h-8 px-3 rounded-full flex items-center',
+                    receiptIdentity === 'Standard' && 'border-green-300 bg-green-50 text-green-800',
+                    receiptIdentity === 'Missing Serial' && 'border-amber-300 bg-amber-50 text-amber-800',
+                    receiptIdentity === 'Different Serial Received' && 'border-orange-300 bg-orange-50 text-orange-800',
+                    receiptIdentity === 'Damaged asset' && 'border-red-300 bg-red-50 text-red-800'
+                  )}
+                  title='Latest physical receipt verification outcome'
+                >
+                  {receiptIdentity}
+                </Badge>
+              )}
+              {partialApproval && (
+                <Badge
+                  variant='outline'
+                  className='font-bold text-[10px] h-8 px-3 rounded-full flex items-center border-amber-300 bg-amber-50 text-amber-800'
+                  title={partialApproval.comment || 'This request was partially approved'}
+                >
+                  Partially approved{partialApprovalQuantity ? ` · ${partialApprovalQuantity}` : ''}
+                </Badge>
+              )}
               {req.status === 'open' && (
                 <Badge variant='outline' className='font-bold text-[10px] h-8 px-3 rounded-full flex items-center bg-muted/20'>
                   Pending at: {req.current_stage_dept}
@@ -1831,6 +1914,9 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
             <ol className='space-y-2'>
               {flow.map((s, i) => {
                 const signOff = stageSignOff(s.key);
+                const isVerificationStage = s.key === 'tech_verify_serials';
+                const verifierNames = isVerificationStage ? serialVerifiers.map((email) => personName({ email, full_name: null })) : [];
+                const verificationLabel = verifierNames.length ? verifierNames.join(', ') : null;
                 const notNeeded = skipped.includes(s.key);
                 // Asset code / PO release only count as done when someone signed them off
                 // (requests started under the old order may have passed them by).
@@ -1863,16 +1949,24 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
                     {done && (
                       <div
                         className='ml-auto flex items-center gap-1.5 text-right shrink-0 max-w-[45%]'
-                        title={signOff ? `${signOff.action === 'submitted' ? 'Submitted' : 'Approved'} by ${signOff.actor_email || ''}` : 'Completed'}
+                        title={
+                          verificationLabel ||
+                          (signOff ? `${signOff.action === 'submitted' ? 'Submitted' : 'Approved'} by ${signOff.actor_email || ''}` : 'Completed')
+                        }
                       >
                         <CheckCircle2 className='w-4 h-4 text-green-600 shrink-0' />
                         <div className='min-w-0 leading-tight'>
                           <div className='text-[11px] font-medium text-green-700 truncate'>
-                            {signOff ? personName({ email: signOff.actor_email || '', full_name: null }) : 'Completed'}
+                            {verificationLabel ||
+                              (signOff ? personName({ email: signOff.actor_email || '', full_name: null }) : 'Completed')}
                           </div>
-                          {signOff && (
+                          {(signOff || (isVerificationStage && latestSerialVerification)) && (
                             <div className='text-[10px] text-muted-foreground'>
-                              {fmtDateTime(signOff.acted_at || signOff.created_at)}
+                              {fmtDateTime(
+                                signOff?.acted_at ||
+                                signOff?.created_at ||
+                                latestSerialVerification
+                              )}
                             </div>
                           )}
                         </div>
@@ -1958,7 +2052,11 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
               {stages.map((s) => (
                 <div key={s.id} className='text-xs p-2 rounded border bg-muted/30 break-words'>
                   <div className='flex items-start justify-between gap-2'>
-                    <span className='font-medium capitalize'>{s.action}</span>
+                    <span className='font-medium'>
+                      {s.action === 'approved' && s.comment?.startsWith('Partially approved:')
+                        ? 'Partially approved'
+                        : s.action.charAt(0).toUpperCase() + s.action.slice(1)}
+                    </span>
                     <span className='text-muted-foreground shrink-0'>{fmtDateTime(s.acted_at || s.created_at)}</span>
                   </div>
                   <div className='text-muted-foreground mt-0.5 break-words'>{s.stage_label}</div>
@@ -2221,7 +2319,9 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
                       Receipt issue
                     </div>
                     <p className='text-[11px] text-slate-600'>
-                      If the shipment is incomplete or a serial is different, record the issue and send this same request back to its creator.
+                      {receiptIssue === 'missing'
+                        ? `Send this request back to ${returnDepartment} to review the quantity, or approve only the ${receivedCount} physically received unit(s). The requested PO quantity remains unchanged for audit.`
+                        : 'If a serial is different or damaged, record the issue and send this same request back for review.'}
                     </p>
                     <div className='flex flex-wrap gap-2'>
                       <Button
@@ -2744,6 +2844,11 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
                   disabled={busy}
                 />
 
+                {isSentBack && isSerialEntryStage && missingCount > 0 && (
+                  <p className='text-xs text-muted-foreground text-right'>
+                    Technology verified {receivedCount} received and {missingCount} missing. Procurement can approve the received units to continue, or update the request and resubmit. The original PO quantity is retained for audit.
+                  </p>
+                )}
                 <div className='flex flex-wrap gap-2 justify-end'>
                   <Button
                     variant='outline'
@@ -2769,12 +2874,41 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
                   >
                     {busy ? <Loader2 className='w-4 h-4 animate-spin' /> : <><X className='w-4 h-4 mr-1' /> Reject</>}
                   </Button>
-                  {!(isVerifyStage && (receiptIssue === 'missing' || receiptIssue === 'incorrect')) && (
+                  {!(isVerifyStage && (receiptIssue === 'incorrect' || receiptIssue === 'missing')) && (
                     <Button
-                      disabled={!canAct || busy}
-                      onClick={() => record('approved')}
+                    disabled={!canAct || busy}
+                      onClick={() => record(
+                        'approved',
+                        receiptIssue === 'missing' ? { proceedWithReceived: true } : undefined
+                      )}
                     >
-                      {busy ? <Loader2 className='w-4 h-4 animate-spin' /> : <><Check className='w-4 h-4 mr-1' /> {isSentBack ? 'Resubmit' : 'Approve'}</>}
+                      {busy
+                        ? <Loader2 className='w-4 h-4 animate-spin' />
+                        : <><Check className='w-4 h-4 mr-1' />{
+                            receiptIssue === 'missing'
+                              ? `Approve received (${receivedCount})`
+                              : isSentBack ? 'Resubmit' : 'Approve'
+                          }</>}
+                    </Button>
+                  )}
+                  {isSentBack && isSerialEntryStage && missingCount > 0 && (
+                    <Button
+                    variant='outline'
+                    disabled={
+                      !canAct ||
+                      busy ||
+                      !comment.trim() ||
+                      serials.some((s) =>
+                        s.verify_result === 'Damaged' ||
+                        (!s.verified && s.verify_result !== 'Not received') ||
+                        s.notes === 'Added received serial'
+                      )
+                    }
+                    onClick={() => record('approved', { proceedWithReceived: true })}
+                    >
+                    {busy
+                      ? <Loader2 className='w-4 h-4 animate-spin' />
+                      : <><Check className='w-4 h-4 mr-1' /> Approve received ({receivedCount})</>}
                     </Button>
                   )}
                 </div>
