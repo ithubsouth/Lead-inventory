@@ -805,6 +805,22 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
       );
       return;
     }
+    if (action === 'approved' && isAssetCodeStage && !opts.reject && !opts.revoke) {
+      try {
+        await ensureAssetCodesAvailable(
+          codeRows
+            .filter((serial) => serial.asset_code)
+            .map((serial) => ({
+              id: serial.id,
+              code: serial.asset_code!,
+              serialNumber: serial.serial_number,
+            }))
+        );
+      } catch (error: unknown) {
+        toast.error(error instanceof Error ? error.message : 'Asset codes must be unique before approval.');
+        return;
+      }
+    }
     if (action === 'approved' && isReleasePoStage && !opts.reject && !opts.revoke) {
       if (!faCodesReady || faSerialsMissingCode.length) {
         toast.error("The PO can't be released for FA assets until Finance has generated the asset codes.");
@@ -1098,7 +1114,7 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
       const { data: orderIns, error: orderError } = await supabase
         .from('orders')
         .insert({
-          order_type: 'Hardware',
+          order_type: 'Stock',
           material_type: 'Inward',
           product: 'Lead',
           asset_type: req.asset_type || 'Tablet',
@@ -1123,31 +1139,99 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
     } else {
       const { error: orderUpdateError } = await supabase
         .from('orders')
-        .update({ quantity: serialNumbers.length, serial_numbers: serialNumbers, updated_by: profile?.email })
+        .update({
+          order_type: 'Stock',
+          quantity: serialNumbers.length,
+          serial_numbers: serialNumbers,
+          updated_by: profile?.email,
+        })
         .eq('id', orderId);
       if (orderUpdateError) throw new Error(`Order update failed: ${orderUpdateError.message}`);
     }
 
     const { data: existingDevices, error: deviceLookupError } = await supabase
       .from('devices')
-      .select('serial_number, order_id')
+      .select('id, serial_number, order_id, sales_order, asset_type, model, warehouse')
+      .eq('is_deleted', false)
       .in('serial_number', serialNumbers);
     if (deviceLookupError) throw deviceLookupError;
-    const deviceOrderBySerial = new Map((existingDevices || []).map((device) => [device.serial_number, device.order_id]));
-    const conflicts = serialNumbers.filter((serialNumber) =>
-      deviceOrderBySerial.has(serialNumber) && deviceOrderBySerial.get(serialNumber) !== orderId
+    const alreadyLinked = (existingDevices || []).filter((device) => device.order_id !== orderId);
+    const incompatible = alreadyLinked.filter((device) =>
+      device.sales_order !== req.po_number ||
+      device.asset_type !== (req.asset_type || 'Tablet') ||
+      device.model !== (req.model || '-') ||
+      device.warehouse !== (req.warehouse || '-')
     );
-    if (conflicts.length) {
-      throw new Error(`These received serial(s) already belong to another order: ${conflicts.join(', ')}.`);
+    if (incompatible.length) {
+      throw new Error(
+        `These serial(s) already belong to a different PO, model, or warehouse and were not changed: ${incompatible.map((device) => device.serial_number).join(', ')}.`
+      );
     }
 
-    const missingDevices = serialsToCreate.filter((serial) => !deviceOrderBySerial.has(serial.serial_number));
+    if (alreadyLinked.length) {
+      const previousOrderIds = [...new Set(
+        alreadyLinked
+          .map((device) => device.order_id)
+          .filter((previousOrderId): previousOrderId is string => !!previousOrderId)
+      )];
+      if (previousOrderIds.length) {
+        const { data: previousOrders, error: previousOrdersError } = await supabase
+          .from('orders')
+          .select('id, serial_numbers')
+          .in('id', previousOrderIds);
+        if (previousOrdersError) throw previousOrdersError;
+        const movedSerials = new Set(alreadyLinked.map((device) => device.serial_number));
+        for (const previousOrder of previousOrders || []) {
+          const remainingSerials = (previousOrder.serial_numbers || []).filter(
+            (serialNumber) => !movedSerials.has(serialNumber)
+          );
+          const { error: previousOrderUpdateError } = await supabase
+            .from('orders')
+            .update({
+              serial_numbers: remainingSerials,
+              quantity: remainingSerials.length,
+              updated_by: profile?.email,
+            })
+            .eq('id', previousOrder.id);
+          if (previousOrderUpdateError) {
+            throw new Error(`Could not remove reassigned serials from the previous order: ${previousOrderUpdateError.message}`);
+          }
+        }
+      }
+
+      const { error: relinkError } = await supabase
+        .from('devices')
+        .update({
+          order_id: orderId,
+          order_type: 'Stock',
+          material_type: 'Inward',
+          ref_po: req.po_number,
+          ref_grn: req.grn_number || null,
+          updated_by: profile?.email,
+        })
+        .in('id', alreadyLinked.map((device) => device.id));
+      if (relinkError) throw new Error(`Could not link existing received devices to the stock order: ${relinkError.message}`);
+    }
+
+    const linkedDeviceIds = (existingDevices || [])
+      .filter((device) => device.order_id === orderId || alreadyLinked.some((linked) => linked.id === device.id))
+      .map((device) => device.id);
+    if (linkedDeviceIds.length) {
+      const { error: deviceUpdateError } = await supabase
+        .from('devices')
+        .update({ order_type: 'Stock', updated_by: profile?.email })
+        .in('id', linkedDeviceIds);
+      if (deviceUpdateError) throw new Error(`Device update failed: ${deviceUpdateError.message}`);
+    }
+
+    const existingSerials = new Set((existingDevices || []).map((device) => device.serial_number));
+    const missingDevices = serialsToCreate.filter((serial) => !existingSerials.has(serial.serial_number));
     if (missingDevices.length) {
       const deviceRows = missingDevices.map((serial) => {
         const parsed = Number(serial.asset_code);
         return {
           order_id: orderId,
-          order_type: 'Hardware',
+          order_type: 'Stock',
           product: 'Lead',
           warehouse: req.warehouse || '-',
           sales_order: req.po_number,
@@ -1555,8 +1639,78 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
       new Promise<T>((_, rej) => setTimeout(() => rej(new Error(`${what} timed out. Please try again.`)), ms)),
     ]);
 
+  const normalizeAssetCode = (value: string) => {
+    const trimmed = value.trim();
+    return /^\d+$/.test(trimmed)
+      ? trimmed.replace(/^0+(?=\d)/, '')
+      : trimmed.toLowerCase();
+  };
+
+  const ensureAssetCodesAvailable = async (
+    candidates: { id?: string; code: string; serialNumber?: string }[]
+  ) => {
+    const assigned = candidates
+      .map((candidate) => ({ ...candidate, code: candidate.code.trim() }))
+      .filter((candidate) => candidate.code);
+    const byNormalizedCode = new Map<string, typeof assigned>();
+    assigned.forEach((candidate) => {
+      const key = normalizeAssetCode(candidate.code);
+      byNormalizedCode.set(key, [...(byNormalizedCode.get(key) || []), candidate]);
+    });
+    const duplicate = [...byNormalizedCode.values()].find((group) => group.length > 1);
+    if (duplicate) throw new Error(`Asset code ${duplicate[0].code} is assigned more than once.`);
+    if (!assigned.length) return;
+
+    const codes = [...new Set(assigned.map((candidate) => candidate.code))];
+    const [{ data: requestCodes, error: requestCodeError }, { data: deviceCodes, error: deviceCodeError }] =
+      await withTimeout(
+        Promise.all([
+          supabase
+            .from('request_serials')
+            .select('id, asset_code')
+            .in('asset_code', codes),
+          supabase
+            .from('devices')
+            .select('serial_number, far_code')
+            .in('far_code', codes.map(Number).filter(Number.isSafeInteger)),
+        ]),
+        30000,
+        'Checking asset code uniqueness'
+      );
+    if (requestCodeError) throw requestCodeError;
+    if (deviceCodeError) throw deviceCodeError;
+
+    const candidateIds = new Set(assigned.map((candidate) => candidate.id).filter(Boolean));
+    const reusedRequestCode = (requestCodes || []).find((row) =>
+      !candidateIds.has(row.id) &&
+      assigned.some((candidate) =>
+        normalizeAssetCode(candidate.code) === normalizeAssetCode(row.asset_code || '')
+      )
+    );
+    if (reusedRequestCode) {
+      throw new Error(`Asset code ${reusedRequestCode.asset_code} is already assigned to another request serial.`);
+    }
+
+    const reusedDeviceCode = (deviceCodes || []).find((device) =>
+      assigned.some((candidate) =>
+        normalizeAssetCode(candidate.code) === normalizeAssetCode(String(device.far_code)) &&
+        candidate.serialNumber?.trim().toLowerCase() !== device.serial_number?.trim().toLowerCase()
+      )
+    );
+    if (reusedDeviceCode) {
+      throw new Error(`Asset code ${reusedDeviceCode.far_code} is already assigned to serial ${reusedDeviceCode.serial_number}.`);
+    }
+  };
+
   /** Update many serial rows at once (in parallel batches) instead of one after another. */
   const updateSerials = async (updates: { id: string; patch: Record<string, unknown> }[]) => {
+    const codeCandidates = updates.flatMap((update) => {
+      if (typeof update.patch.asset_code !== 'string' || !update.patch.asset_code.trim()) return [];
+      const serial = serials.find((row) => row.id === update.id);
+      return [{ id: update.id, code: update.patch.asset_code, serialNumber: serial?.serial_number }];
+    });
+    await ensureAssetCodesAvailable(codeCandidates);
+
     const BATCH = 25;
     for (let i = 0; i < updates.length; i += BATCH) {
       const results = await Promise.all(
@@ -1601,6 +1755,7 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
   /** Asset code rows created before the material arrives: the serial is filled in later. */
   const insertCodeRows = async (codes: string[]) => {
     if (!req || !codes.length) return;
+    await ensureAssetCodesAvailable(codes.map((code) => ({ code })));
     const { error } = await withTimeout(
       (supabase as any).from('request_serials').insert(
         codes.map((c) => ({
@@ -1649,16 +1804,12 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
 
   const setAssetCode = async (id: string, value: string) => {
     const v = value.trim();
-    if (v && serials.some((s) => s.id !== id && s.asset_code === v)) {
-      toast.error(`Asset code ${v} is already used in this request`);
-      return;
+    try {
+      await updateSerials([{ id, patch: { asset_code: v || null } }]);
+      await load();
+    } catch (error: unknown) {
+      toast.error(error instanceof Error ? error.message : 'Could not save asset code');
     }
-    const { error } = await supabase
-      .from('request_serials')
-      .update({ asset_code: v || null })
-      .eq('id', id);
-    if (error) toast.error(error.message);
-    else await load();
   };
 
   const replaceSerial = async (serial: SerialRow) => {
