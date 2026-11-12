@@ -879,6 +879,16 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
         notifTitle = `Comment added on: ${reqName}`;
       }
 
+      // Prepare inventory records before closing, so a failed insert leaves the
+      // request actionable and can be retried without losing the workflow state.
+      if (closesRequest) {
+        if (req.type === 'new_hardware') {
+          await materializeAssets();
+        } else if (req.type === 'asset_movement') {
+          await applyMovement();
+        }
+      }
+
       if (opts.reject || opts.revoke || hasReceiptException || action === 'approved') {
         const { data: updRows, error: updErr } = await supabase
           .from('requests')
@@ -891,15 +901,6 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
           .select('id');
         if (updErr) throw updErr;
         if (!updRows?.length) throw new Error('You do not have permission to update this request.');
-      }
-
-      // Create / update the actual assets only once the request is confirmed closed.
-      if (closesRequest) {
-        if (req.type === 'new_hardware') {
-          await materializeAssets();
-        } else if (req.type === 'asset_movement') {
-          await applyMovement();
-        }
       }
 
       // Record history only after the request itself has moved, so a blocked update
@@ -1060,64 +1061,129 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
 
   const materializeAssets = async () => {
     if (!req) return;
-    const { data: existingMax } = await supabase
+    const serialsToCreate = physicalSerials.filter((serial) => serial.serial_number.trim());
+    if (!serialsToCreate.length) {
+      throw new Error('Cannot create an inventory order because no received serials are verified.');
+    }
+    if (!req.po_number) {
+      throw new Error('Cannot create an inventory order without a PO number.');
+    }
+    const { data: existingMax, error: existingMaxError } = await supabase
       .from('devices')
       .select('far_code')
       .not('far_code', 'is', null)
       .order('far_code', { ascending: false })
       .limit(1);
+    if (existingMaxError) throw existingMaxError;
     let nextCode = ((existingMax?.[0]?.far_code as number) || 100000) + 1;
 
     const sourceName = (req as any).received_from || 'Stock';
 
-    const orderRow: any = {
-      order_type: 'Hardware',
-      material_type: 'Inward',
-      asset_type: req.asset_type || 'Tablet',
-      model: req.model || '-',
-      quantity: physicalSerials.length || req.quantity || 0,
-      warehouse: req.warehouse || '-',
-      sales_order: req.po_number || null,
-      configuration: req.configuration || null,
-      agreement_type: req.agreement_type || null,
-      school_name: sourceName,
-      order_date: new Date().toISOString().split('T')[0],
-      created_by: profile?.email,
-      updated_by: profile?.email,
-    };
-    const { data: orderIns, error: oErr } = await supabase
-      .from('orders').insert(orderRow).select('id').single();
-    if (oErr) { toast.error(`Order create failed: ${oErr.message}`); return; }
-    const orderId = orderIns!.id;
+    const { data: matchingOrders, error: orderLookupError } = await supabase
+      .from('orders')
+      .select('id')
+      .eq('sales_order', req.po_number)
+      .eq('asset_type', req.asset_type || 'Tablet')
+      .eq('model', req.model || '-')
+      .eq('warehouse', req.warehouse || '-')
+      .eq('is_deleted', false)
+      .limit(2);
+    if (orderLookupError) throw orderLookupError;
+    if ((matchingOrders || []).length > 1) {
+      throw new Error('Multiple inventory orders match this PO, model, and warehouse. Ask an administrator to resolve the duplicate orders.');
+    }
+    const serialNumbers = serialsToCreate.map((serial) => serial.serial_number);
+    let orderId = matchingOrders?.[0]?.id;
+    if (!orderId) {
+      const { data: orderIns, error: orderError } = await supabase
+        .from('orders')
+        .insert({
+          order_type: 'Hardware',
+          material_type: 'Inward',
+          product: 'Lead',
+          asset_type: req.asset_type || 'Tablet',
+          model: req.model || '-',
+          quantity: serialNumbers.length,
+          warehouse: req.warehouse || '-',
+          sales_order: req.po_number,
+          serial_numbers: serialNumbers,
+          configuration: req.configuration || null,
+          agreement_type: req.agreement_type || null,
+          asset_group: req.asset_group || null,
+          asset_status: req.asset_status || 'Fresh',
+          school_name: sourceName,
+          order_date: new Date().toISOString(),
+          created_by: profile?.email,
+          updated_by: profile?.email,
+        })
+        .select('id')
+        .single();
+      if (orderError) throw new Error(`Order creation failed: ${orderError.message}`);
+      orderId = orderIns.id;
+    } else {
+      const { error: orderUpdateError } = await supabase
+        .from('orders')
+        .update({ quantity: serialNumbers.length, serial_numbers: serialNumbers, updated_by: profile?.email })
+        .eq('id', orderId);
+      if (orderUpdateError) throw new Error(`Order update failed: ${orderUpdateError.message}`);
+    }
 
-    if (physicalSerials.length) {
-      const deviceRows = physicalSerials.map((s) => {
-        const parsed = Number(s.asset_code);
+    const { data: existingDevices, error: deviceLookupError } = await supabase
+      .from('devices')
+      .select('serial_number, order_id')
+      .in('serial_number', serialNumbers);
+    if (deviceLookupError) throw deviceLookupError;
+    const deviceOrderBySerial = new Map((existingDevices || []).map((device) => [device.serial_number, device.order_id]));
+    const conflicts = serialNumbers.filter((serialNumber) =>
+      deviceOrderBySerial.has(serialNumber) && deviceOrderBySerial.get(serialNumber) !== orderId
+    );
+    if (conflicts.length) {
+      throw new Error(`These received serial(s) already belong to another order: ${conflicts.join(', ')}.`);
+    }
+
+    const missingDevices = serialsToCreate.filter((serial) => !deviceOrderBySerial.has(serial.serial_number));
+    if (missingDevices.length) {
+      const deviceRows = missingDevices.map((serial) => {
+        const parsed = Number(serial.asset_code);
         return {
           order_id: orderId,
           order_type: 'Hardware',
+          product: 'Lead',
           warehouse: req.warehouse || '-',
-          sales_order: req.po_number || null,
+          sales_order: req.po_number,
           school_name: sourceName,
           asset_type: req.asset_type || 'Tablet',
           model: req.model || '-',
           configuration: req.configuration || null,
-          serial_number: s.serial_number,
-          asset_group: s.asset_group || req.asset_group || null,
-          asset_status: s.asset_status || req.asset_status || 'Fresh',
-          // devices.status only allows Available / Assigned / Maintenance
+          serial_number: serial.serial_number,
+          asset_group: serial.asset_group || req.asset_group || null,
+          asset_status: serial.asset_status || req.asset_status || 'Fresh',
           status: 'Available',
-          far_code: s.asset_code && !isNaN(parsed) ? parsed : nextCode++,
-          ref_po: req.po_number || null,
+          far_code: serial.asset_code && !isNaN(parsed) ? parsed : nextCode++,
+          ref_po: req.po_number,
           ref_grn: req.grn_number || null,
           material_type: 'Inward',
           created_by: profile?.email,
           updated_by: profile?.email,
         };
       });
-      const { error: dErr } = await supabase.from('devices').insert(deviceRows as any);
-      if (dErr) toast.error(`Devices create failed: ${dErr.message}`);
-      else toast.success('Order and devices created');
+      const { error: deviceInsertError } = await supabase.from('devices').insert(deviceRows as any);
+      if (deviceInsertError) throw new Error(`Device creation failed: ${deviceInsertError.message}`);
+    }
+    toast.success(`Inventory order ready with ${serialNumbers.length} received device(s)`);
+  };
+
+  const repairInventoryRecords = async () => {
+    setBusy(true);
+    try {
+      await materializeAssets();
+      await load();
+      onChanged?.();
+    } catch (e: any) {
+      console.error('Could not create inventory records for closed request:', e);
+      toast.error(e.message || 'Could not create the order and devices');
+    } finally {
+      setBusy(false);
     }
   };
 
@@ -1864,6 +1930,20 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
               </div>
             </div>
             <div className='flex items-center gap-2 shrink-0 pr-8'>
+              {req.status === 'closed' &&
+                req.type === 'new_hardware' &&
+                (profile?.role === 'Super Admin' || profile?.role === 'Admin') && (
+                  <Button
+                    size='sm'
+                    variant='outline'
+                    className='h-8 px-3 text-xs'
+                    disabled={busy || !physicalSerials.length}
+                    onClick={repairInventoryRecords}
+                    title='Create or repair this request’s order and device records'
+                  >
+                    {busy ? <Loader2 className='w-3.5 h-3.5 animate-spin' /> : 'Create / Repair Inventory'}
+                  </Button>
+                )}
               {receiptIdentity && (
                 <Badge
                   variant='outline'
