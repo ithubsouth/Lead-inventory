@@ -46,6 +46,7 @@ export const NEW_HARDWARE_FLOW: StageDef[] = [
 export const SERIAL_ENTRY_STAGE = 'proc_add_serials';
 export const ASSET_CODE_STAGE = 'finance_approve';
 export const RELEASE_PO_STAGE = 'proc_release_po';
+export const FINANCE_RECEIPT_CONFIRM_STAGE = 'finance_confirm_received_asset_codes';
 
 /** Departments that may raise each request type (Administrators / Super Admin can raise anything). */
 export const RAISING_DEPTS: Record<RequestType, string[] | null> = {
@@ -87,7 +88,7 @@ export const skippedStages = (type: RequestType, opts: { hasFA: boolean }): stri
 
 /**
  * Where a request goes after the current stage is approved.
- * - Skips stages that don't apply (asset code for NFA-only requests).
+ * - Skips stages that don't apply (asset code for NFA-only requests, PO release when a PO exists).
  * - Goes back first to an earlier asset code / PO release stage that was never signed
  *   off (ever). This catches requests started under an older order, so they still get
  *   asset codes and a PO release before closing.
@@ -97,10 +98,11 @@ export const skippedStages = (type: RequestType, opts: { hasFA: boolean }): stri
 export const nextRequiredStage = (
   type: RequestType,
   currentKey: string,
-  opts: { hasFA: boolean; signedOff: Set<string>; everSignedOff?: Set<string> }
+  opts: { hasFA: boolean; hasPO?: boolean; signedOff: Set<string>; everSignedOff?: Set<string> }
 ): StageDef | null => {
   const flow = getFlow(type);
   const skip = new Set(skippedStages(type, opts));
+  if (type === 'new_hardware' && opts.hasPO) skip.add(RELEASE_PO_STAGE);
   const cur = flow.findIndex((s) => s.key === currentKey);
   if (cur < 0) return null;
   const pending = (s: StageDef, i: number) =>

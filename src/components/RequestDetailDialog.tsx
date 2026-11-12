@@ -26,6 +26,7 @@ import {
   skippedStages,
   isFaGroup,
   ASSET_CODE_STAGE,
+  FINANCE_RECEIPT_CONFIRM_STAGE,
   RELEASE_PO_STAGE,
   SERIAL_ENTRY_STAGE,
   sendBackStage,
@@ -239,7 +240,25 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
     }
   }, [open, requestId]);
 
-  const flow = useMemo(() => (req ? getFlow(req.type) : []), [req]);
+  useEffect(() => {
+    setReceiptIssue(null);
+    setReceivedSerial('');
+  }, [open, requestId, req?.current_stage]);
+
+  const hasTechnologyReceiptSendBack = stages.some(
+    (stage) => stage.stage_key === 'tech_verify_serials' && stage.action === 'revoked'
+  );
+  const flow = useMemo(() => {
+    const baseFlow = req ? getFlow(req.type) : [];
+    if (req?.type !== 'new_hardware' || !hasTechnologyReceiptSendBack) return baseFlow;
+    const grnIndex = baseFlow.findIndex((stage) => stage.key === 'scm_take_grn');
+    if (grnIndex < 0) return baseFlow;
+    return [
+      ...baseFlow.slice(0, grnIndex),
+      { key: FINANCE_RECEIPT_CONFIRM_STAGE, label: 'Confirm Received Serial & Asset Code', dept: 'Finance' },
+      ...baseFlow.slice(grnIndex),
+    ];
+  }, [req, hasTechnologyReceiptSendBack]);
   // "REQ-00042 · Subject" — used in notifications so every message names the request.
   const reqName = req
     ? [formatRequestNo(req.request_no), req.title || REQUEST_TYPE_LABELS[req.type]].filter(Boolean).join(' · ')
@@ -272,12 +291,12 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
   const isBackWithRaiser =
     isSentBack && (currentIdx === 0 || (isRaiser && req?.raised_dept === 'Procurement Team'));
 
-  // History since the last send-back (stages are newest first). Approvals made before a
-  // request was sent back no longer count for the workflow ticks.
+  // Keep prior stage approvals visible after a send-back; activeHistory is used only
+  // for determining which stages must be repeated in the current workflow pass.
   const lastRevokeIdx = stages.findIndex((st) => st.action === 'revoked');
   const activeHistory = lastRevokeIdx >= 0 ? stages.slice(0, lastRevokeIdx) : stages;
   const stageSignOff = (key: string) =>
-    activeHistory.find((st) => st.stage_key === key && (st.action === 'approved' || st.action === 'submitted'));
+    stages.find((st) => st.stage_key === key && (st.action === 'approved' || st.action === 'submitted'));
   const serialVerifiers = [...new Set(
     serials
       .filter((serial) => serial.verified || serial.verify_result === 'Damaged')
@@ -297,7 +316,9 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
   // FA serials need an asset code before Procurement can release the PO. Serials that
   // were not received don't count. A request with only NFA serials skips the asset code step.
   const serialGroup = (s: SerialRow) => s.asset_group || req?.asset_group || null;
-  const countedSerials = serials.filter((s) => s.verify_result !== 'Not received');
+  const isMissingSerial = (serial: SerialRow) =>
+    serial.verify_result === 'Not received' || serial.verify_result === 'Not found in upload';
+  const countedSerials = serials.filter((s) => !isMissingSerial(s));
   const hasFA = countedSerials.length
     ? countedSerials.some((s) => isFaGroup(serialGroup(s)))
     : isFaGroup(req?.asset_group);
@@ -305,8 +326,9 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
   const everSignedOff = new Set(
     stages.filter((st) => st.action === 'approved' || st.action === 'submitted').map((st) => st.stage_key)
   );
+  const hasSavedPo = !!req?.po_number?.trim();
   const stageAfterCurrent = () =>
-    req ? nextRequiredStage(req.type, req.current_stage, { hasFA, signedOff, everSignedOff }) : null;
+    req ? nextRequiredStage(req.type, req.current_stage, { hasFA, hasPO: hasSavedPo, signedOff, everSignedOff }) : null;
 
   // Finance creates the asset codes before any serial exists: one row per unit requested,
   // with the code filled in and the serial left blank. Procurement fills the serials in later.
@@ -350,13 +372,20 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
   const isSerialEntryStage = !!req && req.type === 'new_hardware' && req.current_stage === SERIAL_ENTRY_STAGE;
   const isVerifyStage = !!req && req.current_stage === 'tech_verify_serials';
   const isGrnStage = !!req && req.current_stage === 'scm_take_grn';
+  const isFinanceReceiptConfirmStage = !!req && req.current_stage === FINANCE_RECEIPT_CONFIRM_STAGE;
   const isAssetCodeStage = !!req && req.current_stage === ASSET_CODE_STAGE;
+  const isAssetCodeEntryStage = isAssetCodeStage || isFinanceReceiptConfirmStage;
   const isReleasePoStage = !!req && req.current_stage === RELEASE_PO_STAGE;
   const verifiedCount = serials.filter((s) => s.verified).length;
   const damagedCount = serials.filter((s) => s.verify_result === 'Damaged').length;
-  const missingCount = serials.filter((s) => s.verify_result === 'Not received').length;
+  const missingCount = serials.filter(isMissingSerial).length;
   const receivedCount = verifiedCount + damagedCount;
   const pendingReceiptCount = Math.max(0, serials.length - receivedCount - missingCount);
+  const hasManualReplacementWithPendingOriginal =
+    serials.some((s) => s.notes === 'Added received serial') &&
+    serials.some((s) => !s.verified && !isMissingSerial(s) && s.verify_result !== 'Damaged' && s.notes !== 'Added received serial');
+  const canApproveReceived =
+    isSentBack && isSerialEntryStage && (missingCount > 0 || hasManualReplacementWithPendingOriginal);
   const physicalSerials = serials.filter((s) => s.verified || s.verify_result === 'Damaged');
   const faSerialsMissingCode = physicalSerials.filter((s) => isFaGroup(serialGroup(s)) && !s.asset_code);
   const backTarget = req ? sendBackStage(req.type, req.current_stage) : null;
@@ -462,21 +491,24 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
       toast.error('This serial number is already listed in the request.');
       return false;
     }
-    const unmatched = serials.filter((s) => !s.verified && s.verify_result !== 'Damaged' && s.verify_result !== 'Not received');
+    const unmatched = serials.filter((s) => !s.verified && s.verify_result !== 'Damaged' && !isMissingSerial(s));
     if (!unmatched.length) {
       toast.error('No requested serial is available to mark as not received.');
       return false;
     }
 
+    const replacedSerial = unmatched[0];
+    const assetCode = replacedSerial.asset_code;
     const { error: updateError } = await supabase
       .from('request_serials')
       .update({
         verified: false,
         verify_result: 'Not received',
+        asset_code: null,
         verified_by: profile?.email || null,
         verified_at: new Date().toISOString(),
       })
-      .eq('id', unmatched[0].id);
+      .eq('id', replacedSerial.id);
     if (updateError) throw updateError;
 
     const { error: insertError } = await supabase
@@ -484,11 +516,11 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
       .insert({
         request_id: req.id,
         serial_number: replacement,
-        asset_group: unmatched[0].asset_group,
-        warehouse: unmatched[0].warehouse,
-        asset_status: unmatched[0].asset_status,
-        asset_code: null,
-        asset_condition: null,
+        asset_group: replacedSerial.asset_group,
+        warehouse: replacedSerial.warehouse,
+        asset_status: replacedSerial.asset_status,
+        asset_code: assetCode || null,
+        asset_condition: replacedSerial.asset_condition,
         exists_in_devices: false,
         is_duplicate: false,
         verified: true,
@@ -497,7 +529,20 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
         verified_at: new Date().toISOString(),
         notes: 'Added received serial',
       } as any);
-    if (insertError) throw insertError;
+    if (insertError) {
+      if (assetCode) {
+        const { error: restoreError } = await supabase
+          .from('request_serials')
+          .update({ asset_code: assetCode })
+          .eq('id', replacedSerial.id);
+        if (restoreError) {
+          throw new Error(
+            `Could not add the replacement serial or restore asset code ${assetCode}: ${insertError.message}; ${restoreError.message}`
+          );
+        }
+      }
+      throw insertError;
+    }
 
     setReceivedSerial('');
     await load();
@@ -584,21 +629,78 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
         (s) => !s.verified && !s.verify_result && s.notes !== 'Added received serial'
       );
       if (manuallyAdded.length && pendingOriginals.length) {
+        const codedOriginals = pendingOriginals.filter((s) => s.asset_code);
+        const replacementRowsWithoutCode = manuallyAdded.filter((s) => !s.asset_code);
+        let transferredOriginal: SerialRow | undefined;
+        let transferTarget: SerialRow | undefined;
+
+        if (codedOriginals.length === 1 && replacementRowsWithoutCode.length === 1) {
+          transferredOriginal = codedOriginals[0];
+          transferTarget = replacementRowsWithoutCode[0];
+          const { error: clearCodeError } = await supabase
+            .from('request_serials')
+            .update({ asset_code: null })
+            .eq('id', transferredOriginal.id);
+          if (clearCodeError) throw clearCodeError;
+
+          const { error: assignCodeError } = await supabase
+            .from('request_serials')
+            .update({ asset_code: transferredOriginal.asset_code })
+            .eq('id', transferTarget.id);
+          if (assignCodeError) {
+            const { error: restoreCodeError } = await supabase
+              .from('request_serials')
+              .update({ asset_code: transferredOriginal.asset_code })
+              .eq('id', transferredOriginal.id);
+            if (restoreCodeError) {
+              throw new Error(
+                `Could not map asset code ${transferredOriginal.asset_code} to the received serial or restore it to the original: ${assignCodeError.message}; ${restoreCodeError.message}`
+              );
+            }
+            throw assignCodeError;
+          }
+        } else if (codedOriginals.length > 1 || replacementRowsWithoutCode.length > 1) {
+          throw new Error('More than one received serial needs an asset code. Map the serials one at a time to avoid assigning a code to the wrong device.');
+        }
+
         const { error } = await supabase
           .from('request_serials')
           .update({
             verified: false,
             verify_result: 'Not received',
+            ...(transferredOriginal ? { asset_code: null } : {}),
             verified_by: profile?.email || null,
             verified_at: new Date().toISOString(),
           })
           .in('id', pendingOriginals.map((s) => s.id));
-        if (error) throw error;
+        if (error) {
+          if (transferredOriginal && transferTarget) {
+            const { error: clearTargetError } = await supabase
+              .from('request_serials')
+              .update({ asset_code: null })
+              .eq('id', transferTarget.id);
+            if (clearTargetError) {
+              throw new Error(
+                `Could not complete the receipt update or clear the replacement's asset code: ${error.message}; ${clearTargetError.message}`
+              );
+            }
+            const { error: restoreCodeError } = await supabase
+              .from('request_serials')
+              .update({ asset_code: transferredOriginal.asset_code })
+              .eq('id', transferredOriginal.id);
+            if (restoreCodeError) {
+              throw new Error(
+                `Could not complete the receipt update or restore asset code ${transferredOriginal.asset_code}: ${error.message}; ${restoreCodeError.message}`
+              );
+            }
+          }
+          throw error;
+        }
       }
 
       await record('revoked', {
         revoke: true,
-        comment: `Receipt type: Different Serial Received. The original requested serial remains Not received, and the received serial is listed separately. Existing Asset Code retained on the original row. ${reason}`,
+        comment: `Receipt type: Different Serial Received. The original requested serial remains Not received and is ignored for inventory. Its Asset Code was mapped to the physically received replacement serial. ${reason}`,
       });
     } catch (e: any) {
       toast.error(e.message || 'Could not send the corrected serial back');
@@ -713,23 +815,32 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
     const proceedWithReceived = !!opts.proceedWithReceived;
     const manuallyAddedSerials = serials.filter((s) => s.notes === 'Added received serial');
     const pendingSerials = serials.filter(
-      (s) => !s.verified && !s.verify_result && s.notes !== 'Added received serial'
+      (s) => !s.verified && !isMissingSerial(s) && s.verify_result !== 'Damaged' && s.notes !== 'Added received serial'
     );
     if (action === 'approved' && isVerifyStage && receiptIssue &&
       !(receiptIssue === 'missing' && proceedWithReceived)) {
       toast.error('Use the receipt issue action above to send this request back for review.');
       return;
     }
-    if (proceedWithReceived && (!isSentBack || !isSerialEntryStage || missingCount === 0)) {
+    if (
+      proceedWithReceived &&
+      (!isSentBack || !isSerialEntryStage || (missingCount === 0 && !hasManualReplacementWithPendingOriginal))
+    ) {
       toast.error('This partial-receipt approval is only available for a returned request with missing serials.');
+      return;
+    }
+    if (proceedWithReceived && !actionComment.trim()) {
+      toast.error('Add a comment explaining why Procurement is proceeding with the received quantity.');
       return;
     }
     if (
       proceedWithReceived &&
       (serials.some((s) =>
         s.verify_result === 'Damaged' ||
-        (!s.verified && s.verify_result !== 'Not received')
-      ) || manuallyAddedSerials.length > 0)
+        (!s.verified &&
+          !isMissingSerial(s) &&
+          !(manuallyAddedSerials.length > 0 && s.notes !== 'Added received serial'))
+      ))
     ) {
       toast.error('Complete verification and handle damaged or different serials before approving the partial receipt.');
       return;
@@ -739,7 +850,7 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
       isVerifyStage &&
       !proceedWithReceived &&
       !isBackWithRaiser &&
-      (serials.some((s) => s.verify_result === 'Not received' || s.verify_result === 'Damaged') ||
+      (serials.some((s) => isMissingSerial(s) || s.verify_result === 'Damaged') ||
         manuallyAddedSerials.length > 0);
 
     // Check Operator-raised restriction for approvals
@@ -760,7 +871,7 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
 
     if (action === 'approved' && isVerifyStage) {
       const unclassified = serials.filter(
-        (s) => !s.verified && s.verify_result !== 'Not received' && s.verify_result !== 'Damaged'
+        (s) => !s.verified && !isMissingSerial(s) && s.verify_result !== 'Damaged'
       );
       const canReconcileReplacement =
         receiptIssue === 'incorrect' &&
@@ -788,7 +899,7 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
         toast.error(`${blankSerialRows.length} asset code row(s) still have no serial number. Fill them in or delete the unused rows.`);
         return;
       }
-      if (codeRowsMissing.length) {
+      if (codeRowsMissing.length && !proceedWithReceived) {
         toast.error(`${codeRowsMissing.length} FA serial(s) have no asset code. Only serials with an asset code from Finance can be added.`);
         return;
       }
@@ -797,7 +908,7 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
       toast.error('Enter and save the GRN number before approving.');
       return;
     }
-    if (action === 'approved' && isAssetCodeStage && !opts.reject && !opts.revoke && !faCodesReady) {
+    if (action === 'approved' && isAssetCodeEntryStage && !opts.reject && !opts.revoke && !faCodesReady) {
       toast.error(
         codesShort
           ? `Generate an asset code for every unit requested first (${codesShort} still needed).`
@@ -805,7 +916,7 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
       );
       return;
     }
-    if (action === 'approved' && isAssetCodeStage && !opts.reject && !opts.revoke) {
+    if (action === 'approved' && isAssetCodeEntryStage && !opts.reject && !opts.revoke) {
       try {
         await ensureAssetCodesAvailable(
           codeRows
@@ -846,6 +957,86 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
           .in('id', pendingSerials.map((s) => s.id));
         if (reconcileError) throw reconcileError;
       }
+      if (
+        action === 'approved' &&
+        proceedWithReceived &&
+        manuallyAddedSerials.length &&
+        (pendingSerials.length > 0 || missingCount > 0)
+      ) {
+        const originalsToExclude = serials.filter(
+          (serial) =>
+            serial.notes !== 'Added received serial' &&
+            !serial.verified &&
+            (pendingSerials.some((pending) => pending.id === serial.id) || isMissingSerial(serial))
+        );
+        const codedOriginals = originalsToExclude.filter((serial) => serial.asset_code);
+        const replacementRowsWithoutCode = manuallyAddedSerials.filter((serial) => !serial.asset_code);
+        let transferredOriginal: SerialRow | undefined;
+        let transferTarget: SerialRow | undefined;
+
+        if (codedOriginals.length === 1 && replacementRowsWithoutCode.length === 1) {
+          transferredOriginal = codedOriginals[0];
+          transferTarget = replacementRowsWithoutCode[0];
+          const { error: clearCodeError } = await supabase
+            .from('request_serials')
+            .update({ asset_code: null })
+            .eq('id', transferredOriginal.id);
+          if (clearCodeError) throw clearCodeError;
+
+          const { error: assignCodeError } = await supabase
+            .from('request_serials')
+            .update({ asset_code: transferredOriginal.asset_code })
+            .eq('id', transferTarget.id);
+          if (assignCodeError) {
+            const { error: restoreCodeError } = await supabase
+              .from('request_serials')
+              .update({ asset_code: transferredOriginal.asset_code })
+              .eq('id', transferredOriginal.id);
+            if (restoreCodeError) {
+              throw new Error(
+                `Could not map asset code ${transferredOriginal.asset_code} to the received serial or restore it to the original: ${assignCodeError.message}; ${restoreCodeError.message}`
+              );
+            }
+            throw assignCodeError;
+          }
+        } else if (codedOriginals.length > 1 || replacementRowsWithoutCode.length > 1) {
+          throw new Error('More than one received serial needs an asset code. Map the serials one at a time to avoid assigning a code to the wrong device.');
+        }
+
+        const { error: markMissingError } = await supabase
+          .from('request_serials')
+          .update({
+            verified: false,
+            verify_result: 'Not received',
+            ...(transferredOriginal ? { asset_code: null } : {}),
+            verified_by: profile?.email || null,
+            verified_at: new Date().toISOString(),
+          })
+          .in('id', originalsToExclude.map((serial) => serial.id));
+        if (markMissingError) {
+          if (transferredOriginal && transferTarget) {
+            const { error: clearTargetError } = await supabase
+              .from('request_serials')
+              .update({ asset_code: null })
+              .eq('id', transferTarget.id);
+            if (clearTargetError) {
+              throw new Error(
+                `Could not finish classifying the missing serial or clear the replacement asset code: ${markMissingError.message}; ${clearTargetError.message}`
+              );
+            }
+            const { error: restoreCodeError } = await supabase
+              .from('request_serials')
+              .update({ asset_code: transferredOriginal.asset_code })
+              .eq('id', transferredOriginal.id);
+            if (restoreCodeError) {
+              throw new Error(
+                `Could not finish classifying the missing serial or restore asset code ${transferredOriginal.asset_code}: ${markMissingError.message}; ${restoreCodeError.message}`
+              );
+            }
+          }
+          throw markMissingError;
+        }
+      }
 
       let nextStatus: RequestStatus = req.status;
       let nextStageKey = req.current_stage;
@@ -874,9 +1065,16 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
           notifTarget = { target_dept: target.dept };
         }
       } else if (action === 'approved') {
-        const nxt = proceedWithReceived
-          ? nextRequiredStage(req.type, 'tech_verify_serials', { hasFA, signedOff, everSignedOff })
-          : stageAfterCurrent();
+        const nxt =
+          isFinanceReceiptConfirmStage
+            ? flow.find((stage) => stage.key === 'scm_take_grn') || null
+            : isSentBack && hasTechnologyReceiptSendBack && hasFA
+              ? flow.find((stage) => stage.key === FINANCE_RECEIPT_CONFIRM_STAGE) || null
+            : proceedWithReceived && hasFA
+              ? flow.find((stage) => stage.key === FINANCE_RECEIPT_CONFIRM_STAGE) || null
+              : proceedWithReceived
+                ? nextRequiredStage(req.type, 'tech_verify_serials', { hasFA, hasPO: hasSavedPo, signedOff, everSignedOff })
+                : stageAfterCurrent();
         if (!nxt) {
           nextStatus = 'closed';
           notifTitle = `Request approved & closed: ${reqName}`;
@@ -884,8 +1082,14 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
         } else {
           nextStageKey = nxt.key;
           nextDept = nxt.dept;
-          notifTitle = proceedWithReceived
-            ? `Partial receipt approved (${receivedCount} received): ${reqName}`
+          notifTitle = isFinanceReceiptConfirmStage
+            ? `Asset codes confirmed — continue to GRN: ${reqName}`
+            : isSentBack && hasTechnologyReceiptSendBack && hasFA
+              ? `Procurement approved — Finance to confirm received asset codes: ${reqName}`
+            : proceedWithReceived
+              ? hasFA
+                ? `Partial receipt approved — Finance to confirm asset codes: ${reqName}`
+                : `Partial receipt approved (${receivedCount} received): ${reqName}`
             : isSentBack
             ? `Request resubmitted: ${reqName}`
             : `Stage advanced: ${nxt.label} · ${reqName}`;
@@ -1435,7 +1639,7 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
       if (missingIds.length) {
         await supabase
           .from('request_serials')
-          .update({ verified: false, verify_result: 'Not found in upload', verified_by: profile?.email || null, verified_at: stamp })
+          .update({ verified: false, verify_result: 'Not received', verified_by: profile?.email || null, verified_at: stamp })
           .in('id', missingIds);
       }
       await load();
@@ -1724,8 +1928,8 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
   };
 
   const nextFreeAssetCode = async (): Promise<number> => {
-    // Highest code already given to a device, plus codes reserved on other still-open
-    // requests (closed requests' codes are already on devices). Both queries run together.
+    // Include all request serials, not only open requests: legacy or closed requests
+    // may still reserve a code that has not been materialized as a device.
     const [{ data, error: devErr }, { data: used, error: usedErr }] = await withTimeout(
       Promise.all([
         supabase
@@ -1736,9 +1940,8 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
           .limit(1),
         supabase
           .from('request_serials')
-          .select('asset_code, requests!inner(status)')
+          .select('asset_code')
           .not('asset_code', 'is', null)
-          .eq('requests.status', 'open'),
       ]),
       30000,
       'Looking up the next asset code'
@@ -2151,7 +2354,10 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
                 const notNeeded = skipped.includes(s.key);
                 // Asset code / PO release only count as done when someone signed them off
                 // (requests started under the old order may have passed them by).
-                const mustSignOff = s.key === ASSET_CODE_STAGE || s.key === RELEASE_PO_STAGE;
+                const mustSignOff =
+                  s.key === ASSET_CODE_STAGE ||
+                  s.key === FINANCE_RECEIPT_CONFIRM_STAGE ||
+                  s.key === RELEASE_PO_STAGE;
                 const done = !notNeeded && (
                   ((req.status === 'closed' || req.status === 'approved' || i < currentIdx) &&
                     (!mustSignOff || !!signOff)) ||
@@ -2620,8 +2826,7 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
                           <Plus className='w-3.5 h-3.5 mr-1' /> Add received serial
                         </Button>
                         <p className='text-[10px] text-muted-foreground'>
-                        The unmatched requested serial stays listed as Not received. The new row is marked
-                        <span className='font-semibold'> Manually added</span> and counted immediately. You can delete it from the table if it was entered incorrectly.
+                        The unmatched requested serial stays listed as Not received and is ignored for inventory. Its Asset Code is transferred to the manually added received serial, which is counted immediately.
                         </p>
                       </div>
                     )}
@@ -2683,10 +2888,10 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
                   </div>
                 )}
                 <div className='max-h-72 overflow-auto rounded border'>
-                  <table className='w-full table-auto text-xs'>
+                  <table className='w-full min-w-max table-auto text-xs'>
                     <thead className='bg-muted/40 sticky top-0'>
                       <tr>
-                        <th className='whitespace-nowrap text-left align-middle px-2 py-1.5'>Serial</th>
+                        <th className='min-w-max whitespace-nowrap text-left align-middle px-2 py-1.5'>Serial</th>
                         <th className='whitespace-nowrap text-left align-middle px-2 py-1.5'>Status</th>
                         <th className='whitespace-nowrap text-left align-middle px-2 py-1.5'>Group</th>
                         <th className='whitespace-nowrap text-left align-middle px-2 py-1.5'>Asset Code</th>
@@ -2701,8 +2906,8 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
                         .filter(s => !serialSearchQuery || s.serial_number?.toLowerCase().includes(serialSearchQuery.toLowerCase()))
                         .map((s) => (
                         <tr key={s.id} className='border-t hover:bg-muted/10'>
-                          <td className='px-2 py-1.5 align-middle whitespace-nowrap'>
-                            <div className='flex items-center gap-1.5'>
+                          <td className='w-max px-2 py-1.5 align-middle whitespace-nowrap'>
+                            <div className='flex w-max items-center gap-1.5'>
                               {isSerialEntryStage && canAct ? (
                                 <Input
                                   key={`${s.id}:${s.serial_number}`}
@@ -2714,7 +2919,8 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
                                     if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
                                   }}
                                   placeholder='Enter serial'
-                                  className='h-7 w-40 text-[11px] font-mono'
+                                  className='h-7 text-[11px] font-mono'
+                                  style={{ width: `${Math.max(18, s.serial_number.length + 4)}ch` }}
                                   disabled={busy}
                                 />
                               ) : s.serial_number ? (
@@ -2736,7 +2942,7 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
                           <td className='px-2 py-1.5 align-middle'>{s.asset_status || req.asset_status || '-'}</td>
                           <td className='px-2 py-1.5 align-middle'>{s.asset_group || '-'}</td>
                           <td className='px-2 py-1.5 align-middle font-mono'>
-                            {isAssetCodeStage && canAct ? (
+                            {isAssetCodeEntryStage && canAct ? (
                               <Input
                                 defaultValue={s.asset_code || ''}
                                 onBlur={(e) => {
@@ -3024,21 +3230,33 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
               </div>
             )}
 
-            {req.status === 'open' && isAssetCodeStage && canAct && (
+            {req.status === 'open' && isAssetCodeEntryStage && canAct && (
               <div className='p-3 rounded-xl border border-emerald-100 bg-emerald-50/40 space-y-2'>
-                <div className='text-xs font-black uppercase tracking-widest text-emerald-700'>Generate Asset Codes (FA)</div>
-                <p className='text-[11px] text-slate-600'>
-                  Planning requested <b>{req.quantity ?? '-'}</b> {req.asset_type || 'asset'}(s). Generate one asset code per unit.
-                  Procurement can only release the PO once they're all done. The serial numbers are matched to these codes
-                  later, when the material reaches the warehouse.
-                  {(codesShort > 0 || codeRowsMissing.length > 0) && <b> {codesShort + codeRowsMissing.length} still needed.</b>}
-                </p>
+                <div className='text-xs font-black uppercase tracking-widest text-emerald-700'>
+                  {isFinanceReceiptConfirmStage ? 'Confirm Received Serial & Asset Code' : 'Generate Asset Codes (FA)'}
+                </div>
+                {isFinanceReceiptConfirmStage ? (
+                  <p className='text-[11px] text-slate-600'>
+                    Previous Finance and PO approvals remain complete. Review the received serials and confirm each asset code below.
+                    The not-received serial is excluded. Once approved, this request continues directly to Take GRN.
+                    {codeRowsMissing.length > 0 && <b> {codeRowsMissing.length} received serial(s) still need an asset code.</b>}
+                  </p>
+                ) : (
+                  <p className='text-[11px] text-slate-600'>
+                    Planning requested <b>{req.quantity ?? '-'}</b> {req.asset_type || 'asset'}(s). Generate one asset code per unit.
+                    Procurement can only release the PO once they're all done. The serial numbers are matched to these codes
+                    later, when the material reaches the warehouse.
+                    {(codesShort > 0 || codeRowsMissing.length > 0) && <b> {codesShort + codeRowsMissing.length} still needed.</b>}
+                  </p>
+                )}
                 <div className='flex flex-wrap gap-2'>
-                  <Button size='sm' variant='outline' onClick={autoGenerateAssetCodes} disabled={busy}>
-                    {codesShort || codeRowsMissing.length
-                      ? `Auto-generate ${codesShort + codeRowsMissing.length} asset code(s)`
-                      : 'Auto-generate for missing'}
-                  </Button>
+                  {!isFinanceReceiptConfirmStage && (
+                    <Button size='sm' variant='outline' onClick={autoGenerateAssetCodes} disabled={busy}>
+                      {codesShort || codeRowsMissing.length
+                        ? `Auto-generate ${codesShort + codeRowsMissing.length} asset code(s)`
+                        : 'Auto-generate for missing'}
+                    </Button>
+                  )}
                   <Button size='sm' variant='outline' onClick={downloadAssetCodeTemplate} disabled={busy}>
                     <Download className='w-3.5 h-3.5 mr-1' /> Download template
                   </Button>
@@ -3075,9 +3293,12 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
                   disabled={busy}
                 />
 
-                {isSentBack && isSerialEntryStage && missingCount > 0 && (
-                  <p className='text-xs text-muted-foreground text-right'>
-                    Technology verified {receivedCount} received and {missingCount} missing. Procurement can approve the received units to continue, or update the request and resubmit. The original PO quantity is retained for audit.
+                {canApproveReceived && (
+                  <p className='rounded border border-blue-200 bg-blue-50 px-2 py-1.5 text-xs text-blue-800'>
+                    {hasManualReplacementWithPendingOriginal
+                      ? 'Choosing Approve received will mark the pending original serial Not received, move its asset code to the manually added received serial, and continue with received units only.'
+                      : `Choosing Approve received will continue with the ${receivedCount} received unit(s) and exclude the ${missingCount} not-received unit(s).`}
+                    {' '}The original PO quantity is retained for audit. Choose Resubmit to keep the request open for updates instead.
                   </p>
                 )}
                 <div className='flex flex-wrap gap-2 justify-end'>
@@ -3122,7 +3343,7 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
                           }</>}
                     </Button>
                   )}
-                  {isSentBack && isSerialEntryStage && missingCount > 0 && (
+                  {canApproveReceived && (
                     <Button
                     variant='outline'
                     disabled={
@@ -3131,8 +3352,9 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
                       !comment.trim() ||
                       serials.some((s) =>
                         s.verify_result === 'Damaged' ||
-                        (!s.verified && s.verify_result !== 'Not received') ||
-                        s.notes === 'Added received serial'
+                        (!s.verified &&
+                          !isMissingSerial(s) &&
+                          !(hasManualReplacementWithPendingOriginal && s.notes !== 'Added received serial'))
                       )
                     }
                     onClick={() => record('approved', { proceedWithReceived: true })}
