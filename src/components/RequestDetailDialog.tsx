@@ -1187,6 +1187,20 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
     URL.revokeObjectURL(url);
   };
 
+  const downloadSerialTemplate = () => {
+    if (!req) return;
+    const rows = ['"Serial Number"', ...Array.from({ length: Math.max(1, req.quantity || 0) }, () => '""')];
+    const blob = new Blob(['\uFEFF', rows.join('\r\n')], { type: 'text/csv;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${formatRequestNo(req.request_no) || `request_${req.id}`}_serials-template.csv`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  };
+
   const verifyRef = useRef<HTMLInputElement>(null);
   const bulkVerifySerials = async (file: File) => {
     if (!req) return;
@@ -1241,6 +1255,21 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
 
   /** ---- Stage helpers: GRN + Asset Code ---- */
   const codeRef = useRef<HTMLInputElement>(null);
+
+  const downloadAssetCodeTemplate = () => {
+    if (!req) return;
+    const missingCount = codeRowsMissing.length + codesShort;
+    const rows = ['"Asset Code"', ...Array.from({ length: Math.max(1, missingCount) }, () => '""')];
+    const blob = new Blob(['\uFEFF', rows.join('\r\n')], { type: 'text/csv;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${formatRequestNo(req.request_no) || `request_${req.id}`}_asset-codes-template.csv`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  };
 
   const saveGrn = async () => {
     if (!req) return;
@@ -2032,11 +2061,19 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
                       if (f) {
                         // First column of each line is the serial number.
                         const text = await f.text();
-                        await addSerials(text.split(/\r?\n/).map((l) => l.split(',')[0]).join('\n'));
+                        const values = text
+                          .replace(/^\uFEFF/, '')
+                          .split(/\r?\n/)
+                          .map((line) => line.split(',')[0].trim().replace(/^"|"$/g, '').trim())
+                          .filter((value) => value && !/^serial(?:[_ ]?(?:number|no))?$/i.test(value));
+                        await addSerials(values.join('\n'));
                       }
                       if (serialFileRef.current) serialFileRef.current.value = '';
                     }}
                   />
+                  <Button size='sm' variant='outline' onClick={downloadSerialTemplate} disabled={busy}>
+                    <Download className='w-3.5 h-3.5 mr-1' /> Download template
+                  </Button>
                   <Button size='sm' variant='outline' onClick={() => serialFileRef.current?.click()} disabled={busy}>
                     <Upload className='w-3.5 h-3.5 mr-1' /> Upload CSV
                   </Button>
@@ -2670,6 +2707,9 @@ export default function RequestDetailDialog({ requestId, open, onOpenChange, onC
                     {codesShort || codeRowsMissing.length
                       ? `Auto-generate ${codesShort + codeRowsMissing.length} asset code(s)`
                       : 'Auto-generate for missing'}
+                  </Button>
+                  <Button size='sm' variant='outline' onClick={downloadAssetCodeTemplate} disabled={busy}>
+                    <Download className='w-3.5 h-3.5 mr-1' /> Download template
                   </Button>
                   <input
                     ref={codeRef}
